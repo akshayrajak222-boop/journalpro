@@ -11,7 +11,7 @@ import {
   Announcement, 
   MT5Connection, 
   PaymentHistory 
-} from './src/types';
+} from './src/types.js';
 import { createClient } from '@supabase/supabase-js';
 
 // Absolute file paths for database persistence
