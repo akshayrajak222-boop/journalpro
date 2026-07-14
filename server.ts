@@ -22,8 +22,29 @@ let supabase: any = null;
 let useSupabase = false;
 
 try {
-  const supabaseUrl = process.env.SUPABASE_URL?.trim();
-  const supabaseKey = process.env.SUPABASE_KEY?.trim();
+  let supabaseUrl = process.env.SUPABASE_URL?.trim();
+  let supabaseKey = process.env.SUPABASE_KEY?.trim();
+
+  // Strip wrapping quotes if any (common in some env setups)
+  if (supabaseUrl?.startsWith('"') && supabaseUrl?.endsWith('"')) {
+    supabaseUrl = supabaseUrl.slice(1, -1);
+  }
+  if (supabaseUrl?.startsWith("'") && supabaseUrl?.endsWith("'")) {
+    supabaseUrl = supabaseUrl.slice(1, -1);
+  }
+  if (supabaseKey?.startsWith('"') && supabaseKey?.endsWith('"')) {
+    supabaseKey = supabaseKey.slice(1, -1);
+  }
+  if (supabaseKey?.startsWith("'") && supabaseKey?.endsWith("'")) {
+    supabaseKey = supabaseKey.slice(1, -1);
+  }
+
+  if (supabaseUrl && !supabaseUrl.startsWith('http://') && !supabaseUrl.startsWith('https://')) {
+    if (/^[a-zA-Z0-9_-]+$/.test(supabaseUrl)) {
+      console.log(`[AxyFx Journal Server] Raw Supabase project reference "${supabaseUrl}" detected. Automatically expanding to "https://${supabaseUrl}.supabase.co"`);
+      supabaseUrl = `https://${supabaseUrl}.supabase.co`;
+    }
+  }
 
   if (supabaseUrl && supabaseKey) {
     supabase = createClient(supabaseUrl, supabaseKey);
@@ -38,223 +59,236 @@ try {
   supabase = null;
 }
 
-// Helper to load database from local file
+// Helper to load database from local file (always self-healing and bulletproof)
 function loadDatabaseFromFile() {
-  if (!fs.existsSync(DB_FILE)) {
-    // Initial seed database
-    const initialDB = {
-      users: [
-        {
-          id: 'user_admin',
-          email: 'admin@axyfx.com',
-          name: 'AxyFx Admin',
-          experience: 'Professional',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold'],
-          onboardingCompleted: true,
-          isPro: true
-        },
-        {
-          id: 'user_akshay',
-          email: 'akshayrajpanamthode@gmail.com',
-          name: 'Akshay Raj',
-          experience: 'Intermediate',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold', 'Indices'],
-          onboardingCompleted: true,
-          isPro: false
+  const initialDB = {
+    users: [
+      {
+        id: 'user_admin',
+        email: 'admin@axyfx.com',
+        name: 'AxyFx Admin',
+        experience: 'Professional',
+        tradingStyle: 'Day Trading',
+        mainMarkets: ['Forex', 'Gold'],
+        onboardingCompleted: true,
+        isPro: true
+      },
+      {
+        id: 'user_akshay',
+        email: 'akshayrajpanamthode@gmail.com',
+        name: 'Akshay Raj',
+        experience: 'Intermediate',
+        tradingStyle: 'Day Trading',
+        mainMarkets: ['Forex', 'Gold', 'Indices'],
+        onboardingCompleted: true,
+        isPro: false
+      }
+    ] as User[],
+    accounts: [
+      {
+        id: 'acc_1',
+        userId: 'user_akshay',
+        name: 'My Primary Live',
+        broker: 'IC Markets',
+        platform: 'MT5',
+        accountType: 'Live',
+        currency: 'USD',
+        startingBalance: 10000,
+        currentBalance: 11420,
+        equity: 11420,
+        status: 'Active'
+      }
+    ] as TradingAccount[],
+    trades: [
+      {
+        id: 't_1',
+        accountId: 'acc_1',
+        date: '2026-07-01T14:30:00Z',
+        symbol: 'EURUSD',
+        type: 'Buy',
+        lotSize: 1.0,
+        entryPrice: 1.08500,
+        exitPrice: 1.09200,
+        stopLoss: 1.08200,
+        takeProfit: 1.09500,
+        profit: 700,
+        commission: -7,
+        swap: -1.5,
+        riskPercentage: 1.5,
+        strategy: 'Order Block Rejection',
+        emotion: 'Calm',
+        notes: 'Standard buy at support levels. Perfect execution.',
+        tags: ['Scalping', 'Breakout']
+      },
+      {
+        id: 't_2',
+        accountId: 'acc_1',
+        date: '2026-07-02T09:15:00Z',
+        symbol: 'XAUUSD',
+        type: 'Sell',
+        lotSize: 0.5,
+        entryPrice: 2320.00,
+        exitPrice: 2312.00,
+        stopLoss: 2325.00,
+        takeProfit: 2300.00,
+        profit: 400,
+        commission: -3.5,
+        swap: 0,
+        riskPercentage: 1.0,
+        strategy: 'Daily Pivot Reversal',
+        emotion: 'Calm',
+        notes: 'Gold rejected daily highs, targets reached quickly.',
+        tags: ['Breakout']
+      },
+      {
+        id: 't_3',
+        accountId: 'acc_1',
+        date: '2026-07-03T16:00:00Z',
+        symbol: 'GBPUSD',
+        type: 'Buy',
+        lotSize: 1.5,
+        entryPrice: 1.26400,
+        exitPrice: 1.26150,
+        stopLoss: 1.26200,
+        takeProfit: 1.27200,
+        profit: -375,
+        commission: -10.5,
+        swap: -4,
+        riskPercentage: 2.0,
+        strategy: 'EMA Cross',
+        emotion: 'Anxious',
+        notes: 'Violated risk parameters slightly, got stopped out early.',
+        tags: ['FOMO', 'Revenge Trade']
+      },
+      {
+        id: 't_4',
+        accountId: 'acc_1',
+        date: '2026-07-05T11:45:00Z',
+        symbol: 'EURUSD',
+        type: 'Sell',
+        lotSize: 2.0,
+        entryPrice: 1.09100,
+        exitPrice: 1.09450,
+        stopLoss: 1.09300,
+        takeProfit: 1.08200,
+        profit: -700,
+        commission: -14,
+        swap: 0,
+        riskPercentage: 3.0,
+        strategy: 'Order Block Rejection',
+        emotion: 'Revenge',
+        notes: 'Entered in anger after losing trade, completely broke rules.',
+        tags: ['Revenge Trade', 'FOMO']
+      },
+      {
+        id: 't_5',
+        accountId: 'acc_1',
+        date: '2026-07-07T13:00:00Z',
+        symbol: 'USDJPY',
+        type: 'Buy',
+        lotSize: 1.2,
+        entryPrice: 156.20,
+        exitPrice: 157.40,
+        stopLoss: 155.80,
+        takeProfit: 158.00,
+        profit: 910,
+        commission: -8.4,
+        swap: 1.2,
+        riskPercentage: 1.5,
+        strategy: 'Trend Continuation',
+        emotion: 'Calm',
+        notes: 'Strong daily trend buy, excellent profit run.',
+        tags: ['Breakout']
+      },
+      {
+        id: 't_6',
+        accountId: 'acc_1',
+        date: '2026-07-09T18:30:00Z',
+        symbol: 'XAUUSD',
+        type: 'Buy',
+        lotSize: 0.8,
+        entryPrice: 2345.00,
+        exitPrice: 2351.50,
+        stopLoss: 2340.00,
+        takeProfit: 2365.00,
+        profit: 520,
+        commission: -5.6,
+        swap: 0,
+        riskPercentage: 1.2,
+        strategy: 'Daily Pivot Reversal',
+        emotion: 'Excited',
+        notes: 'Gold bounce on London-New York overlap.',
+        tags: ['News Trade']
+      }
+    ] as Trade[],
+    riskSettings: [
+      {
+        id: 'r_1',
+        accountId: 'acc_1',
+        riskPerTradeLimit: 2.0,
+        dailyLossLimit: 500,
+        weeklyLossLimit: 1500,
+        maxDrawdownLimit: 10.0,
+        disciplineEnabled: true
+      }
+    ] as RiskSettings[],
+    supportTickets: [
+      {
+        id: 'ticket_1',
+        userId: 'user_akshay',
+        userEmail: 'akshayrajpanamthode@gmail.com',
+        title: 'MT5 Sync query',
+        description: 'Does IC Markets support MT5 EA connection on free plan?',
+        status: 'Open',
+        category: 'MT5 Sync',
+        date: '2026-07-10T12:00:00Z'
+      }
+    ] as SupportTicket[],
+    announcements: [
+      {
+        id: 'ann_1',
+        title: 'Introducing AxyFx Journal Pro V2.5',
+        content: 'We have updated our Expert Advisor synchronizer. Trade execution speeds are now logged with sub-millisecond precision directly to your dashboard. Upgrade today to unlock advanced AI insight generation!',
+        date: '2026-07-11T10:00:00Z'
+      }
+    ] as Announcement[],
+    mt5Connections: [
+      {
+        id: 'conn_1',
+        userId: 'user_akshay',
+        accountId: 'acc_1',
+        brokerName: 'IC Markets',
+        status: 'Connected',
+        lastSyncTime: '2026-07-11T12:00:00Z',
+        syncToken: 'axy_token_88291_akshay',
+        totalSyncedTrades: 4
+      }
+    ] as MT5Connection[],
+    payments: [] as PaymentHistory[]
+  };
+
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const dataStr = fs.readFileSync(DB_FILE, 'utf-8');
+      if (dataStr && dataStr.trim()) {
+        const parsed = JSON.parse(dataStr);
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.users)) {
+          return parsed;
         }
-      ] as User[],
-      accounts: [
-        {
-          id: 'acc_1',
-          userId: 'user_akshay',
-          name: 'My Primary Live',
-          broker: 'IC Markets',
-          platform: 'MT5',
-          accountType: 'Live',
-          currency: 'USD',
-          startingBalance: 10000,
-          currentBalance: 11420,
-          equity: 11420,
-          status: 'Active'
-        }
-      ] as TradingAccount[],
-      trades: [
-        {
-          id: 't_1',
-          accountId: 'acc_1',
-          date: '2026-07-01T14:30:00Z',
-          symbol: 'EURUSD',
-          type: 'Buy',
-          lotSize: 1.0,
-          entryPrice: 1.08500,
-          exitPrice: 1.09200,
-          stopLoss: 1.08200,
-          takeProfit: 1.09500,
-          profit: 700,
-          commission: -7,
-          swap: -1.5,
-          riskPercentage: 1.5,
-          strategy: 'Order Block Rejection',
-          emotion: 'Calm',
-          notes: 'Standard buy at support levels. Perfect execution.',
-          tags: ['Scalping', 'Breakout']
-        },
-        {
-          id: 't_2',
-          accountId: 'acc_1',
-          date: '2026-07-02T09:15:00Z',
-          symbol: 'XAUUSD',
-          type: 'Sell',
-          lotSize: 0.5,
-          entryPrice: 2320.00,
-          exitPrice: 2312.00,
-          stopLoss: 2325.00,
-          takeProfit: 2300.00,
-          profit: 400,
-          commission: -3.5,
-          swap: 0,
-          riskPercentage: 1.0,
-          strategy: 'Daily Pivot Reversal',
-          emotion: 'Calm',
-          notes: 'Gold rejected daily highs, targets reached quickly.',
-          tags: ['Breakout']
-        },
-        {
-          id: 't_3',
-          accountId: 'acc_1',
-          date: '2026-07-03T16:00:00Z',
-          symbol: 'GBPUSD',
-          type: 'Buy',
-          lotSize: 1.5,
-          entryPrice: 1.26400,
-          exitPrice: 1.26150,
-          stopLoss: 1.26200,
-          takeProfit: 1.27200,
-          profit: -375,
-          commission: -10.5,
-          swap: -4,
-          riskPercentage: 2.0,
-          strategy: 'EMA Cross',
-          emotion: 'Anxious',
-          notes: 'Violated risk parameters slightly, got stopped out early.',
-          tags: ['FOMO', 'Revenge Trade']
-        },
-        {
-          id: 't_4',
-          accountId: 'acc_1',
-          date: '2026-07-05T11:45:00Z',
-          symbol: 'EURUSD',
-          type: 'Sell',
-          lotSize: 2.0,
-          entryPrice: 1.09100,
-          exitPrice: 1.09450,
-          stopLoss: 1.09300,
-          takeProfit: 1.08200,
-          profit: -700,
-          commission: -14,
-          swap: 0,
-          riskPercentage: 3.0,
-          strategy: 'Order Block Rejection',
-          emotion: 'Revenge',
-          notes: 'Entered in anger after losing trade, completely broke rules.',
-          tags: ['Revenge Trade', 'FOMO']
-        },
-        {
-          id: 't_5',
-          accountId: 'acc_1',
-          date: '2026-07-07T13:00:00Z',
-          symbol: 'USDJPY',
-          type: 'Buy',
-          lotSize: 1.2,
-          entryPrice: 156.20,
-          exitPrice: 157.40,
-          stopLoss: 155.80,
-          takeProfit: 158.00,
-          profit: 910,
-          commission: -8.4,
-          swap: 1.2,
-          riskPercentage: 1.5,
-          strategy: 'Trend Continuation',
-          emotion: 'Calm',
-          notes: 'Strong daily trend buy, excellent profit run.',
-          tags: ['Breakout']
-        },
-        {
-          id: 't_6',
-          accountId: 'acc_1',
-          date: '2026-07-09T18:30:00Z',
-          symbol: 'XAUUSD',
-          type: 'Buy',
-          lotSize: 0.8,
-          entryPrice: 2345.00,
-          exitPrice: 2351.50,
-          stopLoss: 2340.00,
-          takeProfit: 2365.00,
-          profit: 520,
-          commission: -5.6,
-          swap: 0,
-          riskPercentage: 1.2,
-          strategy: 'Daily Pivot Reversal',
-          emotion: 'Excited',
-          notes: 'Gold bounce on London-New York overlap.',
-          tags: ['News Trade']
-        }
-      ] as Trade[],
-      riskSettings: [
-        {
-          id: 'r_1',
-          accountId: 'acc_1',
-          riskPerTradeLimit: 2.0,
-          dailyLossLimit: 500,
-          weeklyLossLimit: 1500,
-          maxDrawdownLimit: 10.0,
-          disciplineEnabled: true
-        }
-      ] as RiskSettings[],
-      supportTickets: [
-        {
-          id: 'ticket_1',
-          userId: 'user_akshay',
-          userEmail: 'akshayrajpanamthode@gmail.com',
-          title: 'MT5 Sync query',
-          description: 'Does IC Markets support MT5 EA connection on free plan?',
-          status: 'Open',
-          category: 'MT5 Sync',
-          date: '2026-07-10T12:00:00Z'
-        }
-      ] as SupportTicket[],
-      announcements: [
-        {
-          id: 'ann_1',
-          title: 'Introducing AxyFx Journal Pro V2.5',
-          content: 'We have updated our Expert Advisor synchronizer. Trade execution speeds are now logged with sub-millisecond precision directly to your dashboard. Upgrade today to unlock advanced AI insight generation!',
-          date: '2026-07-11T10:00:00Z'
-        }
-      ] as Announcement[],
-      mt5Connections: [
-        {
-          id: 'conn_1',
-          userId: 'user_akshay',
-          accountId: 'acc_1',
-          brokerName: 'IC Markets',
-          status: 'Connected',
-          lastSyncTime: '2026-07-11T12:00:00Z',
-          syncToken: 'axy_token_88291_akshay',
-          totalSyncedTrades: 4
-        }
-      ] as MT5Connection[],
-      payments: [] as PaymentHistory[]
-    };
-    try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(initialDB, null, 2), 'utf-8');
-    } catch (err) {
-      console.warn('[AxyFx Journal Server] Local database file write ignored (read-only filesystem on serverless environments):', err);
+      }
     }
-    return initialDB;
+  } catch (err) {
+    console.error('[AxyFx Journal Server] Error reading local db.json file, using seed data:', err);
   }
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+
+  // Best-effort local file write
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(initialDB, null, 2), 'utf-8');
+  } catch (err) {
+    // Ignore read-only filesystem issues
+  }
+
+  return initialDB;
 }
 
 let db: any = null;
@@ -390,6 +424,7 @@ const PORT = 3000;
       id: `user_${Date.now()}`,
       email: email.toLowerCase(),
       name,
+      password: password || '',
       onboardingCompleted: false,
       isPro: false
     };
@@ -402,7 +437,7 @@ const PORT = 3000;
   });
 
   app.post('/api/auth/login', (req, res) => {
-    const { email } = req.body;
+    const { email, password } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
     }
@@ -414,6 +449,7 @@ const PORT = 3000;
         id: `user_${Date.now()}`,
         email: email.toLowerCase(),
         name: email.split('@')[0],
+        password: password || '',
         onboardingCompleted: false,
         isPro: false
       };
@@ -421,6 +457,10 @@ const PORT = 3000;
       saveDatabase(db);
       currentUser = newUser;
       return res.json({ message: 'New user created and logged in', user: newUser });
+    }
+
+    if (user.password && password && user.password !== password) {
+      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
     currentUser = user;

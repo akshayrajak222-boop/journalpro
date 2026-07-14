@@ -34,6 +34,7 @@ export default function App() {
   const [authName, setAuthName] = useState('Akshay Raj');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [authPassword, setAuthPassword] = useState('');
   
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -275,8 +276,22 @@ export default function App() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail })
+        body: JSON.stringify({ email: authEmail, password: authPassword })
       });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('[AxyFx] Login error response text:', errorText);
+        try {
+          const errData = JSON.parse(errorText);
+          alert(`Login failed: ${errData.error || response.statusText || 'Server Error'}`);
+        } catch {
+          const cleanSnippet = errorText.replace(/<[^>]*>/g, ' ').trim().slice(0, 150);
+          alert(`Login failed: HTTP ${response.status} ${response.statusText || 'Server Error'}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
+        }
+        return;
+      }
+
       const data = await response.json();
       if (data.user) {
         setUser(data.user);
@@ -285,9 +300,12 @@ export default function App() {
         } else {
           setOnboardingStep(1);
         }
+      } else {
+        alert(data.error || 'Login failed: Invalid server response structure.');
       }
-    } catch (err) {
-      alert('Login failed. Check server log.');
+    } catch (err: any) {
+      console.error('[AxyFx] Login connection error:', err);
+      alert(`Login connection error: ${err?.message || err || 'Network or Parsing error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -301,8 +319,22 @@ export default function App() {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, name: authName })
+        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
       });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('[AxyFx] Register error response text:', errorText);
+        try {
+          const errData = JSON.parse(errorText);
+          alert(`Registration failed: ${errData.error || response.statusText || 'Server Error'}`);
+        } catch {
+          const cleanSnippet = errorText.replace(/<[^>]*>/g, ' ').trim().slice(0, 150);
+          alert(`Registration failed: HTTP ${response.status} ${response.statusText || 'Server Error'}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
+        }
+        return;
+      }
+
       const data = await response.json();
       if (data.user) {
         setUser(data.user);
@@ -310,8 +342,9 @@ export default function App() {
       } else if (data.error) {
         alert(data.error);
       }
-    } catch (err) {
-      alert('Registration failed.');
+    } catch (err: any) {
+      console.error('[AxyFx] Registration connection error:', err);
+      alert(`Registration connection error: ${err?.message || err || 'Network or Parsing error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -1076,9 +1109,11 @@ export default function App() {
                 <div className="relative">
                   <input 
                     type="password" 
-                    defaultValue="••••••••"
-                    disabled
-                    className="bg-slate-100 border border-slate-200 text-xs text-slate-400 rounded-lg p-3 w-full cursor-not-allowed"
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter password"
                   />
                   <Lock className="absolute right-3 top-3 h-4 w-4 text-slate-400" />
                 </div>
@@ -1117,9 +1152,11 @@ export default function App() {
                 <div className="relative">
                   <input 
                     type="password" 
-                    defaultValue="••••••••"
-                    disabled
-                    className="bg-slate-100 border border-slate-200 text-xs text-slate-400 rounded-lg p-3 w-full cursor-not-allowed"
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter password"
                   />
                   <Lock className="absolute right-3 top-3 h-4 w-4 text-slate-400" />
                 </div>
