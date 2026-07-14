@@ -7,11 +7,10 @@ import { createClient } from "@supabase/supabase-js";
 // You can find these in your Supabase Project Settings under API.
 // ============================================================================
 
-// 1. Paste your Supabase API URL here:
-const SUPABASE_URL = "https://nezbikvhycsqnhyrbmua.supabase.co/rest/v1/";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://your-project.supabase.co";
 
-// 2. Paste your Supabase Anon/Public Key here:
-const SUPABASE_PUBLIC_KEY = "sb_publishable_PxfX9C9h_vsYgthi2YZ4TQ_kP8SD0nE";
+// 2. Your Supabase Anon/Public Key:
+const SUPABASE_PUBLIC_KEY = import.meta.env.VITE_SUPABASE_KEY || "your-anon-key";
 
 // Initialize and export the Supabase client
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
