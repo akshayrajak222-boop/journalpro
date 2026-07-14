@@ -308,6 +308,20 @@ async function ensureDbLoaded() {
 
       if (error) {
         console.error('[AxyFx Journal Server] Supabase query error, falling back to local file:', error);
+        if (error.message && (error.message.includes('relation "journal_settings" does not exist') || error.code === '42P01')) {
+          console.warn('\n============================================================\n' +
+                       '   ACTION REQUIRED: SUPABASE TABLE "journal_settings" MISSING\n' +
+                       '============================================================\n' +
+                       'Please run the following SQL query in your Supabase SQL Editor\n' +
+                       'to create the required table for data persistence:\n\n' +
+                       'CREATE TABLE IF NOT EXISTS journal_settings (\n' +
+                       '  key text PRIMARY KEY,\n' +
+                       '  value jsonb DEFAULT \'{}\'::jsonb,\n' +
+                       '  created_at timestamp with time zone DEFAULT timezone(\'utc\'::text, now()) NOT NULL\n' +
+                       ');\n\n' +
+                       'This will enable seamless database persistence on Vercel!\n' +
+                       '============================================================\n');
+        }
         db = loadDatabaseFromFile();
       } else if (!data) {
         console.log('[AxyFx Journal Server] No data found in Supabase. Seeding initial database...');
@@ -318,7 +332,7 @@ async function ensureDbLoaded() {
         db = data.value;
         console.log('[AxyFx Journal Server] Loaded database from Supabase successfully!');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[AxyFx Journal Server] Failed to load database from Supabase, falling back:', err);
       db = loadDatabaseFromFile();
     }
@@ -410,61 +424,83 @@ const PORT = 3000;
   // ==========================================
 
   app.post('/api/auth/register', (req, res) => {
-    const { email, name, password } = req.body;
-    if (!email || !name) {
-      return res.status(400).json({ error: 'Email and Name are required' });
-    }
+    try {
+      const { email, name, password } = req.body;
+      if (!email || !name) {
+        return res.status(400).json({ error: 'Email and Name are required' });
+      }
 
-    const exists = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
-    if (exists) {
-      return res.status(400).json({ error: 'User with this email already exists' });
-    }
+      // Safeguard against missing or uninitialized db
+      if (!db || typeof db !== 'object' || !Array.isArray(db.users)) {
+        console.warn('[AxyFx Journal Server] db or db.users is null during registration. Recovering on-the-fly...');
+        db = loadDatabaseFromFile();
+      }
 
-    const newUser: User = {
-      id: `user_${Date.now()}`,
-      email: email.toLowerCase(),
-      name,
-      password: password || '',
-      onboardingCompleted: false,
-      isPro: false
-    };
+      const exists = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      if (exists) {
+        return res.status(400).json({ error: 'User with this email already exists' });
+      }
 
-    db.users.push(newUser);
-    saveDatabase(db);
-    currentUser = newUser;
-
-    res.json({ message: 'Registration successful', user: newUser });
-  });
-
-  app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-
-    const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      // Automatic sign-up/login simulation to make testing incredibly pleasant
       const newUser: User = {
         id: `user_${Date.now()}`,
         email: email.toLowerCase(),
-        name: email.split('@')[0],
+        name,
         password: password || '',
         onboardingCompleted: false,
         isPro: false
       };
+
       db.users.push(newUser);
       saveDatabase(db);
       currentUser = newUser;
-      return res.json({ message: 'New user created and logged in', user: newUser });
-    }
 
-    if (user.password && password && user.password !== password) {
-      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+      res.json({ message: 'Registration successful', user: newUser });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Registration endpoint error:', err);
+      res.status(500).json({ error: `Server registration error: ${err?.message || err}` });
     }
+  });
 
-    currentUser = user;
-    res.json({ message: 'Login successful', user });
+  app.post('/api/auth/login', (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Safeguard against missing or uninitialized db
+      if (!db || typeof db !== 'object' || !Array.isArray(db.users)) {
+        console.warn('[AxyFx Journal Server] db or db.users is null during login. Recovering on-the-fly...');
+        db = loadDatabaseFromFile();
+      }
+
+      const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      if (!user) {
+        // Automatic sign-up/login simulation to make testing incredibly pleasant
+        const newUser: User = {
+          id: `user_${Date.now()}`,
+          email: email.toLowerCase(),
+          name: email.split('@')[0],
+          password: password || '',
+          onboardingCompleted: false,
+          isPro: false
+        };
+        db.users.push(newUser);
+        saveDatabase(db);
+        currentUser = newUser;
+        return res.json({ message: 'New user created and logged in', user: newUser });
+      }
+
+      if (user.password && password && user.password !== password) {
+        return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+      }
+
+      currentUser = user;
+      res.json({ message: 'Login successful', user });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Login endpoint error:', err);
+      res.status(500).json({ error: `Server login error: ${err?.message || err}` });
+    }
   });
 
   app.get('/api/auth/me', (req, res) => {

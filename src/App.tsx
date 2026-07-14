@@ -21,6 +21,8 @@ import {
   Announcement 
 } from './types';
 
+import { supabase } from './supabaseClient';
+
 import MT5Instructions from './components/MT5Instructions';
 import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
@@ -36,6 +38,7 @@ export default function App() {
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [authPassword, setAuthPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -273,7 +276,21 @@ export default function App() {
     e.preventDefault();
     if (!authEmail) return;
     setActionLoading(true);
+    setAuthError(null);
     try {
+      // 1) Use supabase.auth.signInWithPassword({ email, password })
+      const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword
+      });
+
+      if (supabaseError) {
+        setAuthError(supabaseError.message);
+        setActionLoading(false);
+        return;
+      }
+
+      // 2) Sync login session with the Express server
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -282,13 +299,13 @@ export default function App() {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
-        console.error('[AxyFx] Login error response text:', errorText);
+        console.error('[AxyFx] Login server sync error:', errorText);
         try {
           const errData = JSON.parse(errorText);
-          alert(`Login failed: ${errData.error || response.statusText || 'Server Error'}`);
+          setAuthError(`Server sync error: ${errData.error || response.statusText}`);
         } catch {
           const cleanSnippet = errorText.replace(/<[^>]*>/g, ' ').trim().slice(0, 150);
-          alert(`Login failed: HTTP ${response.status} ${response.statusText || 'Server Error'}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
+          setAuthError(`Server sync error: HTTP ${response.status} ${response.statusText}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
         }
         return;
       }
@@ -302,11 +319,11 @@ export default function App() {
           setOnboardingStep(1);
         }
       } else {
-        alert(data.error || 'Login failed: Invalid server response structure.');
+        setAuthError(data.error || 'Login failed: Invalid server response structure.');
       }
     } catch (err: any) {
       console.error('[AxyFx] Login connection error:', err);
-      alert(`Login connection error: ${err?.message || err || 'Network or Parsing error'}`);
+      setAuthError(`Login connection error: ${err?.message || err || 'Network or Parsing error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -316,7 +333,26 @@ export default function App() {
     e.preventDefault();
     if (!authEmail || !authName) return;
     setActionLoading(true);
+    setAuthError(null);
     try {
+      // 1) Use supabase.auth.signUp({ email, password })
+      const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+        options: {
+          data: {
+            full_name: authName
+          }
+        }
+      });
+
+      if (supabaseError) {
+        setAuthError(supabaseError.message);
+        setActionLoading(false);
+        return;
+      }
+
+      // 2) Sync registration session with Express server
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -325,13 +361,13 @@ export default function App() {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
-        console.error('[AxyFx] Register error response text:', errorText);
+        console.error('[AxyFx] Register server sync error:', errorText);
         try {
           const errData = JSON.parse(errorText);
-          alert(`Registration failed: ${errData.error || response.statusText || 'Server Error'}`);
+          setAuthError(`Server sync error: ${errData.error || response.statusText}`);
         } catch {
           const cleanSnippet = errorText.replace(/<[^>]*>/g, ' ').trim().slice(0, 150);
-          alert(`Registration failed: HTTP ${response.status} ${response.statusText || 'Server Error'}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
+          setAuthError(`Server sync error: HTTP ${response.status} ${response.statusText}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
         }
         return;
       }
@@ -341,11 +377,11 @@ export default function App() {
         setUser(data.user);
         setOnboardingStep(1);
       } else if (data.error) {
-        alert(data.error);
+        setAuthError(data.error);
       }
     } catch (err: any) {
       console.error('[AxyFx] Registration connection error:', err);
-      alert(`Registration connection error: ${err?.message || err || 'Network or Parsing error'}`);
+      setAuthError(`Registration connection error: ${err?.message || err || 'Network or Parsing error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -1134,9 +1170,17 @@ export default function App() {
                 {actionLoading ? 'Creating Workspace...' : 'Register Secure Account'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
+
+              {authError && (
+                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
               <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
                 <span>Already have an account?</span>
-                <button type="button" onClick={() => setIsRegistering(false)} className="text-blue-600 hover:underline font-semibold">Sign In</button>
+                <button type="button" onClick={() => { setIsRegistering(false); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Sign In</button>
               </div>
             </form>
           ) : (
@@ -1186,6 +1230,13 @@ export default function App() {
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
+              {authError && (
+                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
               {/* Google Sign In simulation */}
               <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
                 <button
@@ -1212,7 +1263,7 @@ export default function App() {
 
               <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
                 <span>New to FX Journal Pro?</span>
-                <button type="button" onClick={() => setIsRegistering(true)} className="text-blue-600 hover:underline font-semibold">Create free account</button>
+                <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Create free account</button>
               </div>
             </form>
           )}
