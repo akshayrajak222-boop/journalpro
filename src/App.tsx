@@ -40,6 +40,10 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   
+  // OTP states
+  const [isOtpMode, setIsOtpMode] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -352,6 +356,13 @@ export default function App() {
         return;
       }
 
+      // Check if session exists (user immediately logged in) or if OTP verification is required
+      if (!supabaseData.session) {
+        setIsOtpMode(true);
+        setActionLoading(false);
+        return;
+      }
+
       // 2) Sync registration session with Express server
       const response = await fetch('/api/auth/register', {
         method: 'POST',
@@ -382,6 +393,55 @@ export default function App() {
     } catch (err: any) {
       console.error('[AxyFx] Registration connection error:', err);
       setAuthError(`Registration connection error: ${err?.message || err || 'Network or Parsing error'}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !otpCode || otpCode.length !== 6) {
+      setAuthError('Please enter a valid 6-digit code');
+      return;
+    }
+    setActionLoading(true);
+    setAuthError(null);
+    try {
+      const { data: supabaseData, error: supabaseError } = await supabase.auth.verifyOtp({
+        email: authEmail,
+        token: otpCode,
+        type: 'signup'
+      });
+
+      if (supabaseError) {
+        setAuthError(supabaseError.message);
+        setActionLoading(false);
+        return;
+      }
+
+      // Sync registration session with Express server after OTP
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('[AxyFx] Register server sync error:', errorText);
+        setAuthError('Server sync error after OTP verification.');
+        return;
+      }
+
+      const data = await response.json();
+      if (data.user) {
+        setUser(data.user);
+        setOnboardingStep(1);
+      } else if (data.error) {
+        setAuthError(data.error);
+      }
+    } catch (err: any) {
+      setAuthError(`OTP Verification error: ${err?.message || err}`);
     } finally {
       setActionLoading(false);
     }
@@ -1115,6 +1175,47 @@ export default function App() {
                 className="w-full text-slate-500 hover:text-slate-800 text-xs font-medium block text-center"
               >
                 Back to Sign In
+              </button>
+            </form>
+          ) : isOtpMode ? (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-center mb-4 text-xs text-blue-800">
+                A 6-digit confirmation code has been sent to <br/><strong className="font-bold">{authEmail}</strong>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Enter 6-Digit Code</label>
+                <input 
+                  type="text" 
+                  required 
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  className="bg-slate-50 border border-slate-200 text-lg text-center tracking-[0.5em] rounded-lg p-3 w-full font-mono focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="------"
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={actionLoading || otpCode.length !== 6}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {actionLoading ? 'Verifying...' : 'Verify Code & Login'}
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </button>
+
+              {authError && (
+                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <button 
+                type="button" 
+                onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
+                className="w-full text-slate-500 hover:text-slate-800 text-xs font-medium block text-center mt-2"
+              >
+                Change Email
               </button>
             </form>
           ) : isRegistering ? (
