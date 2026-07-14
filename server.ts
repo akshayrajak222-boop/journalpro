@@ -240,7 +240,11 @@ function loadDatabaseFromFile() {
       ] as MT5Connection[],
       payments: [] as PaymentHistory[]
     };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialDB, null, 2), 'utf-8');
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(initialDB, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[AxyFx Journal Server] Local database file write ignored (read-only filesystem on serverless environments):', err);
+    }
     return initialDB;
   }
   return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
