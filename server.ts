@@ -13,12 +13,26 @@ import {
   MT5Connection, 
   PaymentHistory 
 } from './src/types';
+import { createClient } from '@supabase/supabase-js';
 
 // Absolute file paths for database persistence
 const DB_FILE = path.join(process.cwd(), 'db.json');
 
-// Helper to load database
-function loadDatabase() {
+// Supabase Client Configuration
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+const useSupabase = !!(supabaseUrl && supabaseKey);
+const supabase = useSupabase ? createClient(supabaseUrl!, supabaseKey!) : null;
+
+if (useSupabase) {
+  console.log('[AxyFx Journal Server] Supabase integration ENABLED!');
+} else {
+  console.log('[AxyFx Journal Server] Supabase integration DISABLED. Falling back to local db.json');
+}
+
+// Helper to load database from local file
+function loadDatabaseFromFile() {
   if (!fs.existsSync(DB_FILE)) {
     // Initial seed database
     const initialDB = {
@@ -232,33 +246,101 @@ function loadDatabase() {
   return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
 }
 
-function saveDatabase(data: any) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+let db: any = null;
+let isLoaded = false;
+
+async function ensureDbLoaded() {
+  if (isLoaded && db) return db;
+
+  if (useSupabase) {
+    try {
+      console.log('[AxyFx Journal Server] Loading database from Supabase...');
+      const { data, error } = await supabase!
+        .from('journal_settings')
+        .select('value')
+        .eq('key', 'db_json')
+        .maybeSingle();
+
+      if (error) {
+        console.error('[AxyFx Journal Server] Supabase query error, falling back to local file:', error);
+        db = loadDatabaseFromFile();
+      } else if (!data) {
+        console.log('[AxyFx Journal Server] No data found in Supabase. Seeding initial database...');
+        const initial = loadDatabaseFromFile();
+        await supabase!.from('journal_settings').insert({ key: 'db_json', value: initial });
+        db = initial;
+      } else {
+        db = data.value;
+        console.log('[AxyFx Journal Server] Loaded database from Supabase successfully!');
+      }
+    } catch (err) {
+      console.error('[AxyFx Journal Server] Failed to load database from Supabase, falling back:', err);
+      db = loadDatabaseFromFile();
+    }
+  } else {
+    db = loadDatabaseFromFile();
+  }
+
+  isLoaded = true;
+  return db;
 }
 
-// Initialize database
-let db = loadDatabase();
+async function saveDatabase(data: any) {
+  db = data;
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write db.json locally:', err);
+  }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+  if (useSupabase) {
+    (async () => {
+      try {
+        const { error } = await supabase!
+          .from('journal_settings')
+          .upsert({ key: 'db_json', value: data });
+        if (error) {
+          console.error('[AxyFx Journal Server] Supabase save error:', error);
+        } else {
+          console.log('[AxyFx Journal Server] Saved database to Supabase successfully!');
+        }
+      } catch (err) {
+        console.error('[AxyFx Journal Server] Exception saving to Supabase:', err);
+      }
+    })();
+  }
+}
+
+const app = express();
+const PORT = 3000;
 
   // Middleware
   app.use(express.json({ limit: '15mb' }));
 
   // Helper auth session simulation (simplest session cookies or custom token validation via headers)
-  // For smooth local usage, we will keep current logged in user in memory or simple cookie/header
-  let currentUser: User | null = db.users.find((u: any) => u.email === 'akshayrajpanamthode@gmail.com') || db.users[1];
+  let currentUser: User | null = null;
 
-  // Global middleware to set local user context
-  app.use((req, res, next) => {
-    // Enable simple authorization overrides for developers
-    const authEmail = req.headers['x-auth-email'];
-    if (authEmail) {
-      const dbUser = db.users.find((u: any) => u.email === authEmail);
-      if (dbUser) currentUser = dbUser;
+  // Global middleware to load database and set local user context
+  app.use(async (req, res, next) => {
+    try {
+      await ensureDbLoaded();
+
+      // Initialize default session user if not loaded yet
+      if (!currentUser && db && db.users) {
+        currentUser = db.users.find((u: any) => u.email === 'akshayrajpanamthode@gmail.com') || db.users[1];
+      }
+
+      // Enable simple authorization overrides for developers
+      const authEmail = req.headers['x-auth-email'];
+      if (authEmail && db && db.users) {
+        const dbUser = db.users.find((u: any) => u.email === authEmail);
+        if (dbUser) currentUser = dbUser;
+      }
+      next();
+    } catch (err) {
+      console.error('[AxyFx Journal Server] Middleware execution error:', err);
+      next(err);
     }
-    next();
   });
 
   // ==========================================
@@ -1440,26 +1522,30 @@ Requirements:
   // VITE DEV SERVER OR STATIC ASSET PRODUCTION
   // ==========================================
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
+  // In development environment outside of Vercel, load Vite dev server
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
+    }).then((vite) => {
+      app.use(vite.middlewares);
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`[AxyFx Journal Server] Dev listening on http://0.0.0.0:${PORT}`);
+      });
+    }).catch(err => {
+      console.error('Vite Dev Server creation failed:', err);
     });
-    app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
+    // Static hosting inside Express is only needed for standard non-Vercel production deployments
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[AxyFx Journal Server] Prod listening on http://0.0.0.0:${PORT}`);
+    });
   }
 
-  // Start Server
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[AxyFx Journal Server] Listening on http://0.0.0.0:${PORT}`);
-  });
-}
-
-startServer().catch((err) => {
-  console.error('Fatal Server Boot Error:', err);
-});
+  export default app;
