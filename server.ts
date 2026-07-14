@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { 
   User, 
@@ -19,16 +18,24 @@ import { createClient } from '@supabase/supabase-js';
 const DB_FILE = path.join(process.cwd(), 'db.json');
 
 // Supabase Client Configuration
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+let supabase: any = null;
+let useSupabase = false;
 
-const useSupabase = !!(supabaseUrl && supabaseKey);
-const supabase = useSupabase ? createClient(supabaseUrl!, supabaseKey!) : null;
+try {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const supabaseKey = process.env.SUPABASE_KEY?.trim();
 
-if (useSupabase) {
-  console.log('[AxyFx Journal Server] Supabase integration ENABLED!');
-} else {
-  console.log('[AxyFx Journal Server] Supabase integration DISABLED. Falling back to local db.json');
+  if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+    useSupabase = true;
+    console.log('[AxyFx Journal Server] Supabase integration ENABLED!');
+  } else {
+    console.log('[AxyFx Journal Server] Supabase integration DISABLED. Falling back to local db.json');
+  }
+} catch (err) {
+  console.error('[AxyFx Journal Server] Failed to initialize Supabase client:', err);
+  useSupabase = false;
+  supabase = null;
 }
 
 // Helper to load database from local file
@@ -254,7 +261,7 @@ let db: any = null;
 let isLoaded = false;
 
 async function ensureDbLoaded() {
-  if (isLoaded && db) return db;
+  if (isLoaded && db && db.users && Array.isArray(db.users)) return db;
 
   if (useSupabase) {
     try {
@@ -283,6 +290,23 @@ async function ensureDbLoaded() {
     }
   } else {
     db = loadDatabaseFromFile();
+  }
+
+  // Validate loaded db structure and self-heal if corrupted or incomplete
+  if (!db || typeof db !== 'object' || !Array.isArray(db.users)) {
+    console.warn('[AxyFx Journal Server] Loaded database is invalid or lacks users array. Self-healing with default seed data...');
+    db = loadDatabaseFromFile();
+    if (useSupabase) {
+      // Background async update to heal the record in Supabase
+      supabase!
+        .from('journal_settings')
+        .upsert({ key: 'db_json', value: db })
+        .then(({ error }: { error: any }) => {
+          if (error) console.error('[AxyFx Journal Server] Supabase database healing upsert error:', error);
+          else console.log('[AxyFx Journal Server] Supabase database healed successfully!');
+        })
+        .catch((err: any) => console.error('[AxyFx Journal Server] Exception healing database:', err));
+    }
   }
 
   isLoaded = true;
@@ -1528,13 +1552,15 @@ Requirements:
 
   // In development environment outside of Vercel, load Vite dev server
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-    createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa'
-    }).then((vite) => {
-      app.use(vite.middlewares);
-      app.listen(PORT, '0.0.0.0', () => {
-        console.log(`[AxyFx Journal Server] Dev listening on http://0.0.0.0:${PORT}`);
+    import('vite').then(({ createServer }) => {
+      createServer({
+        server: { middlewareMode: true },
+        appType: 'spa'
+      }).then((vite) => {
+        app.use(vite.middlewares);
+        app.listen(PORT, '0.0.0.0', () => {
+          console.log(`[AxyFx Journal Server] Dev listening on http://0.0.0.0:${PORT}`);
+        });
       });
     }).catch(err => {
       console.error('Vite Dev Server creation failed:', err);
