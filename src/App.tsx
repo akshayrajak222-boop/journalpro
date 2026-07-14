@@ -4,7 +4,7 @@ import {
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
-  Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, RefreshCw, Radio,
+  Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info
 } from 'lucide-react';
 import { 
@@ -35,6 +35,7 @@ export default function App() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -1108,14 +1109,21 @@ export default function App() {
                 <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Password</label>
                 <div className="relative">
                   <input 
-                    type="password" 
+                    type={showPassword ? "text" : "password"} 
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-white border border-slate-300 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter password"
                   />
-                  <Lock className="absolute right-3 top-3 h-4 w-4 text-slate-400" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
               <button 
@@ -1151,14 +1159,21 @@ export default function App() {
                 </div>
                 <div className="relative">
                   <input 
-                    type="password" 
+                    type={showPassword ? "text" : "password"} 
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-white border border-slate-300 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter password"
                   />
-                  <Lock className="absolute right-3 top-3 h-4 w-4 text-slate-400" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
               
