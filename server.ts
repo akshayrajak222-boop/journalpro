@@ -59,6 +59,67 @@ try {
   supabase = null;
 }
 
+// ==========================================
+// MT5 Python Bridge Configuration
+// A local Python Flask server (mt5_bridge/mt5_bridge.py) that connects
+// to your running MT5 terminal via the official MetaTrader5 Python package.
+// Free alternative to MetaApi cloud (which now requires paid credits).
+// ==========================================
+const MT5_BRIDGE_URL = process.env.MT5_BRIDGE_URL || 'http://127.0.0.1:5005';
+
+// Helper: check if the Python bridge is running
+async function checkBridgeHealth(): Promise<{ ok: boolean; connected: boolean; message: string }> {
+  try {
+    const res = await fetch(`${MT5_BRIDGE_URL}/health`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { ok: false, connected: false, message: 'Bridge returned non-200' };
+    const data = await res.json();
+    return { ok: true, connected: data.connected === true, message: 'Bridge is running' };
+  } catch (e: any) {
+    return { ok: false, connected: false, message: `Bridge not reachable: ${e?.message}` };
+  }
+}
+
+// Helper: call the Python bridge
+async function bridgeFetch(path: string, options: any = {}) {
+  const url = `${MT5_BRIDGE_URL}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    signal: AbortSignal.timeout(30000)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Bridge error ${res.status}`);
+  return data;
+}
+
+// Helper: map a MetaAPI deal to our journal trade format
+function mapDealToTrade(deal: any, accountId: string) {
+  // Only import actual trade deals (buy/sell), skip deposits/withdrawals
+  if (!deal.symbol) return null;
+  const type = deal.type === 'DEAL_TYPE_BUY' ? 'Buy' :
+               deal.type === 'DEAL_TYPE_SELL' ? 'Sell' : null;
+  if (!type) return null;
+  return {
+    id: `metaapi_deal_${deal.id || Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+    accountId,
+    date: deal.time || new Date().toISOString(),
+    symbol: (deal.symbol || 'UNKNOWN').toUpperCase(),
+    type,
+    lotSize: parseFloat(deal.volume) || 0,
+    entryPrice: parseFloat(deal.price) || 0,
+    exitPrice: parseFloat(deal.price) || 0,
+    profit: parseFloat(deal.profit) || 0,
+    commission: parseFloat(deal.commission) || 0,
+    swap: parseFloat(deal.swap) || 0,
+    riskPercentage: 1.0,
+    strategy: 'MetaAPI Sync',
+    emotion: 'Calm' as any,
+    notes: deal.comment || 'Imported from MT5 via MetaAPI',
+    tags: ['MT5 Sync', 'MetaAPI'],
+    isMt5Sync: true
+  };
+}
+
 // Helper to load database from local file (always self-healing and bulletproof)
 function loadDatabaseFromFile() {
   const initialDB = {
@@ -906,137 +967,128 @@ const PORT = 3000;
     res.json({ connections: userConns });
   });
 
-  // Connect MT5 Investor password
-  app.post('/api/mt5/connect-investor', (req, res) => {
+  // Check Python bridge health status
+  app.get('/api/mt5/bridge-status', async (req, res) => {
+    const health = await checkBridgeHealth();
+    res.json(health);
+  });
+
+  // Connect MT5 via local Python Bridge (investor password — free, no MetaApi)
+  app.post('/api/mt5/connect-investor', async (req, res) => {
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { loginNumber, brokerServer, investorPassword, autoSync } = req.body;
 
     if (!loginNumber || !brokerServer || !investorPassword) {
-      return res.status(400).json({ error: 'Missing required parameters' });
+      return res.status(400).json({ error: 'loginNumber, brokerServer, and investorPassword are required.' });
     }
 
-    // Automatically create a new dedicated Trading Account for this MT5 connection
-    const newAccId = `acc_mt5_${Date.now()}`;
-    const startingBalance = 10000.00;
-    const newAccount = {
-      id: newAccId,
-      userId: currentUser.id,
-      name: `MT5 Sync (${loginNumber})`,
-      broker: brokerServer,
-      platform: 'MT5',
-      accountType: 'Live',
-      currency: 'USD',
-      startingBalance: startingBalance,
-      currentBalance: startingBalance,
-      equity: startingBalance,
-      status: 'Active'
-    };
-
-    db.accounts.push(newAccount);
-
-    // Create default Risk Settings for this new MT5 account
-    const newRisk = {
-      id: `r_mt5_${Date.now()}`,
-      accountId: newAccId,
-      riskPerTradeLimit: 2.0,
-      dailyLossLimit: 500,
-      weeklyLossLimit: 1500,
-      maxDrawdownLimit: 10.0,
-      disciplineEnabled: true
-    };
-    db.riskSettings.push(newRisk);
-
-    // Create the MT5 connection linked to the brand new account
-    const connection = {
-      id: `conn_inv_${Date.now()}`,
-      userId: currentUser.id,
-      accountId: newAccId,
-      brokerName: brokerServer,
-      status: 'Connected',
-      lastSyncTime: new Date().toISOString(),
-      syncToken: `axy_token_inv_${Math.floor(Math.random()*100000)}`,
-      totalSyncedTrades: 0,
-      loginNumber,
-      brokerServer,
-      isInvestorSync: true,
-      autoSync: autoSync !== false
-    };
-    db.mt5Connections.push(connection);
-
-    // Automatically import some trades, positions, pending orders, etc.
-    const initialMockTrades = [
-      {
-        id: `trade_inv_1_${Date.now()}`,
-        accountId: newAccId,
-        date: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
-        symbol: 'EURUSD',
-        type: 'Buy',
-        lotSize: 1.0,
-        entryPrice: 1.08200,
-        exitPrice: 1.08950,
-        profit: 750,
-        commission: -6.00,
-        swap: -1.50,
-        riskPercentage: 1.2,
-        strategy: 'Investor Password Sync',
-        emotion: 'Calm',
-        notes: 'Auto imported from MT5 Investor Password read-only sync.',
-        tags: ['MT5 Sync'],
-        isMt5Sync: true
-      },
-      {
-        id: `trade_inv_2_${Date.now()}`,
-        accountId: newAccId,
-        date: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-        symbol: 'GBPUSD',
-        type: 'Sell',
-        lotSize: 1.5,
-        entryPrice: 1.27200,
-        exitPrice: 1.26500,
-        profit: 1050,
-        commission: -9.00,
-        swap: 0.0,
-        riskPercentage: 1.5,
-        strategy: 'Investor Password Sync',
-        emotion: 'Calm',
-        notes: 'Auto imported from MT5 Investor Password read-only sync.',
-        tags: ['MT5 Sync'],
-        isMt5Sync: true
-      },
-      {
-        id: `trade_inv_3_${Date.now()}`,
-        accountId: newAccId,
-        date: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString(),
-        symbol: 'XAUUSD',
-        type: 'Buy',
-        lotSize: 0.5,
-        entryPrice: 2320.50,
-        exitPrice: 2311.20,
-        profit: -465,
-        commission: -5.00,
-        swap: -2.10,
-        riskPercentage: 2.0,
-        strategy: 'Investor Password Sync',
-        emotion: 'Calm',
-        notes: 'Auto imported from MT5 Investor Password read-only sync.',
-        tags: ['MT5 Sync'],
-        isMt5Sync: true
+    try {
+      // ── Step 1: Verify Python bridge is running ──────────────────────────
+      const health = await checkBridgeHealth();
+      if (!health.ok) {
+        return res.status(503).json({
+          error: 'MT5 Bridge is not running. Please start mt5_bridge/mt5_bridge.py on your Windows PC first.',
+          bridgeUrl: MT5_BRIDGE_URL,
+          hint: 'Run: cd mt5_bridge && python mt5_bridge.py  (or double-click start_bridge.bat)'
+        });
       }
-    ];
-    db.trades.push(...initialMockTrades);
-    connection.totalSyncedTrades += initialMockTrades.length;
 
-    // Update account balance
-    const totalNet = initialMockTrades.reduce((sum, t) => sum + t.profit + t.commission + t.swap, 0);
-    newAccount.currentBalance = parseFloat((startingBalance + totalNet).toFixed(2));
-    newAccount.equity = parseFloat((newAccount.currentBalance + 120.50).toFixed(2));
+      // ── Step 2: Connect to MT5 with investor password ────────────────────
+      console.log(`[MT5 Bridge] Connecting login=${loginNumber} server=${brokerServer}`);
+      let connectData: any;
+      try {
+        connectData = await bridgeFetch('/connect', {
+          method: 'POST',
+          body: JSON.stringify({ login: parseInt(loginNumber), server: brokerServer, password: investorPassword })
+        });
+      } catch (e: any) {
+        return res.status(400).json({
+          error: `MT5 connection failed: ${e.message}`,
+          hint: 'Check that your MT5 terminal is open, and the login/server/investor password are correct.'
+        });
+      }
 
-    saveDatabase(db);
-    res.json({
-      message: 'MT5 Investor account connected successfully and read-only sync completed.',
-      connection,
-      account: newAccount
-    });
+      const accountInfo = connectData.account || {};
+
+      // ── Step 3: Create journal account entry ─────────────────────────────
+      const newAccId = `acc_mt5py_${Date.now()}`;
+      const startingBalance = parseFloat(accountInfo.balance) || 10000;
+      const currentBalance  = parseFloat(accountInfo.equity)  || startingBalance;
+      const tradeMode       = accountInfo.trade_mode;  // 0=real, 1=demo
+
+      const newAccount = {
+        id: newAccId,
+        userId: currentUser.id,
+        name: `${brokerServer} (${loginNumber})`,
+        broker: brokerServer,
+        platform: 'MT5',
+        accountType: tradeMode === 0 ? 'Live' : 'Demo',
+        currency: accountInfo.currency || 'USD',
+        startingBalance,
+        currentBalance,
+        equity: currentBalance,
+        status: 'Active'
+      };
+      db.accounts.push(newAccount);
+
+      // Default risk settings
+      db.riskSettings.push({
+        id: `r_mt5py_${Date.now()}`,
+        accountId: newAccId,
+        riskPerTradeLimit: 2.0,
+        dailyLossLimit: startingBalance * 0.05,
+        weeklyLossLimit: startingBalance * 0.10,
+        maxDrawdownLimit: 10.0,
+        disciplineEnabled: true
+      });
+
+      // ── Step 4: Fetch deal history (last 1 year) ──────────────────────────
+      const fromDate = new Date();
+      fromDate.setFullYear(fromDate.getFullYear() - 1);
+      const toDate = new Date();
+
+      let mappedTrades: any[] = [];
+      try {
+        const historyData = await bridgeFetch(
+          `/history?from_date=${fromDate.toISOString()}&to_date=${toDate.toISOString()}&account_id=${newAccId}`
+        );
+        mappedTrades = historyData.trades || [];
+        console.log(`[MT5 Bridge] Imported ${mappedTrades.length} trades for account ${newAccId}`);
+      } catch (e: any) {
+        console.warn('[MT5 Bridge] Could not fetch history (account created but no trades):', e.message);
+      }
+
+      db.trades.push(...mappedTrades);
+
+      // ── Step 5: Create connection record ─────────────────────────────────
+      const connection = {
+        id: `conn_mt5py_${Date.now()}`,
+        userId: currentUser.id,
+        accountId: newAccId,
+        brokerName: brokerServer,
+        loginNumber: String(loginNumber),
+        brokerServer,
+        status: 'Connected',
+        lastSyncTime: new Date().toISOString(),
+        syncToken: `axy_bridge_${loginNumber}`,
+        totalSyncedTrades: mappedTrades.length,
+        isInvestorSync: true,
+        autoSync: autoSync !== false,
+        bridgeConnected: true
+      };
+      db.mt5Connections.push(connection);
+
+      saveDatabase(db);
+      res.json({
+        message: `MT5 connected via Python Bridge! Imported ${mappedTrades.length} trades from your broker.`,
+        connection,
+        account: newAccount,
+        tradesImported: mappedTrades.length
+      });
+    } catch (err: any) {
+      console.error('[MT5 Bridge] Connect-investor error:', err);
+      res.status(500).json({ error: `MT5 bridge connection failed: ${err?.message || err}` });
+    }
   });
 
   // Connect MT5 Expert Advisor (Method A) - automatically creates a new dedicated account
@@ -1103,10 +1155,10 @@ const PORT = 3000;
     });
   });
 
-  // Sync now
-  app.post('/api/mt5/sync-investor', (req, res) => {
+  // Sync now — fetches new deals from Python Bridge since last sync
+  app.post('/api/mt5/sync-investor', async (req, res) => {
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
-    const { accountId } = req.body;
+    const { accountId, investorPassword } = req.body;
 
     const account = db.accounts.find((acc: any) => acc.id === accountId && acc.userId === currentUser?.id);
     if (!account) return res.status(404).json({ error: 'Account not found' });
@@ -1114,50 +1166,80 @@ const PORT = 3000;
     const connection = db.mt5Connections.find((conn: any) => conn.accountId === account.id);
     if (!connection) return res.status(404).json({ error: 'MT5 Connection not found for this account' });
 
-    // Generate a new simulated trade during sync
-    const symbols = ['EURUSD', 'GBPUSD', 'XAUUSD', 'USDJPY'];
-    const sym = symbols[Math.floor(Math.random() * symbols.length)];
-    const profit = Math.random() > 0.4 ? parseFloat((Math.random() * 400 + 50).toFixed(2)) : -parseFloat((Math.random() * 200 + 10).toFixed(2));
-    
-    const newTrade: Trade = {
-      id: `trade_inv_sync_${Date.now()}`,
-      accountId: account.id,
-      date: new Date().toISOString(),
-      symbol: sym,
-      type: Math.random() > 0.5 ? 'Buy' : 'Sell',
-      lotSize: parseFloat((Math.random() * 1.0 + 0.1).toFixed(2)),
-      entryPrice: 1.08500,
-      exitPrice: 1.08900,
-      profit,
-      commission: -4.00,
-      swap: 0.0,
-      riskPercentage: 1.0,
-      strategy: 'Investor Password Sync',
-      emotion: 'Calm',
-      notes: 'Imported via manual sync.',
-      tags: ['MT5 Sync'],
-      isMt5Sync: true
-    };
-
-    db.trades.push(newTrade);
-    connection.lastSyncTime = new Date().toISOString();
-    connection.totalSyncedTrades += 1;
-
-    // Update account balance
-    const net = newTrade.profit + newTrade.commission + newTrade.swap;
-    const accIdx = db.accounts.findIndex((acc: any) => acc.id === account.id);
-    if (accIdx !== -1) {
-      db.accounts[accIdx].currentBalance = parseFloat((db.accounts[accIdx].currentBalance + net).toFixed(2));
-      db.accounts[accIdx].equity = parseFloat((db.accounts[accIdx].currentBalance + (Math.random() * 150 - 50)).toFixed(2));
+    if (!connection.bridgeConnected && !connection.isInvestorSync) {
+      return res.status(400).json({ error: 'This account was not connected via Python Bridge. Please reconnect using the Investor Password method.' });
     }
 
-    saveDatabase(db);
-    res.json({
-      message: 'Synchronization finished.',
-      connection,
-      trade: newTrade,
-      account: db.accounts.find((acc: any) => acc.id === account.id)
-    });
+    try {
+      // ── Step 1: Check bridge health ──────────────────────────────────────
+      const health = await checkBridgeHealth();
+      if (!health.ok) {
+        return res.status(503).json({
+          error: 'MT5 Bridge is not running. Please start mt5_bridge/mt5_bridge.py on your Windows PC.',
+          hint: 'Double-click mt5_bridge/start_bridge.bat to start it.'
+        });
+      }
+
+      // ── Step 2: Re-connect if bridge lost session ─────────────────────────
+      if (!health.connected && investorPassword && connection.loginNumber && connection.brokerServer) {
+        try {
+          await bridgeFetch('/connect', {
+            method: 'POST',
+            body: JSON.stringify({
+              login: parseInt(connection.loginNumber),
+              server: connection.brokerServer,
+              password: investorPassword
+            })
+          });
+        } catch (e: any) {
+          return res.status(400).json({
+            error: `Re-connect failed: ${e.message}`,
+            hint: 'Provide your investor password in the request body to re-authenticate.'
+          });
+        }
+      }
+
+      // ── Step 3: Fetch deals since last sync ───────────────────────────────
+      const fromDate = new Date(connection.lastSyncTime || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
+      const toDate = new Date();
+
+      const historyData = await bridgeFetch(
+        `/history?from_date=${fromDate.toISOString()}&to_date=${toDate.toISOString()}&account_id=${account.id}`
+      );
+      const incomingTrades: any[] = historyData.trades || [];
+
+      // Deduplicate by trade ID
+      const existingIds = new Set(db.trades.map((t: any) => t.id));
+      const newTrades = incomingTrades.filter((t: any) => !existingIds.has(t.id));
+
+      if (newTrades.length > 0) {
+        db.trades.push(...newTrades);
+        const net = newTrades.reduce((sum: number, t: any) => sum + t.profit + t.commission + t.swap, 0);
+        const accIdx = db.accounts.findIndex((acc: any) => acc.id === account.id);
+        if (accIdx !== -1) {
+          db.accounts[accIdx].currentBalance = parseFloat((db.accounts[accIdx].currentBalance + net).toFixed(2));
+          db.accounts[accIdx].equity = db.accounts[accIdx].currentBalance;
+        }
+      }
+
+      // Update connection sync time
+      const connIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
+      if (connIdx !== -1) {
+        db.mt5Connections[connIdx].lastSyncTime = toDate.toISOString();
+        db.mt5Connections[connIdx].totalSyncedTrades += newTrades.length;
+        db.mt5Connections[connIdx].status = 'Connected';
+      }
+
+      saveDatabase(db);
+      res.json({
+        message: `Sync complete! ${newTrades.length} new trade(s) imported.`,
+        newTradesCount: newTrades.length,
+        account: db.accounts.find((acc: any) => acc.id === account.id)
+      });
+    } catch (err: any) {
+      console.error('[MT5 Bridge] Sync error:', err);
+      res.status(500).json({ error: `MT5 bridge sync failed: ${err?.message || err}` });
+    }
   });
 
   // Disconnect
@@ -1257,7 +1339,7 @@ const PORT = 3000;
 
   // Secure EA synchronization API hit by MT5 Experts Terminal
   app.post('/api/mt5/sync', (req, res) => {
-    const { syncToken, trades } = req.body;
+    const { syncToken, trades, balance } = req.body;
     if (!syncToken) return res.status(401).json({ error: 'Invalid or missing authorization token' });
 
     // Locate connection
@@ -1309,6 +1391,10 @@ const PORT = 3000;
           db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + net).toFixed(2));
         }
       });
+
+      if (typeof balance === 'number') {
+        db.accounts[accountIdx].currentBalance = parseFloat(balance.toFixed(2));
+      }
 
       db.accounts[accountIdx].equity = db.accounts[accountIdx].currentBalance;
       

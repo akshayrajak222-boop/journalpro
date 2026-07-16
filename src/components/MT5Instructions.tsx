@@ -46,6 +46,10 @@ export default function MT5Instructions({
   const [localConnection, setLocalConnection] = useState<MT5Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Bridge health state
+  const [bridgeStatus, setBridgeStatus] = useState<'checking' | 'running' | 'offline'>('checking');
+  const [bridgeConnected, setBridgeConnected] = useState(false);
+
   // Investor Form inputs
   const [loginNumber, setLoginNumber] = useState('');
   const [brokerServer, setBrokerServer] = useState('');
@@ -87,8 +91,26 @@ export default function MT5Instructions({
     }
   };
 
+  // Check Python bridge health
+  const fetchBridgeStatus = async () => {
+    setBridgeStatus('checking');
+    try {
+      const res = await fetch('/api/mt5/bridge-status');
+      if (res.ok) {
+        const data = await res.json();
+        setBridgeStatus(data.ok ? 'running' : 'offline');
+        setBridgeConnected(data.connected === true);
+      } else {
+        setBridgeStatus('offline');
+      }
+    } catch {
+      setBridgeStatus('offline');
+    }
+  };
+
   useEffect(() => {
     fetchConnection();
+    fetchBridgeStatus();
   }, [account.id]);
 
   const syncToken = localConnection?.syncToken || `axy_token_${account.id}_sandbox`;
@@ -129,7 +151,9 @@ export default function MT5Instructions({
         }, 1200);
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to establish investor sync connection.');
+        const errMsg = err.error || 'Failed to establish investor sync connection.';
+        const hint = err.hint ? `\n\nHint: ${err.hint}` : '';
+        alert(errMsg + hint);
         setIsSubmitting(false);
         setSyncStatusMsg('');
       }
@@ -190,32 +214,33 @@ export default function MT5Instructions({
   // Handle manual sync now
   const handleSyncNow = async () => {
     setIsSyncingNow(true);
-    setSyncStatusMsg('Connecting to broker server... fetching latest ticks...');
+    setSyncStatusMsg('Connecting to MT5 bridge... fetching latest ticks...');
     
     try {
       const res = await fetch('/api/mt5/sync-investor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId: account.id })
+        body: JSON.stringify({ accountId: account.id, investorPassword })
       });
 
       if (res.ok) {
         const data = await res.json();
-        setSyncStatusMsg('Importing closed positions, calculating drawdown, and updating equity metrics...');
+        setSyncStatusMsg(`${data.newTradesCount ?? 0} new trades imported successfully.`);
         
         setTimeout(() => {
-          setLocalConnection(data.connection);
           setIsSyncingNow(false);
           setSyncStatusMsg('');
           if (onSyncSuccess) onSyncSuccess();
         }, 1500);
       } else {
-        alert('Sync failed.');
+        const err = await res.json();
+        const hint = err.hint ? `\n\nHint: ${err.hint}` : '';
+        alert((err.error || 'Sync failed.') + hint);
         setIsSyncingNow(false);
         setSyncStatusMsg('');
       }
     } catch (e) {
-      alert('Sync failed.');
+      alert('Sync failed — make sure the MT5 bridge is running.');
       setIsSyncingNow(false);
       setSyncStatusMsg('');
     }
@@ -268,54 +293,94 @@ export default function MT5Instructions({
     }
   };
 
-  const mqlCode = `//+------------------------------------------------------------------+
+const mqlCode = `//+------------------------------------------------------------------+
 //|                                            FXJournalPro_Sync_EA.mq5|
 //|                               Copyright 2026, FX Journal Pro Platform|
 //|                                         https://fxjournalpro.com   |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, FX Journal Pro Platform"
 #property link      "https://fxjournalpro.com"
-#property version   "2.50"
-#property description "Synchronizes active MT5 orders and closed trades to FX Journal Pro"
+#property version   "3.00"
+#property description "Synchronizes 30-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
-input string   InpApiUrl    = "https://api.fxjournalpro.com/api/mt5/sync"; // FX Journal Pro API endpoint
+input string   InpApiUrl    = "${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/api/mt5/sync"; // FX Journal Pro API endpoint
 input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
 int OnInit() {
-   Print("[FX Journal Pro] Initializing Sync EA...");
+   Print("[FX Journal Pro] Initializing Sync EA (History Mode)...");
    EventSetTimer(InpInterval);
    return(INIT_SUCCEEDED);
 }
 
 // Timer event trigger
 void OnTimer() {
-   Print("[FX Journal Pro] Compiling recent trades...");
    SendTradesToFXJournalPro();
 }
 
 // Web request logic to transmit trades securely
 void SendTradesToFXJournalPro() {
+   datetime to_date = TimeCurrent();
+   datetime from_date = to_date - (30 * 24 * 60 * 60); // 30 days history
+   
+   if(!HistorySelect(from_date, to_date)) {
+      Print("[FX Journal Pro] Failed to load history.");
+      return;
+   }
+   
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   
+   string payload = "{\\"syncToken\\":\\"" + InpSyncToken + "\\",\\"balance\\":" + DoubleToString(balance, 2) + ",\\"trades\\":[";
+   
+   int total = HistoryDealsTotal();
+   bool first = true;
+   
+   for(int i = 0; i < total; i++) {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket > 0) {
+         long entry = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+         // Only look at OUT or INOUT deals (closed trades)
+         if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT) {
+            string symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
+            if(symbol == "") continue; // Skip non-trading operations like deposits
+            
+            double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+            double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+            double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
+            long typeInt = HistoryDealGetInteger(ticket, DEAL_TYPE);
+            
+            // If DEAL_TYPE is BUY (0) closing, original position was SELL.
+            string type = (typeInt == DEAL_TYPE_BUY) ? "Sell" : "Buy"; 
+            
+            if(!first) payload += ",";
+            payload += "{";
+            payload += "\\"symbol\\":\\"" + symbol + "\\",";
+            payload += "\\"type\\":\\"" + type + "\\",";
+            payload += "\\"lotSize\\":" + DoubleToString(volume, 2) + ",";
+            payload += "\\"profit\\":" + DoubleToString(profit, 2) + ",";
+            payload += "\\"entryPrice\\":" + DoubleToString(price, 5);
+            payload += "}";
+            
+            first = false;
+         }
+      }
+   }
+   
+   payload += "]}";
+   
    char postData[];
    char resultData[];
    string headers = "Content-Type: application/json\\r\\n";
    
-   // Format closed positions payload
-   string payload = "{\\"syncToken\\":\\"" + InpSyncToken + "\\",\\"trades\\":[";
-   
-   // Sample logic to loop terminal history and closed trades
-   payload += "{\\"symbol\\":\\"" + _Symbol + "\\",\\"type\\":\\"Buy\\",\\"lotSize\\":0.10,\\"profit\\":25.40}";
-   payload += "]}";
-   
-   StringToCharArray(payload, postData);
+   StringToCharArray(payload, postData, 0, StringLen(payload));
    int timeout = 5000;
    
    string outHeaders;
    int res = WebRequest("POST", InpApiUrl, headers, timeout, postData, resultData, outHeaders);
    
    if(res == 200) {
-      Print("[FX Journal Pro] Sync completed successfully: " + CharArrayToString(resultData));
+      Print("[FX Journal Pro] Sync completed successfully. Balance: ", DoubleToString(balance, 2));
    } else {
       Print("[FX Journal Pro] Sync failed. Error Code: ", res);
    }
@@ -424,7 +489,7 @@ void SendTradesToFXJournalPro() {
                   <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-100 text-blue-600 font-bold">4</span>
                   <div>
                     <strong className="text-slate-800 block">Enable WebRequests</strong>
-                    In MT5 settings, check <code className="text-slate-800 font-semibold">Allow WebRequest</code> and add: <code className="bg-blue-50 px-1 text-blue-700 font-mono rounded">https://fxjournalpro.com</code>. Drag the EA onto any active chart!
+                    In MT5 settings, check <code className="text-slate-800 font-semibold">Allow WebRequest</code> and add: <code className="bg-blue-50 px-1 text-blue-700 font-mono rounded">{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}</code>. Drag the EA onto any active chart!
                   </div>
                 </li>
               </ol>
@@ -585,17 +650,71 @@ void SendTradesToFXJournalPro() {
         /* METHOD B: INVESTOR PASSWORD CLOUD SYNC VIEW */
         <div className="space-y-6 animate-fade-in">
           
-          {/* Security Alert box */}
+          {/* Bridge Status Banner */}
+          <div className={`border rounded-xl p-4 flex gap-3 text-xs ${
+            bridgeStatus === 'running'
+              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800'
+              : bridgeStatus === 'offline'
+              ? 'bg-red-50/70 border-red-200 text-red-800'
+              : 'bg-slate-50/70 border-slate-200 text-slate-600'
+          }`}>
+            <div className={`h-5 w-5 flex-shrink-0 mt-0.5 rounded-full flex items-center justify-center font-bold text-white text-[10px] ${
+              bridgeStatus === 'running' ? 'bg-emerald-500' : bridgeStatus === 'offline' ? 'bg-red-500' : 'bg-slate-400'
+            }`}>
+              {bridgeStatus === 'running' ? '✓' : bridgeStatus === 'offline' ? '!' : '…'}
+            </div>
+            <div className="flex-1">
+              <strong className={`block text-sm font-extrabold mb-1 ${
+                bridgeStatus === 'running' ? 'text-emerald-900' : bridgeStatus === 'offline' ? 'text-red-900' : 'text-slate-700'
+              }`}>
+                {bridgeStatus === 'running'
+                  ? `MT5 Python Bridge: Running ${bridgeConnected ? '(MT5 Connected)' : '(Ready)'}`
+                  : bridgeStatus === 'offline'
+                  ? 'MT5 Python Bridge: Not Running'
+                  : 'Checking MT5 Python Bridge status...'}
+              </strong>
+
+              {bridgeStatus === 'offline' && (
+                <div className="space-y-2 mt-2">
+                  <p className="font-semibold leading-relaxed">
+                    The local Python bridge is required to connect your MT5 terminal. It's free and runs on your Windows PC.
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                    <li>Open a terminal in your project folder</li>
+                    <li>Run: <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">cd mt5_bridge</code></li>
+                    <li>Run: <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">pip install MetaTrader5 flask flask-cors</code></li>
+                    <li>Run: <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">python mt5_bridge.py</code></li>
+                    <li><strong>OR</strong> simply double-click <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">start_bridge.bat</code></li>
+                  </ol>
+                  <button
+                    onClick={fetchBridgeStatus}
+                    className="mt-2 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Recheck Status
+                  </button>
+                </div>
+              )}
+
+              {bridgeStatus === 'running' && (
+                <p className="leading-relaxed font-medium">
+                  ✅ Your local MT5 bridge is online. Fill in your credentials below to import trades. Your investor password is <span className="underline">never</span> sent to any cloud service.
+                  <button onClick={fetchBridgeStatus} className="ml-2 underline text-emerald-700 hover:text-emerald-900">Refresh</button>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Security note */}
           <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 flex gap-3 text-xs text-blue-800">
             <Shield className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div>
               <strong className="block text-blue-900 text-sm font-extrabold mb-1">MT5 Read-Only Credentials Policy</strong>
               <p className="leading-relaxed mb-1.5 font-medium">
-                FX Journal Pro connects directly to your broker's MetaTrader Cloud API server in read-only mode using your <strong className="text-blue-900">Investor Password</strong>.
+                JournalPro uses a <strong className="text-blue-900">local Python bridge</strong> (no cloud service) to connect your MT5 terminal with your <strong className="text-blue-900">Investor Password</strong>.
               </p>
               <ul className="list-disc list-inside space-y-0.5 text-[11px] font-semibold text-blue-700">
-                <li>We <span className="underline">never</span> store or request your main trading/master password.</li>
-                <li>FX Journal Pro can only read your trading data and cannot place or modify trades.</li>
+                <li>Credentials go directly to your MT5 terminal — never to a 3rd party server.</li>
+                <li>Investor password = read-only: no trades can be placed or modified.</li>
               </ul>
             </div>
           </div>
@@ -612,13 +731,14 @@ void SendTradesToFXJournalPro() {
             <div className="max-w-2xl mx-auto bg-slate-50/50 border border-slate-100 rounded-xl p-6">
               <h3 className="font-bold text-slate-900 text-base mb-1 flex items-center gap-2">
                 <Lock className="h-5 w-5 text-indigo-600" />
-                Connect to MT5 Cloud Sync
+                Connect to MT5 via Python Bridge
               </h3>
               <p className="text-xs text-indigo-800 mb-4 bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg font-semibold flex items-center gap-1.5">
-                💡 Note: This will automatically create a brand new dedicated trading account/portfolio specifically for this MT5 sync.
+                💡 This will create a new trading account in your journal and import your last 12 months of MT5 history.
               </p>
               
               <form onSubmit={handleConnectInvestor} className="space-y-4">
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">MT5 Login Number</label>
