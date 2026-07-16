@@ -801,6 +801,20 @@ const PORT = 3000;
       return res.status(404).json({ error: 'Trading account not found or access denied' });
     }
 
+    // Prevent duplicate trades (e.g., frontend double clicks)
+    const duplicateExists = db.trades.some((t: any) => 
+      t.accountId === accountId &&
+      t.symbol === symbol.toUpperCase() &&
+      t.type === type &&
+      t.entryPrice === parseFloat(entryPrice) &&
+      t.profit === parseFloat(profit) &&
+      new Date().getTime() - new Date(t.date).getTime() < 60000 // within 60 seconds
+    );
+
+    if (duplicateExists) {
+      return res.status(400).json({ error: 'Duplicate trade detected. You recently added an identical trade.' });
+    }
+
     const newTrade: Trade = {
       id: `trade_${Date.now()}`,
       accountId,
@@ -1352,17 +1366,41 @@ const PORT = 3000;
     let syncedCount = 0;
     if (trades && Array.isArray(trades)) {
       trades.forEach((incomingTrade: any) => {
-        // Prevent duplicate logs using a composite match on time, price, and profit
-        const exists = db.trades.some((t: any) => 
-          t.accountId === connection.accountId && 
-          t.symbol === incomingTrade.symbol && 
-          Math.abs(t.profit - incomingTrade.profit) < 0.01 && 
-          Math.abs(t.entryPrice - incomingTrade.entryPrice) < 0.0001
-        );
+        const eaTicket = incomingTrade.id || incomingTrade.ticket;
 
-        if (!exists) {
+        // Better deduplication logic to prevent the same trade showing multiple times when profit fluctuates
+        const existingIdx = db.trades.findIndex((t: any) => {
+          if (t.accountId !== connection.accountId) return false;
+          
+          if (eaTicket && t.id === String(eaTicket)) return true;
+          
+          // Composite match ignoring profit (which floats) and time (which might differ slightly)
+          const isSameSymbol = t.symbol === (incomingTrade.symbol || '').toUpperCase();
+          const isSameType = t.type === (incomingTrade.type || 'Buy');
+          const isSameEntry = Math.abs(t.entryPrice - parseFloat(incomingTrade.entryPrice || 1.0)) < 0.0001;
+          const isSameLot = Math.abs(t.lotSize - parseFloat(incomingTrade.lotSize || 0.1)) < 0.001;
+          
+          return isSameSymbol && isSameType && isSameEntry && isSameLot;
+        });
+
+        if (existingIdx !== -1) {
+          // Update the existing trade since profit or exit price might have changed
+          const t = db.trades[existingIdx];
+          const oldNet = t.profit + t.commission + t.swap;
+          
+          t.exitPrice = parseFloat(incomingTrade.exitPrice || t.exitPrice);
+          if (incomingTrade.stopLoss) t.stopLoss = parseFloat(incomingTrade.stopLoss);
+          if (incomingTrade.takeProfit) t.takeProfit = parseFloat(incomingTrade.takeProfit);
+          t.profit = parseFloat(incomingTrade.profit || 0);
+          t.commission = parseFloat(incomingTrade.commission || 0);
+          t.swap = parseFloat(incomingTrade.swap || 0);
+          
+          const newNet = t.profit + t.commission + t.swap;
+          const netDiff = newNet - oldNet;
+          db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + netDiff).toFixed(2));
+        } else {
           const newTrade: Trade = {
-            id: `mt5_ea_${Date.now()}_${Math.floor(Math.random()*100000)}`,
+            id: eaTicket ? String(eaTicket) : `mt5_ea_${Date.now()}_${Math.floor(Math.random()*100000)}`,
             accountId: connection.accountId,
             date: incomingTrade.date || new Date().toISOString(),
             symbol: incomingTrade.symbol.toUpperCase(),
