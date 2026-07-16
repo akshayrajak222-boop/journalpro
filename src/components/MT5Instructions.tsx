@@ -349,6 +349,11 @@ void SendTradesToFXJournalPro() {
             double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
             double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
             long typeInt = HistoryDealGetInteger(ticket, DEAL_TYPE);
+            long dealTime = HistoryDealGetInteger(ticket, DEAL_TIME);
+            
+            // Format time for javascript: YYYY-MM-DD HH:MI
+            string dateStr = TimeToString((datetime)dealTime, TIME_DATE|TIME_MINUTES);
+            StringReplace(dateStr, ".", "-");
             
             // If DEAL_TYPE is BUY (0) closing, original position was SELL.
             string type = (typeInt == DEAL_TYPE_BUY) ? "Sell" : "Buy"; 
@@ -359,7 +364,8 @@ void SendTradesToFXJournalPro() {
             payload += "\\"type\\":\\"" + type + "\\",";
             payload += "\\"lotSize\\":" + DoubleToString(volume, 2) + ",";
             payload += "\\"profit\\":" + DoubleToString(profit, 2) + ",";
-            payload += "\\"entryPrice\\":" + DoubleToString(price, 5);
+            payload += "\\"entryPrice\\":" + DoubleToString(price, 5) + ",";
+            payload += "\\"date\\":\\"" + dateStr + "\\"";
             payload += "}";
             
             first = false;
