@@ -196,10 +196,29 @@ export default function App() {
   // active account
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
 
+  // authFetch — wraps native fetch and injects x-auth-email header so that
+  // Vercel serverless cold starts can always identify the current user.
+  const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
+    const storedEmail = localStorage.getItem('auth_email') || user?.email || '';
+    const method = (options.method || 'GET').toUpperCase();
+    const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...(needsContentType ? { 'Content-Type': 'application/json' } : {}),
+        ...(storedEmail ? { 'x-auth-email': storedEmail } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  };
+
   // Fetch current user session
   const checkUserSession = async () => {
     try {
-      const res = await fetch('/api/auth/me');
+      const storedEmail = localStorage.getItem('auth_email');
+      const res = await authFetch('/api/auth/me', {
+        headers: storedEmail ? { 'x-auth-email': storedEmail } : {},
+      });
       const data = await res.json();
       if (data.user) {
         setUser(data.user);
@@ -224,7 +243,7 @@ export default function App() {
     setLoading(true);
     try {
       // Accounts
-      const accsRes = await fetch('/api/accounts');
+      const accsRes = await authFetch('/api/accounts');
       const accsData = await accsRes.json();
       setAccounts(accsData.accounts);
 
@@ -243,12 +262,12 @@ export default function App() {
       }
 
       // Support tickets
-      const tickRes = await fetch('/api/tickets');
+      const tickRes = await authFetch('/api/tickets');
       const tickData = await tickRes.json();
       setTickets(tickData.tickets);
 
       // Announcements
-      const annRes = await fetch('/api/announcements');
+      const annRes = await authFetch('/api/announcements');
       const annData = await annRes.json();
       setAnnouncements(annData.announcements);
 
@@ -300,7 +319,7 @@ export default function App() {
       }
 
       // 2) Sync login session with the Express server
-      const response = await fetch('/api/auth/login', {
+      const response = await authFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, password: authPassword })
@@ -322,6 +341,7 @@ export default function App() {
       const data = await response.json();
       if (data.user) {
         setUser(data.user);
+        localStorage.setItem('auth_email', data.user.email);
         if (data.user.onboardingCompleted) {
           fetchAccountData();
         } else {
@@ -369,7 +389,7 @@ export default function App() {
       }
 
       // 2) Sync registration session with Express server
-      const response = await fetch('/api/auth/register', {
+      const response = await authFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
@@ -425,7 +445,7 @@ export default function App() {
       }
 
       // Sync registration session with Express server after OTP
-      const response = await fetch('/api/auth/register', {
+      const response = await authFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
@@ -453,7 +473,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await authFetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
     setAccounts([]);
     setTrades([]);
@@ -463,7 +483,7 @@ export default function App() {
   const submitOnboarding = async () => {
     setActionLoading(true);
     try {
-      const res = await fetch('/api/auth/onboarding', {
+      const res = await authFetch('/api/auth/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -489,7 +509,7 @@ export default function App() {
     if (!eaLogin || !eaBroker) return;
     setActionLoading(true);
     try {
-      const res = await fetch('/api/mt5/connect-ea', {
+      const res = await authFetch('/api/mt5/connect-ea', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -502,7 +522,7 @@ export default function App() {
         const data = await res.json();
         
         // Refresh accounts list
-        const accsRes = await fetch('/api/accounts');
+        const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
         setAccounts(accsData.accounts);
         
@@ -526,7 +546,7 @@ export default function App() {
     if (!newAccName || !newAccBroker || !newAccBalance) return;
     setActionLoading(true);
     try {
-      const res = await fetch('/api/accounts', {
+      const res = await authFetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -673,7 +693,7 @@ export default function App() {
           body: JSON.stringify(tradeData)
         });
       } else {
-        res = await fetch('/api/trades', {
+        res = await authFetch('/api/trades', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tradeData)
@@ -684,7 +704,7 @@ export default function App() {
         setShowTradeModal(false);
         fetchTradesAndParams(selectedAccountId);
         // Refresh accounts to get new balance/equity calculations
-        const accsRes = await fetch('/api/accounts');
+        const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
         setAccounts(accsData.accounts);
       }
@@ -702,7 +722,7 @@ export default function App() {
       if (res.ok) {
         fetchTradesAndParams(selectedAccountId);
         // Refresh accounts
-        const accsRes = await fetch('/api/accounts');
+        const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
         setAccounts(accsData.accounts);
       }
@@ -716,7 +736,7 @@ export default function App() {
     if (!selectedAccountId) return;
     setActionLoading(true);
     try {
-      const res = await fetch('/api/mt5/connections/test-sync', {
+      const res = await authFetch('/api/mt5/connections/test-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId: selectedAccountId, symbol })
@@ -726,7 +746,7 @@ export default function App() {
         alert(`MT5 Synchronization Success! Trade parsed:\n${data.trade.symbol} ${data.trade.type} at ${data.trade.entryPrice} with net P/L of $${data.trade.profit}`);
         fetchTradesAndParams(selectedAccountId);
         // Refresh accounts
-        const accsRes = await fetch('/api/accounts');
+        const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
         setAccounts(accsData.accounts);
       }
@@ -740,11 +760,11 @@ export default function App() {
   // Pro Upgrade Trigger via mock Razorpay checkout
   const handleUpgradeToPro = async () => {
     try {
-      const response = await fetch('/api/payments/checkout', { method: 'POST' });
+      const response = await authFetch('/api/payments/checkout', { method: 'POST' });
       const checkoutData = await response.json();
       
       // Simulate Razorpay popup and direct verification call
-      const verifyRes = await fetch('/api/payments/verify', {
+      const verifyRes = await authFetch('/api/payments/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -769,7 +789,7 @@ export default function App() {
     if (!settingsName || !settingsEmail) return;
     setActionLoading(true);
     try {
-      const res = await fetch('/api/auth/update-profile', {
+      const res = await authFetch('/api/auth/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: settingsName, email: settingsEmail })
@@ -800,7 +820,7 @@ export default function App() {
     }
     setActionLoading(true);
     try {
-      const res = await fetch('/api/auth/reset-password', {
+      const res = await authFetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: user?.email })
@@ -835,7 +855,7 @@ export default function App() {
     }
     setActionLoading(true);
     try {
-      const res = await fetch('/api/auth/update-profile', {
+      const res = await authFetch('/api/auth/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPro: false })
@@ -862,7 +882,7 @@ export default function App() {
     }
     setActionLoading(true);
     try {
-      const res = await fetch('/api/tickets', {
+      const res = await authFetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -876,7 +896,7 @@ export default function App() {
         setSupportMessage('');
         setActiveAboutForm('none');
         // Refresh tickets list
-        const tickRes = await fetch('/api/tickets');
+        const tickRes = await authFetch('/api/tickets');
         const tickData = await tickRes.json();
         setTickets(tickData.tickets);
         alert('Support request submitted successfully. You can track this under Support Tickets.');
@@ -898,7 +918,7 @@ export default function App() {
     }
     setActionLoading(true);
     try {
-      const res = await fetch('/api/tickets', {
+      const res = await authFetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -912,7 +932,7 @@ export default function App() {
         setBugSteps('');
         setActiveAboutForm('none');
         // Refresh tickets list
-        const tickRes = await fetch('/api/tickets');
+        const tickRes = await authFetch('/api/tickets');
         const tickData = await tickRes.json();
         setTickets(tickData.tickets);
         alert('Bug report submitted successfully. Thank you for helping us improve FX Journal Pro.');
@@ -934,7 +954,7 @@ export default function App() {
     }
     setActionLoading(true);
     try {
-      const res = await fetch('/api/tickets', {
+      const res = await authFetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -948,7 +968,7 @@ export default function App() {
         setFeatureRequestDesc('');
         setActiveAboutForm('none');
         // Refresh tickets list
-        const tickRes = await fetch('/api/tickets');
+        const tickRes = await authFetch('/api/tickets');
         const tickData = await tickRes.json();
         setTickets(tickData.tickets);
         alert('Feature request submitted successfully. Our product team will review this soon!');
@@ -968,7 +988,7 @@ export default function App() {
     if (!ticketTitle || !ticketDescription) return;
     setActionLoading(true);
     try {
-      const res = await fetch('/api/tickets', {
+      const res = await authFetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -982,7 +1002,7 @@ export default function App() {
         setTicketTitle('');
         setTicketDescription('');
         // Refresh tickets list
-        const tickRes = await fetch('/api/tickets');
+        const tickRes = await authFetch('/api/tickets');
         const tickData = await tickRes.json();
         setTickets(tickData.tickets);
         alert('Support ticket submitted successfully. Our engineers will respond shortly.');

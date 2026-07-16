@@ -23,10 +23,9 @@ import {
 import { MT5Connection, TradingAccount } from '../types';
 
 interface MT5InstructionsProps {
-  account: TradingAccount;
-  connection?: MT5Connection;
-  onTriggerSimulatedSync: (symbol: string) => void;
-  isSyncing: boolean;
+  account?: TradingAccount;
+  onTriggerSimulatedSync?: (symbol: string) => void;
+  isSyncing?: boolean;
   onSyncSuccess?: (newAccountId?: string) => void;
 }
 
@@ -66,11 +65,26 @@ export default function MT5Instructions({
   const [isSyncingNow, setIsSyncingNow] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
+  // authFetch — injects x-auth-email so Vercel serverless cold starts can identify the user
+  const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
+    const storedEmail = localStorage.getItem('auth_email') || '';
+    const method = (options.method || 'GET').toUpperCase();
+    const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...(needsContentType ? { 'Content-Type': 'application/json' } : {}),
+        ...(storedEmail ? { 'x-auth-email': storedEmail } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  };
+
   // Fetch current account's connection status
   const fetchConnection = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/mt5/connections');
+      const res = await authFetch('/api/mt5/connections');
       if (res.ok) {
         const data = await res.json();
         const conn = data.connections.find((c: any) => c.accountId === account.id);
@@ -95,7 +109,7 @@ export default function MT5Instructions({
   const fetchBridgeStatus = async () => {
     setBridgeStatus('checking');
     try {
-      const res = await fetch('/api/mt5/bridge-status');
+      const res = await authFetch('/api/mt5/bridge-status');
       if (res.ok) {
         const data = await res.json();
         setBridgeStatus(data.ok ? 'running' : 'offline');
@@ -127,7 +141,7 @@ export default function MT5Instructions({
     setSyncStatusMsg('Establishing read-only MT5 gateway session...');
     
     try {
-      const res = await fetch('/api/mt5/connect-investor', {
+      const res = await authFetch('/api/mt5/connect-investor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -176,7 +190,7 @@ export default function MT5Instructions({
     setSyncStatusMsg('Creating a brand new dedicated portfolio account and registering MT5 token...');
 
     try {
-      const res = await fetch('/api/mt5/connect-ea', {
+      const res = await authFetch('/api/mt5/connect-ea', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -217,7 +231,7 @@ export default function MT5Instructions({
     setSyncStatusMsg('Connecting to MT5 bridge... fetching latest ticks...');
     
     try {
-      const res = await fetch('/api/mt5/sync-investor', {
+      const res = await authFetch('/api/mt5/sync-investor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId: account.id, investorPassword })
@@ -250,7 +264,7 @@ export default function MT5Instructions({
   const handleToggleAutoSync = async (checked: boolean) => {
     setAutoSync(checked);
     try {
-      const res = await fetch('/api/mt5/toggle-auto-sync', {
+      const res = await authFetch('/api/mt5/toggle-auto-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId: account.id, autoSync: checked })
@@ -272,7 +286,7 @@ export default function MT5Instructions({
 
     setIsLoading(true);
     try {
-      const res = await fetch('/api/mt5/disconnect-investor', {
+      const res = await authFetch('/api/mt5/disconnect-investor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId: account.id })

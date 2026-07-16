@@ -462,17 +462,18 @@ const PORT = 3000;
     try {
       await ensureDbLoaded();
 
-      // Initialize default session user if not loaded yet
-      if (!currentUser && db && db.users) {
-        currentUser = db.users.find((u: any) => u.email === 'akshayrajpanamthode@gmail.com') || db.users[1];
-      }
-
-      // Enable simple authorization overrides for developers
-      const authEmail = req.headers['x-auth-email'];
+      // Always try to resolve user from x-auth-email header first (supports Vercel serverless cold starts)
+      const authEmail = req.headers['x-auth-email'] as string | undefined;
       if (authEmail && db && db.users) {
-        const dbUser = db.users.find((u: any) => u.email === authEmail);
+        const dbUser = db.users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase());
         if (dbUser) currentUser = dbUser;
       }
+
+      // If still no user (no header sent), use fallback from in-memory session or first found user
+      if (!currentUser && db && db.users) {
+        currentUser = db.users.find((u: any) => u.email === 'akshayrajpanamthode@gmail.com') || db.users[0] || null;
+      }
+
       next();
     } catch (err) {
       console.error('[AxyFx Journal Server] Middleware execution error:', err);
@@ -565,6 +566,15 @@ const PORT = 3000;
   });
 
   app.get('/api/auth/me', (req, res) => {
+    // On serverless (Vercel) currentUser may be null after cold start.
+    // If the client sends x-auth-email header, use it to look up the user.
+    if (!currentUser) {
+      const emailHeader = req.headers['x-auth-email'] as string | undefined;
+      if (emailHeader && db && db.users) {
+        const found = db.users.find((u: any) => u.email.toLowerCase() === emailHeader.toLowerCase());
+        if (found) currentUser = found;
+      }
+    }
     res.json({ user: currentUser });
   });
 
