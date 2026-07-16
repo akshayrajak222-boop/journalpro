@@ -5,7 +5,7 @@ import {
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
-  Cpu, Terminal, Globe, Bell, CreditCard, Info
+  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -74,6 +74,11 @@ export default function App() {
   const [newAccType, setNewAccType] = useState<'Live' | 'Demo'>('Live');
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
   const [newAccBalance, setNewAccBalance] = useState('10000');
+  
+  const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual' | 'mt5'>('select');
+  const [eaLogin, setEaLogin] = useState('');
+  const [eaBroker, setEaBroker] = useState('');
+  const [eaBalance, setEaBalance] = useState('10000');
 
   // Edit Account form fields
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
@@ -474,6 +479,42 @@ export default function App() {
       }
     } catch (err) {
       alert('Failed to complete onboarding');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateEaAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eaLogin || !eaBroker) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/mt5/connect-ea', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loginNumber: eaLogin,
+          brokerName: eaBroker,
+          startingBalance: parseFloat(eaBalance) || 10000.00
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Refresh accounts list
+        const accsRes = await fetch('/api/accounts');
+        const accsData = await accsRes.json();
+        setAccounts(accsData.accounts);
+        
+        setShowAccountModal(false);
+        setSelectedAccountId(data.account.id);
+        setActiveTab('mt5');
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to create EA account');
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
       setActionLoading(false);
     }
@@ -1532,7 +1573,7 @@ export default function App() {
             <div className="flex items-center justify-between mb-1">
               <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
               <button
-                onClick={() => setShowAccountModal(true)}
+                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
                 title="Connect New Portfolio Account"
                 className="text-slate-400 hover:text-slate-900 hover:bg-slate-200/50 p-1 rounded transition duration-150"
               >
@@ -2164,7 +2205,7 @@ export default function App() {
 
               {/* Dotted Create Card */}
               <button
-                onClick={() => setShowAccountModal(true)}
+                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
                 className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition h-56 text-xs font-bold bg-white"
               >
                 <Plus className="h-6 w-6 text-slate-400" />
@@ -3176,30 +3217,116 @@ export default function App() {
       {/* A. Account Creation Modal */}
       {showAccountModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-100 max-w-md w-full p-6 relative">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-100 max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setShowAccountModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 z-10"
             >
               ✖
             </button>
-            <form onSubmit={handleCreateAccount} className="space-y-4">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base">Register New Trading Portfolio</h3>
-                <p className="text-[11px] text-slate-400">Configure parameters for manual logs or automated Expert integrations.</p>
-              </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Account Alias / Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newAccName}
-                  onChange={(e) => setNewAccName(e.target.value)}
-                  placeholder="Primary Live Scalper"
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
-                />
+            {accountCreationMethod === 'select' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Connect New Portfolio Account</h3>
+                  <p className="text-[11px] text-slate-400">Choose how you want to connect and log trades.</p>
+                </div>
+                <div className="grid gap-3">
+                  <button onClick={() => setAccountCreationMethod('mt5')} className="border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
+                     <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Activity className="w-5 h-5"/></div>
+                     <div>
+                       <div className="font-bold text-slate-800 text-sm">MT5 Auto-Sync (Recommended)</div>
+                       <div className="text-[11px] text-slate-500">Automatically synchronize live trades from MetaTrader 5 using our Expert Advisor.</div>
+                     </div>
+                  </button>
+                  <button onClick={() => setAccountCreationMethod('manual')} className="border-2 border-slate-100 hover:border-slate-300 hover:bg-slate-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
+                     <div className="bg-slate-100 p-2 rounded-lg text-slate-600"><Edit3 className="w-5 h-5"/></div>
+                     <div>
+                       <div className="font-bold text-slate-800 text-sm">Manual Account Opening</div>
+                       <div className="text-[11px] text-slate-500">Create an empty portfolio to manually log your trades one-by-one.</div>
+                     </div>
+                  </button>
+                </div>
               </div>
+            )}
+
+            {accountCreationMethod === 'mt5' && (
+              <form onSubmit={handleCreateEaAccount} className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <button type="button" onClick={() => setAccountCreationMethod('select')} className="text-slate-400 hover:text-slate-700 text-xs font-semibold">← Back</button>
+                </div>
+                <div>
+                  <h3 className="font-bold text-indigo-900 text-base flex items-center gap-2"><Lock className="h-4 w-4" /> Connect MT5 EA Sync</h3>
+                  <p className="text-[11px] text-indigo-800/80">We will provision a new trading account and unique API token specifically for your MT5 Expert Advisor.</p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">MT5 Login Number</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. 5591240"
+                    value={eaLogin}
+                    onChange={(e) => setEaLogin(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Broker Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. ICMarketsSC-MT5-2"
+                    value={eaBroker}
+                    onChange={(e) => setEaBroker(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Starting Balance ($)</label>
+                  <input 
+                    type="number" 
+                    required
+                    placeholder="10000.00"
+                    value={eaBalance}
+                    onChange={(e) => setEaBalance(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition flex items-center justify-center gap-1.5 mt-2"
+                >
+                  {actionLoading ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "Generate MT5 Token & Account"
+                  )}
+                </button>
+              </form>
+            )}
+
+            {accountCreationMethod === 'manual' && (
+              <form onSubmit={handleCreateAccount} className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <button type="button" onClick={() => setAccountCreationMethod('select')} className="text-slate-400 hover:text-slate-700 text-xs font-semibold">← Back</button>
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Register Manual Portfolio</h3>
+                  <p className="text-[11px] text-slate-400">Configure parameters for manual logs or automated Expert integrations.</p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Account Alias / Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAccName}
+                    onChange={(e) => setNewAccName(e.target.value)}
+                    placeholder="Primary Live Scalper"
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
 
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">Broker Name</label>
@@ -3277,6 +3404,7 @@ export default function App() {
                 {actionLoading ? 'Provisioning Account...' : 'Create Portfolio Account'}
               </button>
             </form>
+            )}
           </div>
         </div>
       )}
