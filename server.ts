@@ -1430,8 +1430,8 @@ const PORT = 3000;
         }
       });
 
-      if (typeof balance === 'number') {
-        db.accounts[accountIdx].currentBalance = parseFloat(balance.toFixed(2));
+      if (balance !== undefined && balance !== null && !isNaN(Number(balance))) {
+        db.accounts[accountIdx].currentBalance = parseFloat(Number(balance).toFixed(2));
       }
 
       db.accounts[accountIdx].equity = db.accounts[accountIdx].currentBalance;
