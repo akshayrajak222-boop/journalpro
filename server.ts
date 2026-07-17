@@ -1197,7 +1197,7 @@ const PORT = 3000;
   // Connect MT5 Expert Advisor (Method A) - automatically creates a new dedicated account
   app.post('/api/mt5/connect-ea', (req, res) => {
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
-    const { loginNumber, brokerName, startingBalance } = req.body;
+    const { loginNumber, brokerName, startingBalance, historyMonths } = req.body;
 
     const num = loginNumber || `${Math.floor(1000000 + Math.random() * 9000000)}`;
     const broker = brokerName || 'MetaQuotes-Demo';
@@ -1246,7 +1246,9 @@ const PORT = 3000;
       loginNumber: num,
       brokerServer: broker,
       isInvestorSync: false,
-      autoSync: true
+      autoSync: true,
+      historyMonths: historyMonths ? parseInt(historyMonths) : 3,
+      initialSyncDone: false
     };
     db.mt5Connections.push(connection);
 
@@ -1255,6 +1257,25 @@ const PORT = 3000;
       message: 'MT5 EA account connected successfully.',
       connection,
       account: newAccount
+    });
+  });
+
+  // Update MT5 Connection historical import settings
+  app.post('/api/mt5/connections/:id/update-history', (req, res) => {
+    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    const { id } = req.params;
+    const { historyMonths } = req.body;
+
+    const connection = db.mt5Connections.find((conn: any) => conn.id === id && conn.userId === currentUser?.id);
+    if (!connection) return res.status(404).json({ error: 'Connection not found' });
+
+    connection.historyMonths = historyMonths ? parseInt(historyMonths) : 3;
+    connection.initialSyncDone = false; // reset initial sync so starting balance recalculates on next sync
+
+    saveDatabase(db);
+    res.json({
+      message: 'MT5 historical trade import settings updated.',
+      connection
     });
   });
 
@@ -1452,7 +1473,9 @@ const PORT = 3000;
     const accountIdx = db.accounts.findIndex((acc: any) => acc.id === connection.accountId);
     if (accountIdx === -1) return res.status(404).json({ error: 'Trading account linked to this token does not exist' });
 
+    const isInitialSync = !connection.initialSyncDone;
     let syncedCount = 0;
+
     if (trades && Array.isArray(trades)) {
       trades.forEach((incomingTrade: any) => {
         const eaTicket = incomingTrade.id || incomingTrade.ticket;
@@ -1518,23 +1541,41 @@ const PORT = 3000;
           db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + net).toFixed(2));
         }
       });
+    }
 
-      if (balance !== undefined && balance !== null && !isNaN(Number(balance))) {
-        db.accounts[accountIdx].currentBalance = parseFloat(Number(balance).toFixed(2));
-      }
+    // Set Live Balance & Recalculate Starting Balance on Initial Sync
+    const liveBalance = (balance !== undefined && balance !== null && !isNaN(Number(balance))) ? parseFloat(Number(balance).toFixed(2)) : db.accounts[accountIdx].currentBalance;
+    db.accounts[accountIdx].currentBalance = liveBalance;
+    db.accounts[accountIdx].equity = liveBalance;
 
-      db.accounts[accountIdx].equity = db.accounts[accountIdx].currentBalance;
-      
+    if (isInitialSync) {
+      // Fetch all trades for this account
+      const accountTrades = db.trades.filter((t: any) => t.accountId === connection.accountId);
+      let totalPL = 0;
+      accountTrades.forEach((t: any) => {
+        totalPL += (parseFloat(t.profit || 0) + parseFloat(t.commission || 0) + parseFloat(t.swap || 0));
+      });
+
+      // Initial Balance = Current Live MT5 Balance - Total P&L of imported trades
+      const initialBalance = parseFloat((liveBalance - totalPL).toFixed(2));
+      db.accounts[accountIdx].startingBalance = initialBalance;
+
+      // Mark connection's initial sync as completed
       const connIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
       if (connIdx !== -1) {
-        db.mt5Connections[connIdx].lastSyncTime = new Date().toISOString();
-        db.mt5Connections[connIdx].totalSyncedTrades += syncedCount;
-        db.mt5Connections[connIdx].status = 'Connected';
+        db.mt5Connections[connIdx].initialSyncDone = true;
       }
     }
 
+    const connIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
+    if (connIdx !== -1) {
+      db.mt5Connections[connIdx].lastSyncTime = new Date().toISOString();
+      db.mt5Connections[connIdx].totalSyncedTrades += syncedCount;
+      db.mt5Connections[connIdx].status = 'Connected';
+    }
+
     saveDatabase(db);
-    res.json({ status: 'Success', syncedTradesCount: syncedCount, accountBalance: db.accounts[accountIdx].currentBalance });
+    res.json({ status: 'Success', syncedTradesCount: syncedCount, accountBalance: db.accounts[accountIdx].currentBalance, startingBalance: db.accounts[accountIdx].startingBalance });
   });
 
   // ==========================================

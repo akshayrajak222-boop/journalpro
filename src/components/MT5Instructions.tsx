@@ -65,6 +65,12 @@ export default function MT5Instructions({
   const [isSyncingNow, setIsSyncingNow] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
+  // History Selector states
+  const [showHistorySelector, setShowHistorySelector] = useState(false);
+  const [historyPeriod, setHistoryPeriod] = useState<'1' | '3' | '6' | '12' | 'custom'>('3');
+  const [customMonths, setCustomMonths] = useState('5');
+  const [savingHistory, setSavingHistory] = useState(false);
+
   // authFetch — injects x-auth-email so Vercel serverless cold starts can identify the user
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
     const storedEmail = localStorage.getItem('auth_email') || '';
@@ -89,13 +95,18 @@ export default function MT5Instructions({
         const data = await res.json();
         const conn = data.connections.find((c: any) => c.accountId === account.id);
         setLocalConnection(conn || null);
-        if (conn && conn.isInvestorSync) {
-          setActiveTab('investor');
-          setLoginNumber(conn.loginNumber || '');
-          setBrokerServer(conn.brokerServer || '');
-          setAutoSync(conn.autoSync !== false);
-        } else {
-          setActiveTab('ea');
+        if (conn) {
+          if (conn.isInvestorSync) {
+            setActiveTab('investor');
+            setLoginNumber(conn.loginNumber || '');
+            setBrokerServer(conn.brokerServer || '');
+            setAutoSync(conn.autoSync !== false);
+          } else {
+            setActiveTab('ea');
+            if (conn.initialSyncDone === false) {
+              setShowHistorySelector(true);
+            }
+          }
         }
       }
     } catch (e) {
@@ -202,16 +213,16 @@ export default function MT5Instructions({
 
       if (res.ok) {
         const data = await res.json();
-        setSyncStatusMsg('Configuring terminal link parameters and loading MQ5 template...');
+        setSyncStatusMsg('Configuring terminal link parameters...');
         
         setTimeout(() => {
           setLocalConnection(data.connection);
+          setShowHistorySelector(true); // Switch to history selection view
           setIsSubmitting(false);
           setSyncStatusMsg('');
           setEaLogin('');
           setEaBroker('');
-          if (onSyncSuccess) onSyncSuccess(data.account?.id);
-        }, 1200);
+        }, 1000);
       } else {
         const err = await res.json();
         alert(err.error || 'Failed to create dedicated MT5 EA connection.');
@@ -222,6 +233,36 @@ export default function MT5Instructions({
       alert('Connection error occurred.');
       setIsSubmitting(false);
       setSyncStatusMsg('');
+    }
+  };
+
+  // Save the selected historical import settings and finalize the connection
+  const handleSaveHistoryPeriod = async () => {
+    if (!localConnection) return;
+    setSavingHistory(true);
+    
+    const finalMonths = historyPeriod === 'custom' ? parseInt(customMonths) || 1 : parseInt(historyPeriod);
+    
+    try {
+      const res = await authFetch(`/api/mt5/connections/${localConnection.id}/update-history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ historyMonths: finalMonths })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setLocalConnection(data.connection);
+        setShowHistorySelector(false);
+        if (onSyncSuccess) onSyncSuccess(data.connection.accountId);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to set history import period.');
+      }
+    } catch (e) {
+      alert('Failed to set history import period due to network error.');
+    } finally {
+      setSavingHistory(false);
     }
   };
 
@@ -307,7 +348,11 @@ export default function MT5Instructions({
     }
   };
 
-const mqlCode = `//+------------------------------------------------------------------+
+  // Dynamic history properties for the Expert Advisor code
+  const historyMonthsVal = localConnection?.historyMonths || 3;
+  const historyDaysVal = historyMonthsVal * 30;
+
+  const mqlCode = `//+------------------------------------------------------------------+
 //|                                            FXJournalPro_Sync_EA.mq5|
 //|                               Copyright 2026, FX Journal Pro Platform|
 //|                                         https://fxjournalpro.com   |
@@ -315,7 +360,7 @@ const mqlCode = `//+------------------------------------------------------------
 #property copyright "Copyright 2026, FX Journal Pro Platform"
 #property link      "https://fxjournalpro.com"
 #property version   "3.00"
-#property description "Synchronizes 30-day MT5 history and balance to FX Journal Pro"
+#property description "Synchronizes ${historyDaysVal}-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
 input string   InpApiUrl    = "${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/api/mt5/sync"; // FX Journal Pro API endpoint
@@ -323,7 +368,7 @@ input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
 int OnInit() {
-   Print("[FX Journal Pro] Initializing Sync EA (History Mode)...");
+   Print("[FX Journal Pro] Initializing Sync EA (${historyMonthsVal} Months History)...");
    EventSetTimer(InpInterval);
    return(INIT_SUCCEEDED);
 }
@@ -336,7 +381,7 @@ void OnTimer() {
 // Web request logic to transmit trades securely
 void SendTradesToFXJournalPro() {
    datetime to_date = TimeCurrent();
-   datetime from_date = to_date - (30 * 24 * 60 * 60); // 30 days history
+   datetime from_date = to_date - (${historyDaysVal} * 24 * 60 * 60); // ${historyDaysVal} days history
    
    if(!HistorySelect(from_date, to_date)) {
       Print("[FX Journal Pro] Failed to load history.");
@@ -515,7 +560,94 @@ void SendTradesToFXJournalPro() {
               </ol>
             </div>
 
-            {!localConnection || localConnection.isInvestorSync ? (
+            {showHistorySelector ? (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 space-y-4 animate-fade-in">
+                <div>
+                  <h4 className="text-sm font-bold text-indigo-900 mb-1 flex items-center gap-1.5">
+                    <Clock className="h-4 w-4" />
+                    Configure Historical Import
+                  </h4>
+                  <p className="text-xs text-indigo-800/85 font-medium leading-relaxed">
+                    Select how many months of historical trades you want to import from your MetaTrader 5 account.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">Import Duration</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: '1 Month', value: '1' },
+                      { label: '3 Months', value: '3' },
+                      { label: '6 Months', value: '6' },
+                      { label: '12 Months', value: '12' }
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setHistoryPeriod(opt.value as any)}
+                        className={`text-xs font-semibold py-2 px-3 rounded-lg border transition ${
+                          historyPeriod === opt.value
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100/50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setHistoryPeriod('custom')}
+                      className={`col-span-2 text-xs font-semibold py-2 px-3 rounded-lg border transition ${
+                        historyPeriod === 'custom'
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100/50'
+                      }`}
+                    >
+                      Custom Months
+                    </button>
+                  </div>
+                </div>
+
+                {historyPeriod === 'custom' && (
+                  <div className="space-y-1 animate-fade-in">
+                    <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">Number of Months</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={customMonths}
+                      onChange={(e) => setCustomMonths(e.target.value)}
+                      className="bg-white border border-indigo-200 text-xs rounded-lg p-2.5 w-full font-semibold text-indigo-900"
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                )}
+
+                <div className="bg-white/80 border border-indigo-100 rounded-lg p-3 space-y-2 text-[11px] text-indigo-950/90 leading-relaxed font-medium">
+                  <div className="flex gap-2">
+                    <span className="text-indigo-600">●</span>
+                    <span><strong>Initial Balance</strong> = Live Balance - Total Net P&L of imported trades.</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-indigo-600">●</span>
+                    <span><strong>Current Balance</strong> = Live MT5 account balance.</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveHistoryPeriod}
+                  disabled={savingHistory}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition flex items-center justify-center gap-1.5"
+                >
+                  {savingHistory ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "Confirm & Get EA Code"
+                  )}
+                </button>
+              </div>
+            ) : !localConnection || localConnection.isInvestorSync ? (
               <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-5">
                 <h4 className="text-sm font-bold text-indigo-900 mb-1 flex items-center gap-1.5">
                   <Lock className="h-4 w-4" />
@@ -573,6 +705,27 @@ void SendTradesToFXJournalPro() {
               </div>
             ) : (
               <>
+                {/* Active Sync Period Widget */}
+                <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Clock className="h-4 w-4 text-indigo-500" />
+                      Syncing: {localConnection.historyMonths || 3} Months History
+                    </h4>
+                    <button
+                      onClick={() => {
+                        setHistoryPeriod(String(localConnection.historyMonths || 3) as any);
+                        setShowHistorySelector(true);
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition"
+                    >
+                      Configure
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-indigo-800/80 leading-relaxed font-medium">
+                    This Expert Advisor will extract trades from the last <strong>{(localConnection.historyMonths || 3) * 30} days</strong> of MT5 history. Modify this setting if you want to recalculate starting balances on your next EA terminal sync.
+                  </p>
+                </div>
                 <div className="bg-blue-50/60 rounded-xl p-5 border border-blue-100">
                   <h4 className="text-sm font-semibold text-blue-900 mb-2">Your Security Token</h4>
                   <p className="text-xs text-blue-700/80 mb-4">
