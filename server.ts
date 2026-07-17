@@ -22,8 +22,8 @@ let supabase: any = null;
 let useSupabase = false;
 
 try {
-  let supabaseUrl = process.env.SUPABASE_URL?.trim();
-  let supabaseKey = process.env.SUPABASE_KEY?.trim();
+  let supabaseUrl = process.env.SUPABASE_URL?.trim() || process.env.VITE_SUPABASE_URL?.trim();
+  let supabaseKey = process.env.SUPABASE_KEY?.trim() || process.env.VITE_SUPABASE_KEY?.trim();
 
   // Strip wrapping quotes if any (common in some env setups)
   if (supabaseUrl?.startsWith('"') && supabaseUrl?.endsWith('"')) {
@@ -355,6 +355,63 @@ function loadDatabaseFromFile() {
 let db: any = null;
 let isLoaded = false;
 
+// Loader and saver specifically for user-scoped databases on Supabase
+async function ensureUserDbLoaded(email: string) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const dbKey = `db_json_${normalizedEmail}`;
+
+  if (useSupabase) {
+    try {
+      console.log(`[AxyFx Journal Server] Loading database from Supabase for user: ${normalizedEmail}...`);
+      const { data, error } = await supabase!
+        .from('journal_settings')
+        .select('value')
+        .eq('key', dbKey)
+        .maybeSingle();
+
+      if (error) {
+        console.error(`[AxyFx Journal Server] Supabase query error for ${normalizedEmail}:`, error);
+        return loadDatabaseFromFile();
+      } else if (!data) {
+        console.log(`[AxyFx Journal Server] No database found in Supabase for user: ${normalizedEmail}. Initializing new user DB...`);
+        const initial = loadDatabaseFromFile();
+        
+        // Setup fresh data for this specific user
+        initial.users = [{
+          id: `user_${Date.now()}`,
+          email: normalizedEmail,
+          name: normalizedEmail.split('@')[0],
+          experience: 'Intermediate',
+          tradingStyle: 'Day Trading',
+          mainMarkets: ['Forex', 'Gold'],
+          onboardingCompleted: false,
+          isPro: false
+        }];
+        initial.accounts = [];
+        initial.trades = [];
+        initial.riskSettings = [];
+        initial.supportTickets = [];
+        initial.mt5Connections = [];
+        initial.payments = [];
+
+        await supabase!
+          .from('journal_settings')
+          .upsert({ key: dbKey, value: initial });
+        
+        return initial;
+      } else {
+        console.log(`[AxyFx Journal Server] Loaded database for user: ${normalizedEmail} from Supabase successfully!`);
+        return data.value;
+      }
+    } catch (err: any) {
+      console.error(`[AxyFx Journal Server] Failed to load user database from Supabase for ${normalizedEmail}:`, err);
+      return loadDatabaseFromFile();
+    }
+  } else {
+    return loadDatabaseFromFile();
+  }
+}
+
 async function ensureDbLoaded() {
   if (isLoaded && db && db.users && Array.isArray(db.users)) return db;
 
@@ -431,20 +488,28 @@ async function saveDatabase(data: any) {
   }
 
   if (useSupabase) {
-    (async () => {
+    const activeEmail = currentUser?.email || data.users?.[0]?.email;
+    if (activeEmail) {
+      const normalizedEmail = activeEmail.toLowerCase().trim();
+      try {
+        const { error } = await supabase!
+          .from('journal_settings')
+          .upsert({ key: `db_json_${normalizedEmail}`, value: data });
+        if (error) {
+          console.error(`[AxyFx Journal Server] Supabase save error for ${normalizedEmail}:`, error);
+        } else {
+          console.log(`[AxyFx Journal Server] Saved user database for ${normalizedEmail} to Supabase successfully!`);
+        }
+      } catch (err) {
+        console.error(`[AxyFx Journal Server] Exception saving to Supabase for ${normalizedEmail}:`, err);
+      }
+    } else {
       try {
         const { error } = await supabase!
           .from('journal_settings')
           .upsert({ key: 'db_json', value: data });
-        if (error) {
-          console.error('[AxyFx Journal Server] Supabase save error:', error);
-        } else {
-          console.log('[AxyFx Journal Server] Saved database to Supabase successfully!');
-        }
-      } catch (err) {
-        console.error('[AxyFx Journal Server] Exception saving to Supabase:', err);
-      }
-    })();
+      } catch (err) {}
+    }
   }
 }
 
@@ -460,18 +525,37 @@ const PORT = 3000;
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
     try {
-      await ensureDbLoaded();
-
-      // Always try to resolve user from x-auth-email header first (supports Vercel serverless cold starts)
+      // Always try to resolve user from x-auth-email header first
       const authEmail = req.headers['x-auth-email'] as string | undefined;
-      if (authEmail && db && db.users) {
-        const dbUser = db.users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase());
-        if (dbUser) currentUser = dbUser;
-      }
-
-      // If still no user (no header sent), use fallback from in-memory session or first found user
-      if (!currentUser && db && db.users) {
-        currentUser = db.users.find((u: any) => u.email === 'akshayrajpanamthode@gmail.com') || db.users[0] || null;
+      
+      if (authEmail) {
+        const email = authEmail.toLowerCase().trim();
+        db = await ensureUserDbLoaded(email);
+        
+        let dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
+        if (!dbUser) {
+          dbUser = {
+            id: `user_${Date.now()}`,
+            email: email,
+            name: email.split('@')[0],
+            experience: 'Intermediate',
+            tradingStyle: 'Day Trading',
+            mainMarkets: ['Forex', 'Gold'],
+            onboardingCompleted: false,
+            isPro: false
+          };
+          db.users.push(dbUser);
+          await saveDatabase(db);
+        }
+        currentUser = dbUser;
+      } else {
+        await ensureDbLoaded();
+        const fallbackEmail = 'akshayrajpanamthode@gmail.com';
+        let fallbackUser = db.users.find((u: any) => u.email.toLowerCase() === fallbackEmail);
+        if (!fallbackUser && db.users && db.users.length > 0) {
+          fallbackUser = db.users[0];
+        }
+        currentUser = fallbackUser;
       }
 
       next();
@@ -485,27 +569,25 @@ const PORT = 3000;
   // AUTH ROUTES
   // ==========================================
 
-  app.post('/api/auth/register', (req, res) => {
+  app.post('/api/auth/register', async (req, res) => {
     try {
       const { email, name, password } = req.body;
       if (!email || !name) {
         return res.status(400).json({ error: 'Email and Name are required' });
       }
 
-      // Safeguard against missing or uninitialized db
-      if (!db || typeof db !== 'object' || !Array.isArray(db.users)) {
-        console.warn('[AxyFx Journal Server] db or db.users is null during registration. Recovering on-the-fly...');
-        db = loadDatabaseFromFile();
-      }
+      const normalizedEmail = email.toLowerCase().trim();
+      db = await ensureUserDbLoaded(normalizedEmail);
 
-      const exists = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      const exists = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
       if (exists) {
-        return res.status(400).json({ error: 'User with this email already exists' });
+        currentUser = exists;
+        return res.json({ message: 'Registration successful', user: exists });
       }
 
       const newUser: User = {
         id: `user_${Date.now()}`,
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         name,
         password: password || '',
         onboardingCompleted: false,
@@ -513,7 +595,7 @@ const PORT = 3000;
       };
 
       db.users.push(newUser);
-      saveDatabase(db);
+      await saveDatabase(db);
       currentUser = newUser;
 
       res.json({ message: 'Registration successful', user: newUser });
@@ -523,32 +605,29 @@ const PORT = 3000;
     }
   });
 
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body;
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }
 
-      // Safeguard against missing or uninitialized db
-      if (!db || typeof db !== 'object' || !Array.isArray(db.users)) {
-        console.warn('[AxyFx Journal Server] db or db.users is null during login. Recovering on-the-fly...');
-        db = loadDatabaseFromFile();
-      }
+      const normalizedEmail = email.toLowerCase().trim();
+      db = await ensureUserDbLoaded(normalizedEmail);
 
-      const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      const user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
       if (!user) {
         // Automatic sign-up/login simulation to make testing incredibly pleasant
         const newUser: User = {
           id: `user_${Date.now()}`,
-          email: email.toLowerCase(),
+          email: normalizedEmail,
           name: email.split('@')[0],
           password: password || '',
           onboardingCompleted: false,
           isPro: false
         };
         db.users.push(newUser);
-        saveDatabase(db);
+        await saveDatabase(db);
         currentUser = newUser;
         return res.json({ message: 'New user created and logged in', user: newUser });
       }

@@ -473,7 +473,14 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('[AxyFx] Error during Supabase signout:', e);
+    }
     await authFetch('/api/auth/logout', { method: 'POST' });
+    localStorage.removeItem('auth_email');
+    localStorage.removeItem('selected_account_id');
     setUser(null);
     setAccounts([]);
     setTrades([]);
