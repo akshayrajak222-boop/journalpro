@@ -3542,7 +3542,12 @@ export default function App() {
             account={activeAccount} 
             onTriggerSimulatedSync={handleTriggerSimulatedSync}
             isSyncing={actionLoading}
-            onSyncSuccess={fetchAccountData}
+            onSyncSuccess={async (newAccountId) => {
+              await fetchAccountData();
+              if (newAccountId && typeof newAccountId === 'string') {
+                setSelectedAccountId(newAccountId);
+              }
+            }}
           />
         )}
 
