@@ -228,6 +228,9 @@ export default function MT5Instructions({
         const data = await res.json();
         setSyncStatusMsg('Configuring terminal link parameters...');
         
+        // Switch to the newly created account immediately
+        if (onSyncSuccess) onSyncSuccess(data.connection.accountId);
+
         setTimeout(() => {
           setLocalConnection(data.connection);
           setShowHistorySelector(true); // Switch to history selection view
