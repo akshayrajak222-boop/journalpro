@@ -704,7 +704,8 @@ const PORT = 3000;
           dailyLossLimit: 500,
           weeklyLossLimit: 1500,
           maxDrawdownLimit: 10.0,
-          disciplineEnabled: true
+          disciplineEnabled: true,
+          maxTradesPerDay: 5
         };
         db.riskSettings.push(newRisk);
       }
@@ -786,7 +787,8 @@ const PORT = 3000;
       dailyLossLimit: parseFloat(startingBalance) * 0.05, // 5% default
       weeklyLossLimit: parseFloat(startingBalance) * 0.10, // 10% default
       maxDrawdownLimit: 10.0,
-      disciplineEnabled: true
+      disciplineEnabled: true,
+      maxTradesPerDay: 5
     };
     db.riskSettings.push(newRisk);
 
@@ -1023,9 +1025,14 @@ const PORT = 3000;
         dailyLossLimit: 500,
         weeklyLossLimit: 1500,
         maxDrawdownLimit: 10.0,
-        disciplineEnabled: true
+        disciplineEnabled: true,
+        maxTradesPerDay: 5
       };
       return res.json({ riskSettings: defaultSettings });
+    }
+    // Make sure old settings objects also have maxTradesPerDay
+    if (settings.maxTradesPerDay === undefined) {
+      settings.maxTradesPerDay = 5;
     }
     res.json({ riskSettings: settings });
   });
@@ -1033,7 +1040,7 @@ const PORT = 3000;
   app.put('/api/risk-settings/:accountId', (req, res) => {
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId } = req.params;
-    const { riskPerTradeLimit, dailyLossLimit, weeklyLossLimit, maxDrawdownLimit, disciplineEnabled } = req.body;
+    const { riskPerTradeLimit, dailyLossLimit, weeklyLossLimit, maxDrawdownLimit, disciplineEnabled, maxTradesPerDay } = req.body;
 
     const idx = db.riskSettings.findIndex((r: any) => r.accountId === accountId);
     if (idx !== -1) {
@@ -1042,6 +1049,7 @@ const PORT = 3000;
       db.riskSettings[idx].weeklyLossLimit = parseFloat(weeklyLossLimit);
       db.riskSettings[idx].maxDrawdownLimit = parseFloat(maxDrawdownLimit);
       db.riskSettings[idx].disciplineEnabled = !!disciplineEnabled;
+      db.riskSettings[idx].maxTradesPerDay = parseInt(maxTradesPerDay) || 5;
       saveDatabase(db);
       res.json({ message: 'Risk parameters saved', riskSettings: db.riskSettings[idx] });
     } else {
@@ -1052,7 +1060,8 @@ const PORT = 3000;
         dailyLossLimit: parseFloat(dailyLossLimit || 500),
         weeklyLossLimit: parseFloat(weeklyLossLimit || 1500),
         maxDrawdownLimit: parseFloat(maxDrawdownLimit || 10.0),
-        disciplineEnabled: disciplineEnabled !== undefined ? !!disciplineEnabled : true
+        disciplineEnabled: disciplineEnabled !== undefined ? !!disciplineEnabled : true,
+        maxTradesPerDay: parseInt(maxTradesPerDay || 5)
       };
       db.riskSettings.push(newRisk);
       saveDatabase(db);

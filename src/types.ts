@@ -60,6 +60,7 @@ export interface RiskSettings {
   weeklyLossLimit: number;
   maxDrawdownLimit: number;
   disciplineEnabled: boolean;
+  maxTradesPerDay: number;
 }
 
 export interface SupportTicket {

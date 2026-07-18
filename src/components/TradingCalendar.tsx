@@ -11,6 +11,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 11)); // Seed to match our metadata context
   const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[] | null>(null);
   const [selectedDayString, setSelectedDayString] = useState<string | null>(null);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -36,9 +37,20 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
     return symbols[curr] || '$';
   };
 
-  // Group trades by day
+  // Helper to convert date to timezone-agnostic local YYYY-MM-DD string matching our calendar grid
+  const getLocalDateString = (dateInput: string | Date) => {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // Group trades by day using local date to align with local calendar cells perfectly
   const tradesByDay = trades.reduce((acc: { [key: string]: { trades: Trade[]; netProfit: number } }, trade) => {
-    const dStr = new Date(trade.date).toISOString().split('T')[0];
+    const dStr = getLocalDateString(trade.date);
+    if (!dStr) return acc;
     if (!acc[dStr]) {
       acc[dStr] = { trades: [], netProfit: 0 };
     }
@@ -55,11 +67,13 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
     setSelectedDayTrades(null);
+    setSelectedDayKey(null);
   };
 
   const handleNextMonth = () => {
     setCurrentDate(new Date(year, month + 1, 1));
     setSelectedDayTrades(null);
+    setSelectedDayKey(null);
   };
 
   const monthNames = [
@@ -95,6 +109,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
 
   const handleDayClick = (dayNum: number) => {
     const formattedDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    setSelectedDayKey(formattedDay);
     const dayData = tradesByDay[formattedDay];
     setSelectedDayString(`${monthNames[month]} ${dayNum}, ${year}`);
     if (dayData) {
@@ -149,13 +164,14 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
           <div className="grid grid-cols-7 gap-1.5">
             {cells.map((cell, idx) => {
               if (cell.isPadding) {
-                return <div key={`pad-${idx}`} className="h-14 sm:h-16 md:h-20 bg-slate-50/40 border border-transparent rounded-lg"></div>;
+                return <div key={`pad-${idx}`} className="h-14 sm:h-16 md:h-20 bg-slate-50/40 border border-slate-100 rounded-lg"></div>;
               }
 
               const formattedDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
               const dayData = tradesByDay[formattedDay];
+              const isSelected = selectedDayKey === formattedDay;
               
-              let bgClass = "bg-slate-50 text-slate-800 hover:bg-slate-100/80";
+              let bgClass = "bg-slate-50 border border-slate-100 text-slate-800 hover:bg-slate-100/80";
               let textAccent = "text-slate-400";
               let amountText = "";
 
@@ -175,7 +191,11 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                 <button
                   key={`day-${cell.day}`}
                   onClick={() => handleDayClick(cell.day)}
-                  className={`h-14 sm:h-16 md:h-20 p-1 sm:p-2 text-left rounded-lg transition flex flex-col justify-between group ${bgClass}`}
+                  className={`h-14 sm:h-16 md:h-20 p-1 sm:p-2 text-left rounded-lg transition flex flex-col justify-between group relative ${bgClass} ${
+                    isSelected 
+                      ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-slate-900 border-indigo-500 scale-[1.03] z-10 shadow-sm' 
+                      : ''
+                  }`}
                 >
                   <span className="text-[10px] sm:text-xs font-medium text-slate-500 group-hover:text-slate-900">{cell.day}</span>
                   {amountText && (

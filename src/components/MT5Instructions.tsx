@@ -18,7 +18,8 @@ import {
   Coins, 
   Activity, 
   FileText,
-  Clock
+  Clock,
+  Globe
 } from 'lucide-react';
 import { MT5Connection, TradingAccount } from '../types';
 
@@ -70,6 +71,18 @@ export default function MT5Instructions({
   const [historyPeriod, setHistoryPeriod] = useState<'1' | '3' | '6' | '12' | 'custom'>('3');
   const [customMonths, setCustomMonths] = useState('5');
   const [savingHistory, setSavingHistory] = useState(false);
+
+  // API Origin / Host overrides for WebRequest / Vercel
+  const [apiOrigin, setApiOrigin] = useState(() => {
+    if (typeof window !== 'undefined') {
+      // Pre-select Vercel if we detect it or have it, otherwise use current window
+      if (window.location.hostname.includes('vercel.app')) {
+        return window.location.origin;
+      }
+    }
+    return 'https://journalpro-iota.vercel.app'; // Default to their production Vercel url
+  });
+  const [customOriginInput, setCustomOriginInput] = useState('');
 
   // authFetch — injects x-auth-email so Vercel serverless cold starts can identify the user
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -363,7 +376,7 @@ export default function MT5Instructions({
 #property description "Synchronizes ${historyDaysVal}-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
-input string   InpApiUrl    = "${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/api/mt5/sync"; // FX Journal Pro API endpoint
+input string   InpApiUrl    = "${apiOrigin}/api/mt5/sync"; // FX Journal Pro API endpoint
 input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
@@ -463,24 +476,24 @@ void SendTradesToFXJournalPro() {
   };
 
   return (
-    <div id="mt5-instructions-section" className="bg-white border border-slate-100 rounded-xl p-6 shadow-sm">
+    <div id="mt5-instructions-section" className="bg-[#0f172a] border border-slate-800 rounded-xl p-6 shadow-xl text-slate-100">
       
       {/* Header section with active portfolio alias status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800 pb-4 mb-6">
         <div>
-          <span className="text-xs font-semibold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full uppercase tracking-wider">
+          <span className="text-xs font-semibold bg-indigo-950/50 text-indigo-400 px-2.5 py-1 rounded-full uppercase tracking-wider border border-indigo-900/30">
             MT5 Automation Center
           </span>
-          <h2 className="text-xl font-bold text-slate-900 mt-2">Synchronization for "{account.name}"</h2>
-          <p className="text-sm text-slate-500">Configure real-time automated data streaming and journal metrics updates.</p>
+          <h2 className="text-xl font-bold text-white mt-2">Synchronization for "{account?.name}"</h2>
+          <p className="text-sm text-slate-400">Configure real-time automated data streaming and journal metrics updates.</p>
         </div>
         <div className="mt-4 md:mt-0 flex items-center gap-3">
           <div className="text-right">
-            <span className="text-xs text-slate-400 block">Active Mode Status</span>
+            <span className="text-xs text-slate-500 block">Active Mode Status</span>
             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-              localConnection?.status === 'Connected' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-600'
+              localConnection?.status === 'Connected' ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/30' : 'bg-slate-900 text-slate-400 border border-slate-800'
             }`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${localConnection?.status === 'Connected' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+              <span className={`h-1.5 w-1.5 rounded-full ${localConnection?.status === 'Connected' ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
               {localConnection?.status === 'Connected' 
                 ? (localConnection.isInvestorSync ? 'Investor Password Linked' : 'Expert Advisor Active') 
                 : 'Not Configured'}
@@ -490,13 +503,13 @@ void SendTradesToFXJournalPro() {
       </div>
 
       {/* Modern tabbed design to select between Expert Advisor and Investor Password Cloud Sync */}
-      <div className="flex border-b border-slate-100 mb-6 gap-2">
+      <div className="flex border-b border-slate-800 mb-6 gap-2">
         <button
           onClick={() => { if (!isSubmitting) setActiveTab('ea'); }}
           className={`pb-3 text-xs font-bold transition-all px-4 border-b-2 ${
             activeTab === 'ea' 
-              ? 'border-slate-900 text-slate-900 font-extrabold' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
+              ? 'border-indigo-500 text-white font-extrabold' 
+              : 'border-transparent text-slate-500 hover:text-slate-300'
           }`}
         >
           📁 Method A: Expert Advisor (EA) Code
@@ -505,11 +518,11 @@ void SendTradesToFXJournalPro() {
           onClick={() => { if (!isSubmitting) setActiveTab('investor'); }}
           className={`pb-3 text-xs font-bold transition-all px-4 border-b-2 flex items-center gap-1.5 ${
             activeTab === 'investor' 
-              ? 'border-slate-900 text-slate-900 font-extrabold' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
+              ? 'border-indigo-500 text-white font-extrabold' 
+              : 'border-transparent text-slate-500 hover:text-slate-300'
           }`}
         >
-          ☁️ Method B: Investor Password Sync <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">NEW (Read-Only)</span>
+          ☁️ Method B: Investor Password Sync <span className="bg-emerald-950/80 text-emerald-400 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-emerald-900/30">NEW (Read-Only)</span>
         </button>
       </div>
 
@@ -518,62 +531,207 @@ void SendTradesToFXJournalPro() {
           <RefreshCw className="h-6 w-6 animate-spin text-slate-500" />
           <p className="text-xs">Accessing trading port settings...</p>
         </div>
+      ) : activeTab === 'investor' ? (
+        /* METHOD B: INVESTOR PASSWORD CLOUD SYNC VIEW - COMING SOON */
+        <div className="animate-fade-in py-8 px-4 max-w-3xl mx-auto w-full">
+          <div className="bg-gradient-to-br from-slate-900 via-[#1e293b] to-[#0f172a] text-white rounded-2xl border border-slate-800 shadow-2xl p-8 md:p-12 relative overflow-hidden">
+            {/* Background elements for high fidelity */}
+            <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+            <div className="absolute bottom-0 left-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl -ml-20 -mb-20"></div>
+
+            <div className="relative z-10 flex flex-col items-center text-center space-y-6">
+              {/* Badge */}
+              <span className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-widest font-black px-3 py-1 rounded-full border border-indigo-500/30 flex items-center gap-1.5 animate-pulse">
+                <span className="h-1.5 w-1.5 bg-indigo-400 rounded-full"></span>
+                Coming Soon to FX Journal Pro
+              </span>
+
+              {/* Icon */}
+              <div className="h-16 w-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-indigo-400 shadow-inner">
+                <Globe className="h-8 w-8 animate-pulse" />
+              </div>
+
+              {/* Title & Description */}
+              <div className="space-y-3 max-w-xl">
+                <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight font-display text-white">
+                  Cloud Investor Password Sync
+                </h3>
+                <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-normal">
+                  Zero local installation required. We are establishing secure cloud proxies to stream read-only broker accounts directly to your personal journal database with 100% security.
+                </p>
+              </div>
+
+              {/* Highlight Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full pt-6 border-t border-slate-800 text-left">
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/60">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Lock className="h-4 w-4 text-indigo-400" />
+                    <span className="text-xs font-bold text-slate-100">AES-256 Shield</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">Your investor credentials never leave our end-to-end encrypted vault layers.</p>
+                </div>
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/60">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Server className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-slate-100">Zero Local Apps</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">No Python scripts or start-up bridge applications required on your local PC.</p>
+                </div>
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/60">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Activity className="h-4 w-4 text-indigo-400" />
+                    <span className="text-xs font-bold text-slate-100">Real-Time Streams</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">Continuous live synchronizations to capture active pips, margin states, and drawdowns.</p>
+                </div>
+              </div>
+
+              {/* Waiting List Signup form */}
+              <div className="w-full max-w-md pt-4">
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const target = e.target as HTMLFormElement;
+                    const emailInput = target.elements.namedItem('notify_email') as HTMLInputElement;
+                    if (emailInput?.value) {
+                      alert(`🚀 Thank you! ${emailInput.value} has been added to our Cloud Beta Priority Access list.`);
+                      target.reset();
+                    }
+                  }}
+                  className="flex flex-col sm:flex-row gap-2 mt-2"
+                >
+                  <input
+                    type="email"
+                    name="notify_email"
+                    required
+                    placeholder="Enter your email for beta priority"
+                    className="bg-slate-950/80 border border-slate-700/80 text-xs rounded-lg px-4 py-2.5 flex-1 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-sans text-white"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition"
+                  >
+                    Get Priority Access
+                  </button>
+                </form>
+                <span className="text-[10px] text-slate-500 block mt-2 text-center">
+                  🔒 We respect your privacy. No spam, opt-out any time.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : activeTab === 'ea' ? (
         /* METHOD A: EXPERT ADVISOR VIEW */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
           {/* Step-by-Step Instructions */}
           <div className="lg:col-span-1 space-y-6">
-            <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-              <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-blue-600" />
+            {/* API Destination Selection Widget */}
+            <div className="bg-indigo-950/20 rounded-xl p-5 border border-indigo-900/40 space-y-3">
+              <h3 className="font-semibold text-indigo-300 flex items-center gap-2 text-xs uppercase tracking-wider">
+                <Globe className="h-4 w-4 text-indigo-400 animate-pulse" />
+                API Endpoint URL
+              </h3>
+              <p className="text-[11px] text-indigo-300/80 leading-relaxed font-medium">
+                Select the domain where your MT5 terminal will post sync transactions. Highly recommended to use your production Vercel link!
+              </p>
+              <div className="flex flex-col gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setApiOrigin(typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')}
+                  className={`text-left text-xs p-2 rounded-lg border transition flex flex-col ${
+                    apiOrigin === (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
+                      ? 'bg-[#1e1b4b] border-indigo-500 text-white font-bold shadow-sm'
+                      : 'bg-slate-900/50 border-indigo-950 text-indigo-400/80 hover:bg-[#131b2e] hover:text-indigo-300'
+                  }`}
+                >
+                  <span className="text-[9px] uppercase text-indigo-400 font-extrabold tracking-wider">Local/Current origin</span>
+                  <span className="font-mono text-[10px] mt-0.5 truncate w-full">{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setApiOrigin('https://journalpro-iota.vercel.app')}
+                  className={`text-left text-xs p-2 rounded-lg border transition flex flex-col ${
+                    apiOrigin === 'https://journalpro-iota.vercel.app'
+                      ? 'bg-[#1e1b4b] border-indigo-500 text-white font-bold shadow-sm'
+                      : 'bg-slate-900/50 border-indigo-950 text-indigo-400/80 hover:bg-[#131b2e] hover:text-indigo-300'
+                  }`}
+                >
+                  <span className="text-[9px] uppercase text-emerald-400 font-extrabold tracking-wider flex items-center gap-1">
+                    Production Vercel Domain
+                    <span className="bg-emerald-950 text-emerald-400 text-[8px] font-bold px-1 rounded border border-emerald-900/30">STABLE</span>
+                  </span>
+                  <span className="font-mono text-[10px] mt-0.5">https://journalpro-iota.vercel.app</span>
+                </button>
+
+                <div className="border-t border-indigo-950 pt-2 mt-1">
+                  <span className="text-[9px] font-bold text-indigo-400/80 uppercase tracking-wider block mb-1">Custom Host URL Override</span>
+                  <input
+                    type="text"
+                    placeholder="https://journalpro-iota.vercel.app"
+                    value={customOriginInput}
+                    onChange={(e) => {
+                      setCustomOriginInput(e.target.value);
+                      setApiOrigin(e.target.value || 'https://journalpro-iota.vercel.app');
+                    }}
+                    className="bg-slate-950 border border-indigo-900/50 text-xs font-mono text-indigo-200 rounded-lg p-2 w-full focus:ring-indigo-500 focus:border-indigo-500 font-semibold"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/50 rounded-xl p-5 border border-slate-800">
+              <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+                <Cpu className="h-4 w-4 text-blue-400" />
                 Installation Steps
               </h3>
-              <ol className="space-y-4 text-xs text-slate-600">
+              <ol className="space-y-4 text-xs text-slate-400">
                 <li className="flex gap-2">
-                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-100 text-blue-600 font-bold">1</span>
+                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-950 text-blue-400 border border-blue-900/30 font-bold">1</span>
                   <div>
-                    <strong className="text-slate-800 block">Open MT5 Terminal</strong>
-                    Navigate to <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-700">Tools &gt; MetaQuotes Language Editor</code> or press F4.
+                    <strong className="text-slate-200 block">Open MT5 Terminal</strong>
+                    Navigate to <code className="bg-slate-900 px-1 py-0.5 rounded text-slate-300">Tools &gt; MetaQuotes Language Editor</code> or press F4.
                   </div>
                 </li>
                 <li className="flex gap-2">
-                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-100 text-blue-600 font-bold">2</span>
+                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-950 text-blue-400 border border-blue-900/30 font-bold">2</span>
                   <div>
-                    <strong className="text-slate-800 block">Create Expert Advisor</strong>
-                    Click <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-700">New &gt; Expert Advisor (template)</code>. Name it <code className="text-blue-600 font-semibold">FXJournalPro_Sync_EA</code>.
+                    <strong className="text-slate-200 block">Create Expert Advisor</strong>
+                    Click <code className="bg-slate-900 px-1 py-0.5 rounded text-slate-300">New &gt; Expert Advisor (template)</code>. Name it <code className="text-blue-400 font-semibold">FXJournalPro_Sync_EA</code>.
                   </div>
                 </li>
                 <li className="flex gap-2">
-                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-100 text-blue-600 font-bold">3</span>
+                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-950 text-blue-400 border border-blue-900/30 font-bold">3</span>
                   <div>
-                    <strong className="text-slate-800 block">Paste Code & Compile</strong>
+                    <strong className="text-slate-200 block">Paste Code & Compile</strong>
                     Copy our pre-compiled integration code on the right and replace all template content in the editor. Hit <strong>Compile</strong>.
                   </div>
                 </li>
                 <li className="flex gap-2">
-                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-100 text-blue-600 font-bold">4</span>
+                  <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-950 text-blue-400 border border-blue-900/30 font-bold">4</span>
                   <div>
-                    <strong className="text-slate-800 block">Enable WebRequests</strong>
-                    In MT5 settings, check <code className="text-slate-800 font-semibold">Allow WebRequest</code> and add: <code className="bg-blue-50 px-1 text-blue-700 font-mono rounded">{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}</code>. Drag the EA onto any active chart!
+                    <strong className="text-slate-200 block">Enable WebRequests</strong>
+                    In MT5 settings, check <code className="text-slate-200 font-semibold">Allow WebRequest</code> and add: <code className="bg-blue-950/40 border border-blue-900/20 px-1 text-blue-300 font-mono rounded">{apiOrigin}</code>. Drag the EA onto any active chart!
                   </div>
                 </li>
               </ol>
             </div>
 
             {showHistorySelector ? (
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 space-y-4 animate-fade-in">
+              <div className="bg-indigo-950/20 border border-indigo-900/40 rounded-xl p-5 space-y-4 animate-fade-in">
                 <div>
-                  <h4 className="text-sm font-bold text-indigo-900 mb-1 flex items-center gap-1.5">
+                  <h4 className="text-sm font-bold text-indigo-300 mb-1 flex items-center gap-1.5">
                     <Clock className="h-4 w-4" />
                     Configure Historical Import
                   </h4>
-                  <p className="text-xs text-indigo-800/85 font-medium leading-relaxed">
+                  <p className="text-xs text-indigo-300/80 font-medium leading-relaxed">
                     Select how many months of historical trades you want to import from your MetaTrader 5 account.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">Import Duration</label>
+                  <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Import Duration</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { label: '1 Month', value: '1' },
@@ -588,7 +746,7 @@ void SendTradesToFXJournalPro() {
                         className={`text-xs font-semibold py-2 px-3 rounded-lg border transition ${
                           historyPeriod === opt.value
                             ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100/50'
+                            : 'bg-slate-900 text-indigo-300 border-indigo-950 hover:bg-indigo-950/40'
                         }`}
                       >
                         {opt.label}
@@ -600,7 +758,7 @@ void SendTradesToFXJournalPro() {
                       className={`col-span-2 text-xs font-semibold py-2 px-3 rounded-lg border transition ${
                         historyPeriod === 'custom'
                           ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100/50'
+                          : 'bg-slate-900 text-indigo-300 border-indigo-950 hover:bg-indigo-950/40'
                       }`}
                     >
                       Custom Months
@@ -610,26 +768,26 @@ void SendTradesToFXJournalPro() {
 
                 {historyPeriod === 'custom' && (
                   <div className="space-y-1 animate-fade-in">
-                    <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">Number of Months</label>
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Number of Months</label>
                     <input
                       type="number"
                       min="1"
                       max="120"
                       value={customMonths}
                       onChange={(e) => setCustomMonths(e.target.value)}
-                      className="bg-white border border-indigo-200 text-xs rounded-lg p-2.5 w-full font-semibold text-indigo-900"
+                      className="bg-slate-950 border border-indigo-900/50 text-xs rounded-lg p-2.5 w-full font-semibold text-indigo-200"
                       placeholder="e.g. 5"
                     />
                   </div>
                 )}
 
-                <div className="bg-white/80 border border-indigo-100 rounded-lg p-3 space-y-2 text-[11px] text-indigo-950/90 leading-relaxed font-medium">
+                <div className="bg-slate-900/80 border border-indigo-950 rounded-lg p-3 space-y-2 text-[11px] text-indigo-300/90 leading-relaxed font-medium">
                   <div className="flex gap-2">
-                    <span className="text-indigo-600">●</span>
+                    <span className="text-indigo-400">●</span>
                     <span><strong>Initial Balance</strong> = Live Balance - Total Net P&L of imported trades.</span>
                   </div>
                   <div className="flex gap-2">
-                    <span className="text-indigo-600">●</span>
+                    <span className="text-indigo-400">●</span>
                     <span><strong>Current Balance</strong> = Live MT5 account balance.</span>
                   </div>
                 </div>
@@ -648,46 +806,46 @@ void SendTradesToFXJournalPro() {
                 </button>
               </div>
             ) : !localConnection || localConnection.isInvestorSync ? (
-              <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-5">
-                <h4 className="text-sm font-bold text-indigo-900 mb-1 flex items-center gap-1.5">
+              <div className="bg-indigo-950/20 border border-indigo-900/40 rounded-xl p-5">
+                <h4 className="text-sm font-bold text-indigo-300 mb-1 flex items-center gap-1.5">
                   <Lock className="h-4 w-4" />
                   Connect MT5 EA Sync
                 </h4>
-                <p className="text-xs text-indigo-800/85 mb-4 font-medium leading-relaxed">
+                <p className="text-xs text-indigo-300/80 mb-4 font-medium leading-relaxed">
                   We will automatically provision a new trading account and unique API token specifically for your MT5 Expert Advisor connection.
                 </p>
                 <form onSubmit={handleConnectEa} className="space-y-3">
                   <div>
-                    <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">MT5 Login Number</label>
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">MT5 Login Number</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. 5591240"
                       value={eaLogin}
                       onChange={(e) => setEaLogin(e.target.value)}
-                      className="bg-white border border-indigo-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
+                      className="bg-slate-950 border border-indigo-900/50 text-xs rounded-lg p-2.5 w-full font-mono font-semibold text-white placeholder-slate-600"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Broker Name</label>
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">Broker Name</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. ICMarketsSC-MT5-2"
                       value={eaBroker}
                       onChange={(e) => setEaBroker(e.target.value)}
-                      className="bg-white border border-indigo-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
+                      className="bg-slate-950 border border-indigo-900/50 text-xs rounded-lg p-2.5 w-full font-mono font-semibold text-white placeholder-slate-600"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Starting Balance ($)</label>
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">Starting Balance ($)</label>
                     <input 
                       type="number" 
                       required
                       placeholder="10000.00"
                       value={eaBalance}
                       onChange={(e) => setEaBalance(e.target.value)}
-                      className="bg-white border border-indigo-200 text-xs rounded-lg p-2.5 w-full font-mono"
+                      className="bg-slate-950 border border-indigo-900/50 text-xs rounded-lg p-2.5 w-full font-mono text-white placeholder-slate-600"
                     />
                   </div>
                   <button
@@ -706,10 +864,10 @@ void SendTradesToFXJournalPro() {
             ) : (
               <>
                 {/* Active Sync Period Widget */}
-                <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-5 space-y-3">
+                <div className="bg-indigo-950/20 border border-indigo-900/40 rounded-xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Clock className="h-4 w-4 text-indigo-500" />
+                    <h4 className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Clock className="h-4 w-4 text-indigo-400" />
                       Syncing: {localConnection.historyMonths || 3} Months History
                     </h4>
                     <button
@@ -717,18 +875,18 @@ void SendTradesToFXJournalPro() {
                         setHistoryPeriod(String(localConnection.historyMonths || 3) as any);
                         setShowHistorySelector(true);
                       }}
-                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition"
+                      className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 bg-indigo-950/50 px-2 py-1 rounded transition border border-indigo-900/30"
                     >
                       Configure
                     </button>
                   </div>
-                  <p className="text-[11px] text-indigo-800/80 leading-relaxed font-medium">
+                  <p className="text-[11px] text-indigo-300/80 leading-relaxed font-medium">
                     This Expert Advisor will extract trades from the last <strong>{(localConnection.historyMonths || 3) * 30} days</strong> of MT5 history. Modify this setting if you want to recalculate starting balances on your next EA terminal sync.
                   </p>
                 </div>
-                <div className="bg-blue-50/60 rounded-xl p-5 border border-blue-100">
-                  <h4 className="text-sm font-semibold text-blue-900 mb-2">Your Security Token</h4>
-                  <p className="text-xs text-blue-700/80 mb-4">
+                <div className="bg-blue-950/20 rounded-xl p-5 border border-blue-900/40">
+                  <h4 className="text-sm font-semibold text-blue-300 mb-2">Your Security Token</h4>
+                  <p className="text-xs text-blue-400/80 mb-4">
                     Use this private token inside the EA configuration variables to authenticate your terminal.
                   </p>
                   <div className="flex items-center gap-2">
@@ -736,7 +894,7 @@ void SendTradesToFXJournalPro() {
                       type="text" 
                       readOnly 
                       value={syncToken}
-                      className="bg-white/80 border border-blue-200 text-xs text-blue-900 font-mono rounded-lg p-2.5 flex-1 select-all"
+                      className="bg-[#0b1329] border border-blue-900/50 text-xs text-blue-200 font-mono rounded-lg p-2.5 flex-1 select-all"
                     />
                     <button 
                       onClick={handleCopyToken}
@@ -749,21 +907,21 @@ void SendTradesToFXJournalPro() {
                 </div>
 
                 {/* Real-time Sandbox Sync Stimulator */}
-                <div className="bg-emerald-50/50 rounded-xl p-5 border border-emerald-100">
-                  <h4 className="text-sm font-semibold text-emerald-900 mb-2 flex items-center gap-2">
-                    <Terminal className="h-4 w-4 text-emerald-600 animate-pulse" />
+                <div className="bg-emerald-950/10 rounded-xl p-5 border border-emerald-900/40">
+                  <h4 className="text-sm font-semibold text-emerald-300 mb-2 flex items-center gap-2">
+                    <Terminal className="h-4 w-4 text-emerald-400 animate-pulse" />
                     Interactive EA Simulator
                   </h4>
-                  <p className="text-xs text-emerald-700/80 mb-4">
+                  <p className="text-xs text-emerald-300/80 mb-4">
                     Test your REST endpoint in real-time by generating simulated MetaTrader trade sync signals.
                   </p>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs font-semibold text-emerald-800 block mb-1">Target Currency Pair</label>
+                      <label className="text-xs font-semibold text-emerald-400 block mb-1">Target Currency Pair</label>
                       <select 
                         value={simulatedSymbol}
                         onChange={(e) => setSimulatedSymbol(e.target.value)}
-                        className="bg-white border border-emerald-200 text-xs text-slate-700 rounded-lg p-2 w-full focus:ring-emerald-500 focus:border-emerald-500"
+                        className="bg-[#061e14] border border-emerald-900/50 text-xs text-emerald-200 rounded-lg p-2 w-full focus:ring-emerald-500 focus:border-emerald-500 font-semibold"
                       >
                         <option value="EURUSD">EURUSD (Euro / US Dollar)</option>
                         <option value="XAUUSD">XAUUSD (Gold Spot)</option>
@@ -774,7 +932,7 @@ void SendTradesToFXJournalPro() {
                     </div>
                     <button
                       disabled={isSyncing}
-                      onClick={() => onTriggerSimulatedSync(simulatedSymbol)}
+                      onClick={() => onTriggerSimulatedSync && onTriggerSimulatedSync(simulatedSymbol)}
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg py-2.5 px-4 transition flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       {isSyncing ? (
@@ -826,19 +984,19 @@ void SendTradesToFXJournalPro() {
           {/* Bridge Status Banner */}
           <div className={`border rounded-xl p-4 flex gap-3 text-xs ${
             bridgeStatus === 'running'
-              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800'
+              ? 'bg-emerald-950/20 border-emerald-900/50 text-emerald-300'
               : bridgeStatus === 'offline'
-              ? 'bg-red-50/70 border-red-200 text-red-800'
-              : 'bg-slate-50/70 border-slate-200 text-slate-600'
+              ? 'bg-red-950/20 border-red-900/50 text-red-300'
+              : 'bg-slate-900 border-slate-800 text-slate-400'
           }`}>
             <div className={`h-5 w-5 flex-shrink-0 mt-0.5 rounded-full flex items-center justify-center font-bold text-white text-[10px] ${
-              bridgeStatus === 'running' ? 'bg-emerald-500' : bridgeStatus === 'offline' ? 'bg-red-500' : 'bg-slate-400'
+              bridgeStatus === 'running' ? 'bg-emerald-600' : bridgeStatus === 'offline' ? 'bg-red-600' : 'bg-slate-600'
             }`}>
               {bridgeStatus === 'running' ? '✓' : bridgeStatus === 'offline' ? '!' : '…'}
             </div>
             <div className="flex-1">
               <strong className={`block text-sm font-extrabold mb-1 ${
-                bridgeStatus === 'running' ? 'text-emerald-900' : bridgeStatus === 'offline' ? 'text-red-900' : 'text-slate-700'
+                bridgeStatus === 'running' ? 'text-emerald-200' : bridgeStatus === 'offline' ? 'text-red-200' : 'text-slate-300'
               }`}>
                 {bridgeStatus === 'running'
                   ? `MT5 Python Bridge: Running ${bridgeConnected ? '(MT5 Connected)' : '(Ready)'}`
@@ -852,12 +1010,12 @@ void SendTradesToFXJournalPro() {
                   <p className="font-semibold leading-relaxed">
                     The local Python bridge is required to connect your MT5 terminal. It's free and runs on your Windows PC.
                   </p>
-                  <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-red-300/80">
                     <li>Open a terminal in your project folder</li>
-                    <li>Run: <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">cd mt5_bridge</code></li>
-                    <li>Run: <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">pip install MetaTrader5 flask flask-cors</code></li>
-                    <li>Run: <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">python mt5_bridge.py</code></li>
-                    <li><strong>OR</strong> simply double-click <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono font-bold">start_bridge.bat</code></li>
+                    <li>Run: <code className="bg-red-950/50 border border-red-900/30 px-1.5 py-0.5 rounded font-mono font-bold text-red-200">cd mt5_bridge</code></li>
+                    <li>Run: <code className="bg-red-950/50 border border-red-900/30 px-1.5 py-0.5 rounded font-mono font-bold text-red-200">pip install MetaTrader5 flask flask-cors</code></li>
+                    <li>Run: <code className="bg-red-950/50 border border-red-900/30 px-1.5 py-0.5 rounded font-mono font-bold text-red-200">python mt5_bridge.py</code></li>
+                    <li><strong>OR</strong> simply double-click <code className="bg-red-950/50 border border-red-900/30 px-1.5 py-0.5 rounded font-mono font-bold text-red-200">start_bridge.bat</code></li>
                   </ol>
                   <button
                     onClick={fetchBridgeStatus}
@@ -871,21 +1029,21 @@ void SendTradesToFXJournalPro() {
               {bridgeStatus === 'running' && (
                 <p className="leading-relaxed font-medium">
                   ✅ Your local MT5 bridge is online. Fill in your credentials below to import trades. Your investor password is <span className="underline">never</span> sent to any cloud service.
-                  <button onClick={fetchBridgeStatus} className="ml-2 underline text-emerald-700 hover:text-emerald-900">Refresh</button>
+                  <button onClick={fetchBridgeStatus} className="ml-2 underline text-emerald-400 hover:text-emerald-300">Refresh</button>
                 </p>
               )}
             </div>
           </div>
 
           {/* Security note */}
-          <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 flex gap-3 text-xs text-blue-800">
-            <Shield className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="bg-blue-950/20 border border-blue-900/40 rounded-xl p-4 flex gap-3 text-xs text-blue-300">
+            <Shield className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <strong className="block text-blue-900 text-sm font-extrabold mb-1">MT5 Read-Only Credentials Policy</strong>
+              <strong className="block text-blue-200 text-sm font-extrabold mb-1">MT5 Read-Only Credentials Policy</strong>
               <p className="leading-relaxed mb-1.5 font-medium">
-                JournalPro uses a <strong className="text-blue-900">local Python bridge</strong> (no cloud service) to connect your MT5 terminal with your <strong className="text-blue-900">Investor Password</strong>.
+                JournalPro uses a <strong className="text-blue-200">local Python bridge</strong> (no cloud service) to connect your MT5 terminal with your <strong className="text-blue-200">Investor Password</strong>.
               </p>
-              <ul className="list-disc list-inside space-y-0.5 text-[11px] font-semibold text-blue-700">
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] font-semibold text-blue-400">
                 <li>Credentials go directly to your MT5 terminal — never to a 3rd party server.</li>
                 <li>Investor password = read-only: no trades can be placed or modified.</li>
               </ul>
@@ -893,7 +1051,7 @@ void SendTradesToFXJournalPro() {
           </div>
 
           {syncStatusMsg && (
-            <div className="bg-slate-50 border border-slate-200 text-slate-700 p-3.5 rounded-lg text-xs font-mono flex items-center gap-2 animate-pulse">
+            <div className="bg-[#131b2e] border border-slate-800 text-slate-300 p-3.5 rounded-lg text-xs font-mono flex items-center gap-2 animate-pulse">
               <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-500" />
               <span>{syncStatusMsg}</span>
             </div>
@@ -901,12 +1059,12 @@ void SendTradesToFXJournalPro() {
 
           {!localConnection || !localConnection.isInvestorSync ? (
             /* CONNECTION FORM */
-            <div className="max-w-2xl mx-auto bg-slate-50/50 border border-slate-100 rounded-xl p-6">
-              <h3 className="font-bold text-slate-900 text-base mb-1 flex items-center gap-2">
-                <Lock className="h-5 w-5 text-indigo-600" />
+            <div className="max-w-2xl mx-auto bg-slate-900/30 border border-slate-800 rounded-xl p-6">
+              <h3 className="font-bold text-white text-base mb-1 flex items-center gap-2">
+                <Lock className="h-5 w-5 text-indigo-400" />
                 Connect to MT5 via Python Bridge
               </h3>
-              <p className="text-xs text-indigo-800 mb-4 bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg font-semibold flex items-center gap-1.5">
+              <p className="text-xs text-indigo-300 mb-4 bg-indigo-950/40 border border-indigo-900/30 p-2.5 rounded-lg font-semibold flex items-center gap-1.5">
                 💡 This will create a new trading account in your journal and import your last 12 months of MT5 history.
               </p>
               
@@ -914,54 +1072,54 @@ void SendTradesToFXJournalPro() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">MT5 Login Number</label>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">MT5 Login Number</label>
                     <input 
                       type="text"
                       required
                       placeholder="e.g. 8847103"
                       value={loginNumber}
                       onChange={(e) => setLoginNumber(e.target.value)}
-                      className="bg-white border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
+                      className="bg-[#0b0f19] border border-slate-800 text-xs rounded-lg p-2.5 w-full font-mono font-semibold text-white placeholder-slate-600"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Broker Server Name</label>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">Broker Server Name</label>
                     <input 
                       type="text"
                       required
                       placeholder="e.g. ICMarketsSC-MT5-2"
                       value={brokerServer}
                       onChange={(e) => setBrokerServer(e.target.value)}
-                      className="bg-white border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
+                      className="bg-[#0b0f19] border border-slate-800 text-xs rounded-lg p-2.5 w-full font-mono font-semibold text-white placeholder-slate-600"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Investor Password (Read-Only)</label>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Investor Password (Read-Only)</label>
                   <input 
                     type="password"
                     required
                     placeholder="Enter your broker-provided read-only password"
                     value={investorPassword}
                     onChange={(e) => setInvestorPassword(e.target.value)}
-                    className="bg-white border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono"
+                    className="bg-[#0b0f19] border border-slate-800 text-xs rounded-lg p-2.5 w-full font-mono text-white placeholder-slate-600"
                   />
-                  <p className="text-[10px] text-slate-400 mt-1">Ensure this is the Investor Password. Keep your main master password completely secure.</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Ensure this is the Investor Password. Keep your main master password completely secure.</p>
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100">
+                <div className="flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded-lg">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-slate-800">Auto synchronization (Every 30m)</span>
-                    <span className="text-[10px] text-slate-400">Silently stream closed execution records automatically in background.</span>
+                    <span className="text-xs font-bold text-white">Auto synchronization (Every 30m)</span>
+                    <span className="text-[10px] text-slate-500">Silently stream closed execution records automatically in background.</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setAutoSync(!autoSync)}
-                    className="text-slate-600 hover:text-slate-900 transition"
+                    className="text-slate-400 hover:text-white transition"
                   >
-                    <div className={`w-11 h-6 rounded-full p-0.5 transition-colors ${autoSync ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                    <div className={`w-11 h-6 rounded-full p-0.5 transition-colors ${autoSync ? 'bg-indigo-600' : 'bg-slate-800'}`}>
                       <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${autoSync ? 'translate-x-5' : 'translate-x-0'}`}></div>
                     </div>
                   </button>
@@ -971,7 +1129,7 @@ void SendTradesToFXJournalPro() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2.5 px-6 rounded-lg transition flex items-center gap-2 disabled:opacity-50"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 px-6 rounded-lg transition flex items-center gap-2 disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <>
@@ -988,20 +1146,20 @@ void SendTradesToFXJournalPro() {
             <div className="space-y-6">
               
               {/* Main sync card */}
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 text-emerald-700 rounded-2xl">
+                  <div className="p-3 bg-emerald-950 text-emerald-400 rounded-2xl border border-emerald-900/30">
                     <CheckCircle className="h-8 w-8" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                    <h3 className="font-extrabold text-white text-base flex items-center gap-2">
                       MT5 Investor Feed Connected
-                      <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Live &amp; Synced</span>
+                      <span className="bg-emerald-950/80 text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-900/30">Live &amp; Synced</span>
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Broker Server: <span className="font-mono bg-white px-1 py-0.5 border border-slate-200 rounded text-slate-700">{localConnection.brokerServer}</span> • Login ID: <span className="font-mono bg-white px-1 py-0.5 border border-slate-200 rounded text-slate-700">{localConnection.loginNumber}</span>
+                    <p className="text-xs text-slate-400 font-medium">
+                      Broker Server: <span className="font-mono bg-[#0b0f19] px-1 py-0.5 border border-slate-800 rounded text-slate-300">{localConnection.brokerServer}</span> • Login ID: <span className="font-mono bg-[#0b0f19] px-1 py-0.5 border border-slate-800 rounded text-slate-300">{localConnection.loginNumber}</span>
                     </p>
-                    <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                    <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
                       <Clock className="h-3 w-3" /> Last sync verified: {localConnection.lastSyncTime ? new Date(localConnection.lastSyncTime).toLocaleString() : 'N/A'}
                     </p>
                   </div>
@@ -1009,14 +1167,14 @@ void SendTradesToFXJournalPro() {
 
                 {/* Operations buttons */}
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2 mr-2 border-r border-slate-200 pr-4">
-                    <span className="text-xs font-bold text-slate-600">Auto-Sync</span>
+                  <div className="flex items-center gap-2 mr-2 border-r border-slate-800 pr-4">
+                    <span className="text-xs font-bold text-slate-400">Auto-Sync</span>
                     <button
                       type="button"
                       onClick={() => handleToggleAutoSync(!autoSync)}
-                      className="text-slate-600 hover:text-slate-900 transition"
+                      className="text-slate-400 hover:text-white transition"
                     >
-                      <div className={`w-9 h-5 rounded-full p-0.5 transition-colors ${autoSync ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                      <div className={`w-9 h-5 rounded-full p-0.5 transition-colors ${autoSync ? 'bg-indigo-600' : 'bg-slate-800'}`}>
                         <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${autoSync ? 'translate-x-4' : 'translate-x-0'}`}></div>
                       </div>
                     </button>
@@ -1033,7 +1191,7 @@ void SendTradesToFXJournalPro() {
 
                   <button
                     onClick={handleDisconnect}
-                    className="border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-xs py-2 px-4 rounded-lg transition flex items-center gap-1.5"
+                    className="border border-rose-950/50 hover:bg-rose-950/25 text-rose-400 font-bold text-xs py-2 px-4 rounded-lg transition flex items-center gap-1.5"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     Disconnect Account
@@ -1044,61 +1202,61 @@ void SendTradesToFXJournalPro() {
               {/* Grid showing live mock telemetry indicators */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 
-                <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-2xs">
+                <div className="bg-[#131b2e] border border-slate-800 rounded-xl p-4 shadow-lg">
                   <div className="flex items-center justify-between text-slate-400 mb-2">
                     <span className="text-xs font-semibold">Active Balance &amp; Equity</span>
                     <Coins className="h-4 w-4 text-amber-500" />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-lg font-black text-slate-800">
-                      ${account.currentBalance.toLocaleString()}
+                    <div className="text-lg font-black text-white">
+                      ${account?.currentBalance.toLocaleString()}
                     </div>
-                    <div className="text-xs font-bold text-slate-500">
-                      Equity: <span className="text-emerald-600">${account.equity.toLocaleString()}</span>
+                    <div className="text-xs font-bold text-slate-400">
+                      Equity: <span className="text-emerald-400">${account?.equity.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-2xs">
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                <div className="bg-[#131b2e] border border-slate-800 rounded-xl p-4 shadow-lg">
+                  <div className="flex items-center justify-between text-slate-500 mb-2">
                     <span className="text-xs font-semibold">Open Positions</span>
-                    <Activity className="h-4 w-4 text-indigo-500" />
+                    <Activity className="h-4 w-4 text-indigo-400" />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-lg font-black text-slate-800">
+                    <div className="text-lg font-black text-white">
                       1 Active Position
                     </div>
-                    <div className="text-xs text-emerald-600 font-extrabold">
+                    <div className="text-xs text-emerald-400 font-extrabold">
                       EURUSD Buy 1.00 Lot (+${(120.50).toFixed(2)})
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-2xs">
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                <div className="bg-[#131b2e] border border-slate-800 rounded-xl p-4 shadow-lg">
+                  <div className="flex items-center justify-between text-slate-500 mb-2">
                     <span className="text-xs font-semibold">Pending Orders</span>
-                    <FileText className="h-4 w-4 text-blue-500" />
+                    <FileText className="h-4 w-4 text-blue-400" />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-lg font-black text-slate-800">
+                    <div className="text-lg font-black text-white">
                       1 Pending Limit
                     </div>
-                    <div className="text-xs text-slate-500 font-bold">
+                    <div className="text-xs text-slate-400 font-bold">
                       XAUUSD Buy Limit @ 2305.00
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-2xs">
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                <div className="bg-[#131b2e] border border-slate-800 rounded-xl p-4 shadow-lg">
+                  <div className="flex items-center justify-between text-slate-500 mb-2">
                     <span className="text-xs font-semibold">Max Drawdown Stat</span>
                     <TrendingUp className="h-4 w-4 text-rose-500" />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-lg font-black text-rose-600">
+                    <div className="text-lg font-black text-rose-400">
                       -2.45%
                     </div>
-                    <div className="text-xs text-slate-500 font-bold">
+                    <div className="text-xs text-slate-400 font-bold">
                       Within risk parameters limit
                     </div>
                   </div>
