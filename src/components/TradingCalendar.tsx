@@ -120,15 +120,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   };
 
   return (
-    <div id="trading-calendar-card" className="bg-white border border-slate-100 rounded-xl p-6 shadow-sm">
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 mb-6">
+    <div id="trading-calendar-card" className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-6 shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+          <div className="p-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-lg">
             <CalendarRange className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Trading Performance Calendar</h2>
-            <p className="text-xs text-slate-500">Color-coded daily profit and loss journal</p>
+            <h2 className="text-lg font-black text-slate-900 dark:text-white trading-calendar-title">Trading Performance Calendar</h2>
+            <p className="text-xs text-slate-700 dark:text-slate-200 font-bold trading-calendar-desc">Color-coded daily profit and loss journal</p>
           </div>
         </div>
         
@@ -136,18 +136,18 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
         <div className="flex items-center gap-3 mt-4 md:mt-0">
           <button 
             onClick={handlePrevMonth}
-            className="p-1.5 hover:bg-slate-50 border border-slate-100 rounded-lg transition"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
           >
-            <ChevronLeft className="h-5 w-5 text-slate-600" />
+            <ChevronLeft className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
           </button>
-          <span className="font-semibold text-slate-800 min-w-[120px] text-center text-sm md:text-base">
+          <span className="font-black text-slate-900 dark:text-white min-w-[120px] text-center text-sm md:text-base tracking-tight trading-calendar-month">
             {monthNames[month]} {year}
           </span>
           <button 
             onClick={handleNextMonth}
-            className="p-1.5 hover:bg-slate-50 border border-slate-100 rounded-lg transition"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
           >
-            <ChevronRight className="h-5 w-5 text-slate-600" />
+            <ChevronRight className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
           </button>
         </div>
       </div>
@@ -157,32 +157,32 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
         <div className="lg:col-span-3">
           <div className="grid grid-cols-7 gap-1 text-center mb-2">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} className="text-xs font-semibold text-slate-400 py-1">{day}</div>
+              <div key={day} className="text-xs font-black text-slate-900 dark:text-slate-100 py-1 calendar-day-name">{day}</div>
             ))}
           </div>
 
           <div className="grid grid-cols-7 gap-1.5">
             {cells.map((cell, idx) => {
               if (cell.isPadding) {
-                return <div key={`pad-${idx}`} className="h-14 sm:h-16 md:h-20 bg-slate-50/40 border border-slate-100 rounded-lg"></div>;
+                return <div key={`pad-${idx}`} className="h-14 sm:h-16 md:h-20 calendar-day-box opacity-40 rounded-lg"></div>;
               }
 
               const formattedDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
               const dayData = tradesByDay[formattedDay];
               const isSelected = selectedDayKey === formattedDay;
               
-              let bgClass = "bg-slate-50 border border-slate-100 text-slate-800 hover:bg-slate-100/80";
-              let textAccent = "text-slate-400";
+              let borderClass = "!border !border-slate-300 dark:!border-slate-800";
+              let textAccent = "text-slate-800 dark:text-slate-300";
               let amountText = "";
 
               if (dayData) {
                 if (dayData.netProfit > 0) {
-                  bgClass = "bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-200/60";
-                  textAccent = "text-emerald-700 font-semibold";
+                  borderClass = "!border-2 !border-emerald-500 dark:!border-emerald-600";
+                  textAccent = "text-emerald-700 dark:text-emerald-400 font-extrabold";
                   amountText = `+${dayData.netProfit.toFixed(0)}`;
                 } else if (dayData.netProfit < 0) {
-                  bgClass = "bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-200/60";
-                  textAccent = "text-rose-700 font-semibold";
+                  borderClass = "!border-2 !border-rose-500 dark:!border-rose-600";
+                  textAccent = "text-rose-700 dark:text-rose-400 font-extrabold";
                   amountText = dayData.netProfit.toFixed(0);
                 }
               }
@@ -191,15 +191,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                 <button
                   key={`day-${cell.day}`}
                   onClick={() => handleDayClick(cell.day)}
-                  className={`h-14 sm:h-16 md:h-20 p-1 sm:p-2 text-left rounded-lg transition flex flex-col justify-between group relative ${bgClass} ${
+                  className={`h-14 sm:h-16 md:h-20 p-1 sm:p-2 text-left rounded-lg transition flex flex-col justify-between group relative calendar-day-box hover:!bg-slate-50 dark:hover:!bg-slate-800/50 transition-all duration-150 ${borderClass} ${
                     isSelected 
-                      ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-slate-900 border-indigo-500 scale-[1.03] z-10 shadow-sm' 
+                      ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-slate-900 scale-[1.03] z-10 shadow-xs' 
                       : ''
                   }`}
                 >
-                  <span className="text-[10px] sm:text-xs font-medium text-slate-500 group-hover:text-slate-900">{cell.day}</span>
+                  <span className="text-[11px] sm:text-xs font-black calendar-day-number text-slate-950 dark:text-slate-50 group-hover:text-black dark:group-hover:text-white">{cell.day}</span>
                   {amountText && (
-                    <span className={`text-[8px] sm:text-[10px] md:text-xs font-bold truncate block ${textAccent}`}>
+                    <span className={`text-[10px] sm:text-xs md:text-sm font-black truncate block ${textAccent}`}>
                       {getCurrencySymbol(currency)}{Math.abs(Number(amountText))}
                     </span>
                   )}
@@ -211,62 +211,62 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
 
         {/* Sidebar / Stats Panel */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Month Performance</h3>
+          <div className="bg-white dark:bg-slate-800/20 border border-slate-200/60 dark:border-slate-800/60 rounded-xl p-4 shadow-2xs calendar-sidebar-box">
+            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Month Performance</h3>
             <div className="space-y-4">
               <div>
-                <span className="text-xs text-slate-500 block">Net P/L</span>
-                <span className={`text-lg font-bold ${monthlyProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block">Net P/L</span>
+                <span className={`text-lg font-bold ${monthlyProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                   {monthlyProfit >= 0 ? '+' : ''}{formatValue(monthlyProfit)}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 dark:border-slate-800 pt-3">
                 <div>
-                  <span className="text-[11px] text-slate-400 block flex items-center gap-1">
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block flex items-center gap-1">
                     <TrendingUp className="h-3 w-3 text-emerald-500" /> Profitable Days
                   </span>
-                  <span className="text-sm font-bold text-emerald-600">{winDays}</span>
+                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{winDays}</span>
                 </div>
                 <div>
-                  <span className="text-[11px] text-slate-400 block flex items-center gap-1">
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block flex items-center gap-1">
                     <TrendingDown className="h-3 w-3 text-rose-500" /> Loss Days
                   </span>
-                  <span className="text-sm font-bold text-rose-600">{lossDays}</span>
+                  <span className="text-sm font-bold text-rose-600 dark:text-rose-400">{lossDays}</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Expanded Selected Day Trades */}
-          <div className="bg-white border border-slate-100 rounded-xl p-4 max-h-[300px] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 max-h-[300px] overflow-y-auto calendar-sidebar-box">
             {selectedDayTrades === null ? (
-              <div className="text-center py-6 text-slate-400">
+              <div className="text-center py-6 text-slate-400 dark:text-slate-500">
                 <Info className="h-5 w-5 mx-auto mb-2 opacity-50" />
                 <p className="text-xs">Click a calendar day to view active orders and closed trade journals</p>
               </div>
             ) : selectedDayTrades.length === 0 ? (
               <div>
-                <h4 className="text-xs font-semibold text-slate-600 mb-2">{selectedDayString}</h4>
-                <p className="text-xs text-slate-400">No trading activity logged on this date.</p>
+                <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">{selectedDayString}</h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500">No trading activity logged on this date.</p>
               </div>
             ) : (
               <div>
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
-                  <h4 className="text-xs font-bold text-slate-700">{selectedDayString}</h4>
-                  <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">
+                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">{selectedDayString}</h4>
+                  <span className="text-[10px] bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-bold">
                     {selectedDayTrades.length} Positions
                   </span>
                 </div>
                 <div className="space-y-3">
                   {selectedDayTrades.map((trade) => (
-                    <div key={trade.id} className="p-2.5 bg-slate-50 rounded-lg text-xs hover:bg-slate-100/50 transition">
+                    <div key={trade.id} className="p-2.5 bg-white dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 rounded-lg text-xs hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                       <div className="flex justify-between font-semibold mb-1">
-                        <span className="text-slate-800">{trade.symbol}</span>
-                        <span className={trade.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                        <span className="text-slate-800 dark:text-slate-200">{trade.symbol}</span>
+                        <span className={trade.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
                           {trade.profit >= 0 ? '+' : ''}{formatValue(trade.profit)}
                         </span>
                       </div>
-                      <div className="flex justify-between text-[10px] text-slate-400">
+                      <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500">
                         <span>{trade.type} • {trade.lotSize} Lots</span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-2.5 w-2.5" />
@@ -274,7 +274,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                         </span>
                       </div>
                       {trade.notes && (
-                        <p className="text-[11px] text-slate-500 mt-1.5 line-clamp-1 italic bg-white/60 p-1 rounded">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-1 italic bg-white/60 dark:bg-slate-900/40 p-1 rounded">
                           "{trade.notes}"
                         </p>
                       )}

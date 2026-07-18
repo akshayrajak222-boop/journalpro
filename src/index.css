@@ -23,6 +23,87 @@
   background: #94a3b8;
 }
 
+
+/* Custom styling for Trading Performance Calendar Card */
+#trading-calendar-card {
+  background-color: #FBFBFA !important; /* Match left sidebar background color */
+  border: 1px solid #cbd5e1 !important;
+}
+html.dark #trading-calendar-card,
+.dark #trading-calendar-card {
+  background-color: #060913 !important;
+  border: 1px solid #1e293b !important;
+}
+
+/* Explicit high-contrast text styles for light theme to guarantee visibility */
+#trading-calendar-card .trading-calendar-title,
+#trading-calendar-card h2 {
+  color: #000000 !important;
+}
+#trading-calendar-card .trading-calendar-desc,
+#trading-calendar-card p {
+  color: #1e293b !important;
+}
+#trading-calendar-card .trading-calendar-month {
+  color: #000000 !important;
+}
+#trading-calendar-card .calendar-day-name {
+  color: #000000 !important;
+}
+
+/* Dark mode resets for the custom calendar classes */
+html.dark #trading-calendar-card .trading-calendar-title,
+.dark #trading-calendar-card .trading-calendar-title,
+html.dark #trading-calendar-card h2,
+.dark #trading-calendar-card h2 {
+  color: #ffffff !important;
+}
+html.dark #trading-calendar-card .trading-calendar-desc,
+.dark #trading-calendar-card .trading-calendar-desc,
+html.dark #trading-calendar-card p,
+.dark #trading-calendar-card p {
+  color: #cbd5e1 !important;
+}
+html.dark #trading-calendar-card .trading-calendar-month,
+.dark #trading-calendar-card .trading-calendar-month {
+  color: #ffffff !important;
+}
+html.dark #trading-calendar-card .calendar-day-name,
+.dark #trading-calendar-card .calendar-day-name {
+  color: #f1f5f9 !important;
+}
+
+/* Explicit date numbers inside day boxes - Black in light theme, off-white in dark theme */
+#trading-calendar-card .calendar-day-number {
+  color: #000000 !important;
+}
+html.dark #trading-calendar-card .calendar-day-number,
+.dark #trading-calendar-card .calendar-day-number {
+  color: #f8fafc !important;
+}
+
+/* Calendar Date Boxes - Crisp white inside, clear borders */
+.calendar-day-box {
+  background-color: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+html.dark .calendar-day-box,
+.dark .calendar-day-box {
+  background-color: rgba(30, 41, 59, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Calendar Sidebar/Stats Boxes - Crisp white inside, clear borders in light mode */
+.calendar-sidebar-box {
+  background-color: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+html.dark .calendar-sidebar-box,
+.dark .calendar-sidebar-box {
+  background-color: rgba(30, 41, 59, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
 /* Comprehensive Dark Mode Overrides - Premium Obsidian & Indigo Glow Theme */
 html.dark, html.dark body {
   background-color: #03060d !important;

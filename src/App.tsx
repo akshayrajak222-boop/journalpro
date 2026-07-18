@@ -1867,7 +1867,7 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto md:h-full bg-white p-6 md:p-12 space-y-8">
+      <main className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 md:p-12 space-y-8">
         
         {/* Dynamic Plain Title bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -3334,7 +3334,7 @@ export default function App() {
                   </div>
 
                   {accounts.length > 0 && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 text-xs shadow-xs">
                       <div>
                         <span className="font-bold text-slate-800 dark:text-slate-200 block">Configure Portfolio:</span>
                         <span className="text-[10px] text-slate-400">Select which trading account these guard limits apply to.</span>
@@ -3346,7 +3346,7 @@ export default function App() {
                           setSelectedAccountId(accId);
                           fetchTradesAndParams(accId);
                         }}
-                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-bold text-slate-700 dark:text-slate-200 text-xs min-w-[200px] focus:ring-slate-500 focus:border-slate-500"
+                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-bold text-slate-700 dark:text-slate-200 text-xs min-w-[200px] focus:ring-slate-500 focus:border-slate-500 shadow-xs"
                       >
                         {accounts.map((acc) => (
                           <option key={acc.id} value={acc.id}>
@@ -3361,7 +3361,7 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
                       
                       {/* Daily Loss Guard */}
-                      <div className="space-y-1.5 p-4 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="space-y-1.5 p-4 bg-white dark:bg-slate-800/20 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
                         <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                           Daily Loss Guard Limit ($)
                         </label>
@@ -3371,12 +3371,12 @@ export default function App() {
                           required
                           value={riskSettings?.dailyLossLimit ?? 500}
                           onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, dailyLossLimit: parseFloat(e.target.value) || 0 })}
-                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
 
                       {/* Overtrading Scanner */}
-                      <div className="space-y-1.5 p-4 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="space-y-1.5 p-4 bg-white dark:bg-slate-800/20 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
                         <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                           Overtrading Max Daily Trades
                         </label>
@@ -3386,12 +3386,12 @@ export default function App() {
                           required
                           value={riskSettings?.maxTradesPerDay ?? 5}
                           onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, maxTradesPerDay: parseInt(e.target.value) || 0 })}
-                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
 
                       {/* Weekly Loss Limit */}
-                      <div className="space-y-1.5 p-4 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="space-y-1.5 p-4 bg-white dark:bg-slate-800/20 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
                         <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                           Weekly Loss Limit ($)
                         </label>
@@ -3401,12 +3401,12 @@ export default function App() {
                           required
                           value={riskSettings?.weeklyLossLimit ?? 1500}
                           onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, weeklyLossLimit: parseFloat(e.target.value) || 0 })}
-                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
 
                       {/* Max Drawdown Limit */}
-                      <div className="space-y-1.5 p-4 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="space-y-1.5 p-4 bg-white dark:bg-slate-800/20 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
                         <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                           Max Drawdown Limit (%)
                         </label>
@@ -3417,12 +3417,12 @@ export default function App() {
                           required
                           value={riskSettings?.maxDrawdownLimit ?? 10.0}
                           onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, maxDrawdownLimit: parseFloat(e.target.value) || 0 })}
-                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
 
                       {/* Risk Per Trade Cap */}
-                      <div className="space-y-1.5 p-4 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="space-y-1.5 p-4 bg-white dark:bg-slate-800/20 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
                         <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                           Risk-Per-Trade Cap (%)
                         </label>
@@ -3433,12 +3433,12 @@ export default function App() {
                           required
                           value={riskSettings?.riskPerTradeLimit ?? 2.0}
                           onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, riskPerTradeLimit: parseFloat(e.target.value) || 0 })}
-                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
 
                       {/* Discipline Protection Mode */}
-                      <div className="space-y-1.5 p-4 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                      <div className="space-y-1.5 p-4 bg-white dark:bg-slate-800/20 rounded-xl border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between shadow-xs">
                         <div>
                           <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                             Discipline Protection Mode
