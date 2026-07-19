@@ -415,23 +415,27 @@ void SendTradesToFXJournalPro() {
       ulong ticket = HistoryDealGetTicket(i);
       if(ticket > 0) {
          long entry = HistoryDealGetInteger(ticket, DEAL_ENTRY);
-         // Only look at OUT or INOUT deals (closed trades)
-         if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT) {
+         long typeInt = HistoryDealGetInteger(ticket, DEAL_TYPE);
+         
+         // Look at OUT or INOUT deals (closed trades) OR balance operations
+         if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT || typeInt == DEAL_TYPE_BALANCE) {
             string symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
-            if(symbol == "") continue; // Skip non-trading operations like deposits
-            
             double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
             double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
             double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
-            long typeInt = HistoryDealGetInteger(ticket, DEAL_TYPE);
             long dealTime = HistoryDealGetInteger(ticket, DEAL_TIME);
             
             // Format time for javascript: YYYY-MM-DD HH:MI
             string dateStr = TimeToString((datetime)dealTime, TIME_DATE|TIME_MINUTES);
             StringReplace(dateStr, ".", "-");
             
-            // If DEAL_TYPE is BUY (0) closing, original position was SELL.
             string type = (typeInt == DEAL_TYPE_BUY) ? "Sell" : "Buy"; 
+            if(typeInt == DEAL_TYPE_BALANCE) {
+               type = (profit > 0) ? "Deposit" : "Withdrawal";
+               symbol = "BALANCE";
+            } else if (symbol == "") {
+               continue; // Skip other non-trading operations
+            }
             
             if(!first) payload += ",";
             payload += "{";

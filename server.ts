@@ -1494,6 +1494,7 @@ const PORT = 3000;
 
     const isInitialSync = !connection.initialSyncDone;
     let syncedCount = 0;
+    let totalImportedNet = 0;
 
     if (trades && Array.isArray(trades)) {
       trades.forEach((incomingTrade: any) => {
@@ -1545,7 +1546,7 @@ const PORT = 3000;
             commission: parseFloat(incomingTrade.commission || 0),
             swap: parseFloat(incomingTrade.swap || 0),
             riskPercentage: parseFloat(incomingTrade.riskPercentage || 1.0),
-            strategy: 'MT5 Expert EA Sync',
+            strategy: incomingTrade.type === 'Deposit' || incomingTrade.type === 'Withdrawal' ? 'Balance Operation' : 'MT5 Expert EA Sync',
             emotion: 'Calm',
             notes: incomingTrade.notes || 'Automated execution sync.',
             tags: ['MT5 AutoSync'],
@@ -1557,6 +1558,7 @@ const PORT = 3000;
 
           // Adjust account balance
           const net = newTrade.profit + newTrade.commission + newTrade.swap;
+          totalImportedNet += net;
           db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + net).toFixed(2));
         }
       });
@@ -1586,13 +1588,12 @@ const PORT = 3000;
       }
     }
 
-    const connIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
-    if (connIdx !== -1) {
-      db.mt5Connections[connIdx].lastSyncTime = new Date().toISOString();
-      db.mt5Connections[connIdx].totalSyncedTrades += syncedCount;
-      db.mt5Connections[connIdx].status = 'Connected';
+    const finalConnIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
+    if (finalConnIdx !== -1) {
+      db.mt5Connections[finalConnIdx].lastSyncTime = new Date().toISOString();
+      db.mt5Connections[finalConnIdx].totalSyncedTrades += syncedCount;
+      db.mt5Connections[finalConnIdx].status = 'Connected';
     }
-
     saveDatabase(db);
     res.json({ status: 'Success', syncedTradesCount: syncedCount, accountBalance: db.accounts[accountIdx].currentBalance, startingBalance: db.accounts[accountIdx].startingBalance });
   });

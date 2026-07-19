@@ -34,7 +34,7 @@ export interface Trade {
   accountId: string;
   date: string; // ISO format or date string
   symbol: string;
-  type: 'Buy' | 'Sell';
+  type: 'Buy' | 'Sell' | 'Deposit' | 'Withdrawal';
   lotSize: number;
   entryPrice: number;
   exitPrice: number;

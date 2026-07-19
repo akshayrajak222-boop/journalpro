@@ -259,15 +259,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                 </div>
                 <div className="space-y-3">
                   {selectedDayTrades.map((trade) => (
-                    <div key={trade.id} className="p-2.5 bg-white dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 rounded-lg text-xs hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                    <div key={trade.id} className={`p-2.5 bg-white dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 rounded-lg text-xs hover:bg-slate-50 dark:hover:bg-slate-800/50 transition ${trade.type === 'Deposit' || trade.type === 'Withdrawal' ? 'border-l-2 border-l-blue-400' : ''}`}>
                       <div className="flex justify-between font-semibold mb-1">
-                        <span className="text-slate-800 dark:text-slate-200">{trade.symbol}</span>
+                        <span className="text-slate-800 dark:text-slate-200">{trade.symbol === 'BALANCE' ? (trade.type === 'Deposit' ? 'Funds Deposit' : 'Funds Withdrawal') : trade.symbol}</span>
                         <span className={trade.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
                           {trade.profit >= 0 ? '+' : ''}{formatValue(trade.profit)}
                         </span>
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500">
-                        <span>{trade.type} • {trade.lotSize} Lots</span>
+                        <span>{trade.type}{trade.symbol !== 'BALANCE' ? ` • ${trade.lotSize} Lots` : ''}</span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-2.5 w-2.5" />
                           {new Date(trade.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
