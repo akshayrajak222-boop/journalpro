@@ -5,7 +5,7 @@ import {
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
-  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon
+  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -1779,7 +1779,7 @@ export default function App() {
 
             <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
-              title="AI Trading Co-pilot"
+              title="AI Mentor"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
                 sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
               } ${
@@ -1787,8 +1787,8 @@ export default function App() {
               }`}
             >
               <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
-                <Sparkles className="h-4 w-4 text-indigo-500" />
-                {!sidebarCollapsed && 'AI Trading Co-pilot'}
+                <Brain className="h-4 w-4 text-indigo-500" />
+                {!sidebarCollapsed && 'AI Mentor'}
               </span>
               {!sidebarCollapsed && (
                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider text-[8px]">

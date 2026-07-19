@@ -1602,33 +1602,29 @@ const PORT = 3000;
   // REAL-TIME AI TRADING INSIGHTS ROUTE (GEMINI)
   // ==========================================
 
-  app.post('/api/ai/insights', async (req, res) => {
+  app.post('/api/ai/mentor', async (req, res) => {
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     
     // Pro Plan requirement
     if (!currentUser.isPro) {
       return res.status(403).json({ 
-        error: 'AI Insights are a premium Pro Feature. Please upgrade your plan to unlock!',
+        error: 'AI Mentor is a premium Pro Feature. Please upgrade your plan to unlock!',
         proRequired: true
       });
     }
 
-    const { accountId } = req.body;
+    const { accountId, messages } = req.body;
     if (!accountId) return res.status(400).json({ error: 'accountId is required' });
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'messages array is required' });
+    }
 
     // Fetch trades
     const accountTrades = db.trades.filter((t: any) => t.accountId === accountId);
-    if (accountTrades.length === 0) {
-      return res.json({ 
-        insights: [
-          "Log more trades in this account to unlock customized AI analyses. We recommend registering at least 3 trades for robust session and volatility diagnostics."
-        ],
-        summary: "No trades logged yet in this account."
-      });
-    }
-
-    // Prepare a concise trading digest for Gemini API
-    const digest = accountTrades.map((t: any) => ({
+    
+    // Prepare a concise trading digest for Gemini API (latest 50 trades)
+    const recentTrades = accountTrades.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 50);
+    const digest = recentTrades.map((t: any) => ({
       date: t.date.split('T')[0],
       symbol: t.symbol,
       type: t.type,
@@ -1641,49 +1637,9 @@ const PORT = 3000;
 
     const geminiKey = process.env.GEMINI_API_KEY;
 
-    // Standard high-quality local fallback in case key is missing (following security guidance)
-    const localHeuristics = [];
-    const wins = accountTrades.filter(t => t.profit > 0);
-    const losses = accountTrades.filter(t => t.profit <= 0);
-    const winRate = accountTrades.length > 0 ? (wins.length / accountTrades.length) * 100 : 0;
-    
-    // Simple calculations
-    const sumWins = wins.reduce((sum, t) => sum + t.profit, 0);
-    const sumLosses = Math.abs(losses.reduce((sum, t) => sum + t.profit, 0));
-    const profitFactor = sumLosses > 0 ? (sumWins / sumLosses) : sumWins;
-
-    // Symbol performance mapping
-    const pairPerformance: { [key: string]: number } = {};
-    accountTrades.forEach(t => {
-      pairPerformance[t.symbol] = (pairPerformance[t.symbol] || 0) + t.profit;
-    });
-    const bestPair = Object.keys(pairPerformance).reduce((a, b) => pairPerformance[a] > pairPerformance[b] ? a : b, 'None');
-    
-    // Emotion mapping
-    const anxiousTrades = accountTrades.filter(t => t.emotion === 'Anxious' || t.emotion === 'Revenge');
-    const fomoTrades = accountTrades.filter(t => t.tags.includes('FOMO') || t.tags.includes('Revenge Trade'));
-
-    if (bestPair && pairPerformance[bestPair] > 0) {
-      localHeuristics.push(`Your strongest asset is **${bestPair}**, yielding a cumulative net gain of $${pairPerformance[bestPair].toFixed(2)}.`);
-    }
-    if (winRate < 50) {
-      localHeuristics.push(`Your current win rate is **${winRate.toFixed(1)}%**. Focus on improving your risk-to-reward ratio (strive for at least 1:2) to stay net profitable even with a lower strike rate.`);
-    } else {
-      localHeuristics.push(`Excellent strike rate of **${winRate.toFixed(1)}%**! Maintain strict lot-size consistency to prevent a single high-risk loss from erasing multiple winning runs.`);
-    }
-    if (anxiousTrades.length > 0) {
-      localHeuristics.push(`We detected emotional trading behavior (**Anxious / Revenge** states). Trades logged with these emotional profiles represent over **${((anxiousTrades.length / accountTrades.length) * 100).toFixed(0)}%** of your log. Sticking to automated order entries may minimize panic exits.`);
-    }
-    if (fomoTrades.length > 0) {
-      localHeuristics.push(`**Revenge & FOMO tags** are present in your losing trades. There is a statistical trend of escalating risk (lot sizes) immediately following a losing session. Implement a 'two-losses-and-out' rule for the day.`);
-    }
-    localHeuristics.push(`Your average win-to-loss profit factor is **${profitFactor.toFixed(2)}**. A value above 1.5 indicates a highly viable strategy.`);
-
     if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
-      // Return beautiful local heuristics if Gemini is not set up
       return res.json({ 
-        insights: localHeuristics,
-        summary: `AI Performance diagnostics computed successfully based on ${accountTrades.length} recorded positions.`
+        reply: `I am running in offline mode. I can see you have logged ${accountTrades.length} trades. Please configure a valid Gemini API key in the environment to enable full mentoring capabilities.`
       });
     }
 
@@ -1697,41 +1653,45 @@ const PORT = 3000;
         }
       });
 
-      const prompt = `You are a professional forex trading risk analyst and psychologist.
-Analyze the following recorded trade history and generate 4 highly specific, actionable, professional bullet-point observations to help the trader improve their discipline and profitability.
+      const systemInstruction = `You are a professional forex trading mentor and coach.
+Analyze the user's trading journal, performance history, statistics, and previous trades before answering.
 
-Trading History Digest:
-${JSON.stringify(digest, null, 2)}
+Trading History Digest (Last 50 trades):
+${JSON.stringify(digest)}
 
-Requirements:
-- Ensure the output is returned as raw text, containing exactly 4 lines or bullet points.
-- Focus heavily on risk control, emotional states, symbol trends, or session management.
-- Keep observations direct, constructive, and elite. Do not use generic filler words.
-- Highlight specific symbols or emotions in your text.`;
+Total Trades Logged: ${accountTrades.length}
+
+RESTRICTIONS:
+- You must ONLY answer questions related to trading, trading psychology, risk management, discipline, emotional control, trade execution mistakes, performance improvement, strategy consistency, and journal insights.
+- If a user asks about non-trading topics (general knowledge, coding, politics, entertainment, personal advice unrelated to trading, etc.), you MUST politely refuse and redirect the user to trading-related questions.
+- You must NOT act as a general-purpose chatbot.
+- You must NOT provide financial guarantees or promise profits.
+- Base your responses heavily on the user's trading data provided in the digest whenever possible. Be specific.`;
+
+      const conversation = messages.map(msg => ({
+        role: msg.role === 'mentor' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+      }));
+
+      // Prepend system instructions to the conversation
+      conversation.unshift(
+        { role: 'user', parts: [{ text: `SYSTEM INSTRUCTIONS:\n${systemInstruction}\n\nUNDERSTAND AND ACKNOWLEDGE.` }] },
+        { role: 'model', parts: [{ text: 'Understood. I will act strictly as a trading mentor and follow all restrictions.' }] }
+      );
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.5-flash',
-        contents: prompt
+        contents: conversation
       });
 
-      const responseText = response.text || '';
-      const lines = responseText.split('\n')
-        .map(l => l.replace(/^[-*•\s\d.]+\s*/, '').trim())
-        .filter(l => l.length > 10);
+      const replyText = response.text || "I'm sorry, I couldn't generate a response.";
 
-      const finalInsights = lines.length >= 3 ? lines.slice(0, 4) : localHeuristics;
-
-      res.json({
-        insights: finalInsights,
-        summary: `Advanced neural diagnostics completed based on recent trading behaviors.`
-      });
+      res.json({ reply: replyText });
 
     } catch (err: any) {
       console.error('Gemini API Error:', err);
-      // Fallback seamlessly
       res.json({
-        insights: localHeuristics,
-        summary: `Diagnostics rendered via local heuristic processor (Gemini connection timed out).`
+        reply: "I am currently experiencing connection issues. Please try again in a few moments."
       });
     }
   });
