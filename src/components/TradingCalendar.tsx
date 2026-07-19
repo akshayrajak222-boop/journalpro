@@ -120,15 +120,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   };
 
   return (
-    <div id="trading-calendar-card" className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-6 shadow-xs">
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-lg">
+    <div id="trading-calendar-card" className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-900/80 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-none transition-all">
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-5 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/40 dark:to-indigo-900/20 text-blue-600 dark:text-blue-400 rounded-xl shadow-sm border border-blue-100 dark:border-blue-800/30">
             <CalendarRange className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-slate-900 dark:text-white trading-calendar-title">Trading Performance Calendar</h2>
-            <p className="text-xs text-slate-700 dark:text-slate-200 font-bold trading-calendar-desc">Color-coded daily profit and loss journal</p>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Trading Performance Calendar</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">Color-coded daily profit and loss journal</p>
           </div>
         </div>
         
@@ -157,7 +157,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
         <div className="lg:col-span-3">
           <div className="grid grid-cols-7 gap-1 text-center mb-2">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} className="text-xs font-black text-slate-900 dark:text-slate-100 py-1 calendar-day-name">{day}</div>
+              <div key={day} className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider py-1">{day}</div>
             ))}
           </div>
 
@@ -171,17 +171,20 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
               const dayData = tradesByDay[formattedDay];
               const isSelected = selectedDayKey === formattedDay;
               
-              let borderClass = "!border !border-slate-300 dark:!border-slate-800";
-              let textAccent = "text-slate-800 dark:text-slate-300";
+              let cellBg = "bg-white dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/70";
+              let borderClass = "border border-slate-200 dark:border-slate-700/50";
+              let textAccent = "text-slate-500 dark:text-slate-400 font-medium";
               let amountText = "";
 
               if (dayData) {
                 if (dayData.netProfit > 0) {
-                  borderClass = "!border-2 !border-emerald-500 dark:!border-emerald-600";
+                  cellBg = "bg-gradient-to-br from-emerald-50/50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-900/20 hover:from-emerald-100/80 hover:to-emerald-200/50 dark:hover:from-emerald-900/40 dark:hover:to-emerald-800/40";
+                  borderClass = "border border-emerald-200 dark:border-emerald-800/50";
                   textAccent = "text-emerald-700 dark:text-emerald-400 font-extrabold";
                   amountText = `+${dayData.netProfit.toFixed(0)}`;
                 } else if (dayData.netProfit < 0) {
-                  borderClass = "!border-2 !border-rose-500 dark:!border-rose-600";
+                  cellBg = "bg-gradient-to-br from-rose-50/50 to-rose-100/50 dark:from-rose-950/20 dark:to-rose-900/20 hover:from-rose-100/80 hover:to-rose-200/50 dark:hover:from-rose-900/40 dark:hover:to-rose-800/40";
+                  borderClass = "border border-rose-200 dark:border-rose-800/50";
                   textAccent = "text-rose-700 dark:text-rose-400 font-extrabold";
                   amountText = dayData.netProfit.toFixed(0);
                 }
@@ -191,15 +194,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                 <button
                   key={`day-${cell.day}`}
                   onClick={() => handleDayClick(cell.day)}
-                  className={`h-14 sm:h-16 md:h-20 p-1 sm:p-2 text-left rounded-lg transition flex flex-col justify-between group relative calendar-day-box hover:!bg-slate-50 dark:hover:!bg-slate-800/50 transition-all duration-150 ${borderClass} ${
+                  className={`h-14 sm:h-16 md:h-20 p-1.5 sm:p-2 text-left rounded-xl flex flex-col justify-between group relative transition-all duration-300 ${cellBg} ${borderClass} ${
                     isSelected 
-                      ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-slate-900 scale-[1.03] z-10 shadow-xs' 
-                      : ''
+                      ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-slate-900 scale-[1.03] z-10 shadow-md' 
+                      : 'hover:scale-[1.03] hover:shadow-sm hover:z-10'
                   }`}
                 >
-                  <span className="text-[11px] sm:text-xs font-black calendar-day-number text-slate-950 dark:text-slate-50 group-hover:text-black dark:group-hover:text-white">{cell.day}</span>
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{cell.day}</span>
                   {amountText && (
-                    <span className={`text-[10px] sm:text-xs md:text-sm font-black truncate block ${textAccent}`}>
+                    <span className={`text-[10px] sm:text-xs md:text-sm truncate block mt-auto ${textAccent}`}>
                       {getCurrencySymbol(currency)}{Math.abs(Number(amountText))}
                     </span>
                   )}
@@ -211,7 +214,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
 
         {/* Sidebar / Stats Panel */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white dark:bg-slate-800/20 border border-slate-200/60 dark:border-slate-800/60 rounded-xl p-4 shadow-2xs calendar-sidebar-box">
+          <div className="bg-white/50 dark:bg-slate-800/40 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-5 shadow-lg shadow-slate-200/40 dark:shadow-none">
             <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Month Performance</h3>
             <div className="space-y-4">
               <div>
@@ -238,7 +241,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
           </div>
 
           {/* Expanded Selected Day Trades */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 max-h-[300px] overflow-y-auto calendar-sidebar-box">
+          <div className="bg-white/50 dark:bg-slate-800/40 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-5 shadow-lg shadow-slate-200/40 dark:shadow-none max-h-[300px] overflow-y-auto">
             {selectedDayTrades === null ? (
               <div className="text-center py-6 text-slate-400 dark:text-slate-500">
                 <Info className="h-5 w-5 mx-auto mb-2 opacity-50" />
