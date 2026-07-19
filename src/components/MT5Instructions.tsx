@@ -59,7 +59,6 @@ export default function MT5Instructions({
   // EA Form inputs
   const [eaLogin, setEaLogin] = useState('');
   const [eaBroker, setEaBroker] = useState('');
-  const [eaBalance, setEaBalance] = useState('10000.00');
 
   // Operational states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -220,7 +219,7 @@ export default function MT5Instructions({
         body: JSON.stringify({
           loginNumber: eaLogin,
           brokerName: eaBroker,
-          startingBalance: parseFloat(eaBalance) || 10000.00
+          startingBalance: 0
         })
       });
 
@@ -842,17 +841,6 @@ void SendTradesToFXJournalPro() {
                       value={eaBroker}
                       onChange={(e) => setEaBroker(e.target.value)}
                       className="bg-slate-950 border border-indigo-900/50 text-xs rounded-lg p-2.5 w-full font-mono font-semibold text-white placeholder-slate-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">Starting Balance ($)</label>
-                    <input 
-                      type="number" 
-                      required
-                      placeholder="10000.00"
-                      value={eaBalance}
-                      onChange={(e) => setEaBalance(e.target.value)}
-                      className="bg-slate-950 border border-indigo-900/50 text-xs rounded-lg p-2.5 w-full font-mono text-white placeholder-slate-600"
                     />
                   </div>
                   <button
