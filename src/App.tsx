@@ -399,13 +399,6 @@ export default function App() {
         return;
       }
 
-      // Check if session exists (user immediately logged in) or if OTP verification is required
-      if (!supabaseData.session) {
-        setIsOtpMode(true);
-        setActionLoading(false);
-        return;
-      }
-
       // 2) Sync registration session with Express server
       const response = await authFetch('/api/auth/register', {
         method: 'POST',
@@ -429,6 +422,7 @@ export default function App() {
       const data = await response.json();
       if (data.user) {
         setUser(data.user);
+        localStorage.setItem('auth_email', data.user.email);
         setOnboardingStep(1);
       } else if (data.error) {
         setAuthError(data.error);

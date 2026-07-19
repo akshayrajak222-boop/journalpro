@@ -379,7 +379,7 @@ export default function MT5Instructions({
 #property description "Synchronizes ${historyDaysVal}-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
-input string   InpApiUrl    = "${apiOrigin}/api/mt5/sync"; // FX Journal Pro API endpoint
+input string   InpApiUrl    = "${apiOrigin}/api/mt5/sync?email=${typeof window !== 'undefined' ? encodeURIComponent(localStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro API endpoint
 input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization

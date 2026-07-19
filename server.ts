@@ -361,6 +361,10 @@ async function ensureUserDbLoaded(email: string) {
   const normalizedEmail = email.toLowerCase().trim();
   const dbKey = `db_json_${normalizedEmail}`;
 
+  if (db && db.users && db.users.some((u: any) => u.email.toLowerCase() === normalizedEmail)) {
+    return db;
+  }
+
   if (useSupabase) {
     try {
       console.log(`[AxyFx Journal Server] Loading database from Supabase for user: ${normalizedEmail}...`);
@@ -1472,9 +1476,14 @@ const PORT = 3000;
   });
 
   // Secure EA synchronization API hit by MT5 Experts Terminal
-  app.post('/api/mt5/sync', (req, res) => {
+  app.post('/api/mt5/sync', async (req, res) => {
     const { syncToken, trades, balance } = req.body;
     if (!syncToken) return res.status(401).json({ error: 'Invalid or missing authorization token' });
+
+    const email = req.query.email as string;
+    if (email) {
+      db = await ensureUserDbLoaded(email);
+    }
 
     // Locate connection
     const connection = db.mt5Connections.find((conn: any) => conn.syncToken === syncToken);
