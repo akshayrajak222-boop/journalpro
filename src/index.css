@@ -26,13 +26,64 @@
 
 /* Custom styling for Trading Performance Calendar Card */
 #trading-calendar-card {
-  background-color: #FBFBFA !important; /* Match left sidebar background color */
-  border: 1px solid #cbd5e1 !important;
+  background-color: #f0f4f8 !important;
+  background-image: none !important; /* Clear Tailwind gradient in light mode */
+  border: 1px solid #d1dce8 !important;
 }
 html.dark #trading-calendar-card,
 .dark #trading-calendar-card {
   background-color: #060913 !important;
+  background-image: none !important;
   border: 1px solid #1e293b !important;
+}
+
+/* Light mode — force all calendar day buttons to soft off-white */
+#trading-calendar-card button {
+  background-color: #f5f7fa !important;
+  background-image: none !important;
+  border: 1px solid #d8e0ea !important;
+  color: #0f172a !important;
+}
+/* Keep profit days green */
+#trading-calendar-card button.border-emerald-200 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+/* Keep loss days red */
+#trading-calendar-card button.border-rose-200 {
+  background-color: #fff1f2 !important;
+  border-color: #fda4af !important;
+}
+
+/* Dark mode — revert day buttons to dark */
+html.dark #trading-calendar-card button,
+.dark #trading-calendar-card button {
+  background-color: rgba(30, 41, 59, 0.35) !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  color: #f1f5f9 !important;
+}
+html.dark #trading-calendar-card button.border-emerald-200,
+.dark #trading-calendar-card button.border-emerald-200 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+html.dark #trading-calendar-card button.border-rose-200,
+.dark #trading-calendar-card button.border-rose-200 {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Light mode sidebar / stats panels */
+#trading-calendar-card .lg\:col-span-1 > div {
+  background-color: #eef1f6 !important;
+  background-image: none !important;
+  border: 1px solid #d1dce8 !important;
+}
+html.dark #trading-calendar-card .lg\:col-span-1 > div,
+.dark #trading-calendar-card .lg\:col-span-1 > div {
+  background-color: rgba(30, 41, 59, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
 }
 
 /* Explicit high-contrast text styles for light theme to guarantee visibility */
@@ -48,7 +99,7 @@ html.dark #trading-calendar-card,
   color: #000000 !important;
 }
 #trading-calendar-card .calendar-day-name {
-  color: #000000 !important;
+  color: #334155 !important;
 }
 
 /* Dark mode resets for the custom calendar classes */
@@ -82,21 +133,23 @@ html.dark #trading-calendar-card .calendar-day-number,
   color: #f8fafc !important;
 }
 
-/* Calendar Date Boxes - Crisp white inside, clear borders */
+/* Calendar padding boxes (empty slots) */
 .calendar-day-box {
-  background-color: #ffffff !important;
-  border: 1.5px solid #cbd5e1 !important;
+  background-color: #e8ecf2 !important;
+  background-image: none !important;
+  border: 1px solid #d1dce8 !important;
 }
 html.dark .calendar-day-box,
 .dark .calendar-day-box {
-  background-color: rgba(30, 41, 59, 0.3) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background-color: rgba(30, 41, 59, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
 /* Calendar Sidebar/Stats Boxes - Crisp white inside, clear borders in light mode */
 .calendar-sidebar-box {
-  background-color: #ffffff !important;
-  border: 1.5px solid #cbd5e1 !important;
+  background-color: #eef1f6 !important;
+  background-image: none !important;
+  border: 1.5px solid #d1dce8 !important;
 }
 html.dark .calendar-sidebar-box,
 .dark .calendar-sidebar-box {
@@ -455,3 +508,142 @@ html.dark, html.dark body {
   background-color: rgba(6, 9, 19, 0.8) !important;
 }
 
+/* ───── AI Mentor / AI Insights - Light Mode Overrides ───── */
+/* Ensure the premium teaser renders correctly in light mode */
+#ai-insights-premium-teaser {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.dark #ai-insights-premium-teaser,
+.dark #ai-insights-premium-teaser {
+  background: linear-gradient(135deg, #0f172a 0%, #020617 100%) !important;
+  border: 1px solid #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Light mode heading and paragraph text in AI teaser */
+#ai-insights-premium-teaser h2,
+#ai-insights-premium-teaser h3 {
+  color: #0f172a !important;
+}
+#ai-insights-premium-teaser p {
+  color: #475569 !important;
+}
+html.dark #ai-insights-premium-teaser h2,
+html.dark #ai-insights-premium-teaser h3,
+.dark #ai-insights-premium-teaser h2,
+.dark #ai-insights-premium-teaser h3 {
+  color: #f1f5f9 !important;
+}
+html.dark #ai-insights-premium-teaser p,
+.dark #ai-insights-premium-teaser p {
+  color: #94a3b8 !important;
+}
+
+/* ───── AI Mentor Chat (Pro) - Light / Dark Mode Overrides ───── */
+
+/* Outer card */
+#ai-mentor-card {
+  background-color: #f0f4f8 !important;
+  background-image: none !important;
+  border: 1px solid #d1dce8 !important;
+}
+html.dark #ai-mentor-card,
+.dark #ai-mentor-card {
+  background-color: #060913 !important;
+  background-image: none !important;
+  border: 1px solid #1e293b !important;
+}
+
+/* Header bar */
+#ai-mentor-card > div:first-child {
+  background-color: #e8edf4 !important;
+  background-image: none !important;
+  border-bottom-color: #d1dce8 !important;
+}
+html.dark #ai-mentor-card > div:first-child,
+.dark #ai-mentor-card > div:first-child {
+  background-color: rgba(6, 9, 19, 0.6) !important;
+  border-bottom-color: #1e293b !important;
+}
+
+/* Header text */
+#ai-mentor-card h2 {
+  color: #0f172a !important;
+}
+#ai-mentor-card p {
+  color: #475569 !important;
+}
+html.dark #ai-mentor-card h2,
+.dark #ai-mentor-card h2 {
+  color: #f1f5f9 !important;
+}
+html.dark #ai-mentor-card p,
+.dark #ai-mentor-card p {
+  color: #94a3b8 !important;
+}
+
+/* Chat message area (scrollable body) */
+#ai-mentor-card .flex-1.overflow-y-auto {
+  background-color: #eef2f7 !important;
+  background-image: none !important;
+}
+html.dark #ai-mentor-card .flex-1.overflow-y-auto,
+.dark #ai-mentor-card .flex-1.overflow-y-auto {
+  background-color: rgba(3, 6, 13, 0.5) !important;
+}
+
+/* Mentor message bubble (bg-white inside chat) */
+#ai-mentor-card .rounded-tl-none {
+  background-color: #ffffff !important;
+  border-color: #d1dce8 !important;
+  color: #1e293b !important;
+}
+html.dark #ai-mentor-card .rounded-tl-none,
+.dark #ai-mentor-card .rounded-tl-none {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+  border-color: rgba(255,255,255,0.07) !important;
+  color: #cbd5e1 !important;
+}
+
+/* User avatar circle */
+#ai-mentor-card .bg-slate-200 {
+  background-color: #dde3ec !important;
+}
+html.dark #ai-mentor-card .bg-slate-200,
+.dark #ai-mentor-card .bg-slate-200 {
+  background-color: rgba(51, 65, 85, 0.8) !important;
+}
+
+/* Input footer bar */
+#ai-mentor-card > div:last-child {
+  background-color: #e8edf4 !important;
+  background-image: none !important;
+  border-top-color: #d1dce8 !important;
+}
+html.dark #ai-mentor-card > div:last-child,
+.dark #ai-mentor-card > div:last-child {
+  background-color: #060913 !important;
+  border-top-color: #1e293b !important;
+}
+
+/* Input field */
+#ai-mentor-card input[type="text"] {
+  background-color: #f5f7fa !important;
+  border-color: #c8d3e0 !important;
+  color: #0f172a !important;
+}
+#ai-mentor-card input[type="text"]::placeholder {
+  color: #94a3b8 !important;
+}
+html.dark #ai-mentor-card input[type="text"],
+.dark #ai-mentor-card input[type="text"] {
+  background-color: #04060d !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+html.dark #ai-mentor-card input[type="text"]::placeholder,
+.dark #ai-mentor-card input[type="text"]::placeholder {
+  color: #475569 !important;
+}

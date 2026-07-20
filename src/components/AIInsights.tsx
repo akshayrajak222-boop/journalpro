@@ -69,21 +69,21 @@ export default function AIInsights({ user, account, onUpgradeToPro }: AIInsights
 
   if (!user.isPro) {
     return (
-      <div id="ai-insights-premium-teaser" className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-xl p-8 text-white relative overflow-hidden">
+      <div id="ai-insights-premium-teaser" className="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl p-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
         <div className="max-w-2xl mx-auto text-center space-y-6 relative z-10">
-          <div className="inline-flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full text-xs font-semibold text-blue-400">
+          <div className="inline-flex items-center gap-1.5 bg-blue-100 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-500/20 px-3 py-1 rounded-full text-xs font-semibold text-blue-600 dark:text-blue-400">
             <Brain className="h-3.5 w-3.5" />
             FX Journal Pro Cognitive Intelligence
           </div>
           
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white font-sans">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
             Personalized AI Trading Mentor
           </h2>
           
-          <p className="text-slate-400 text-sm md:text-base leading-relaxed">
+          <p className="text-slate-500 dark:text-slate-400 text-sm md:text-base leading-relaxed">
             Stop trading alone. Chat directly with an advanced AI mentor that analyzes your live trading journal, spots emotional triggers, and answers your most critical questions regarding risk management and discipline.
           </p>
 
@@ -102,7 +102,7 @@ export default function AIInsights({ user, account, onUpgradeToPro }: AIInsights
   }
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[650px] max-h-[80vh]">
+    <div id="ai-mentor-card" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden flex flex-col h-[650px] max-h-[80vh]">
       {/* Header */}
       <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 px-6 py-4">
         <div className="flex items-center gap-3">
@@ -122,14 +122,14 @@ export default function AIInsights({ user, account, onUpgradeToPro }: AIInsights
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 dark:bg-slate-950/50">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50 dark:bg-slate-950/50">
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex gap-3 max-w-[85%] md:max-w-[75%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className="flex-shrink-0 mt-1">
                 {msg.role === 'user' ? (
                   <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                    <UserIcon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                    <UserIcon className="h-4 w-4 text-slate-700 dark:text-slate-300" />
                   </div>
                 ) : (
                   <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
@@ -177,7 +177,7 @@ export default function AIInsights({ user, account, onUpgradeToPro }: AIInsights
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask your mentor about risk management, psychology, or specific trades..."
-            className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-full py-3.5 pl-5 pr-14 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition placeholder-slate-400 dark:placeholder-slate-500"
+            className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-full py-3.5 pl-5 pr-14 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition placeholder-slate-400 dark:placeholder-slate-500"
             disabled={loading}
           />
           <button
