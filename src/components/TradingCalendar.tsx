@@ -164,7 +164,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
           <div className="grid grid-cols-7 gap-1.5">
             {cells.map((cell, idx) => {
               if (cell.isPadding) {
-                return <div key={`pad-${idx}`} className="h-14 sm:h-16 md:h-20 calendar-day-box opacity-40 rounded-lg"></div>;
+                return <div key={`pad-${idx}`} className="h-16 md:h-20 calendar-day-box opacity-40 rounded-lg"></div>;
               }
 
               const formattedDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
@@ -194,15 +194,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                 <button
                   key={`day-${cell.day}`}
                   onClick={() => handleDayClick(cell.day)}
-                  className={`h-14 sm:h-16 md:h-20 p-1.5 sm:p-2 text-left rounded-xl flex flex-col justify-between group relative transition-all duration-300 ${cellBg} ${borderClass} ${
+                  className={`h-16 md:h-20 p-1 sm:p-2 text-left rounded-xl flex flex-col justify-between group relative transition-all duration-300 ${cellBg} ${borderClass} ${
                     isSelected 
                       ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-slate-900 scale-[1.03] z-10 shadow-md' 
                       : 'hover:scale-[1.03] hover:shadow-sm hover:z-10'
                   }`}
                 >
-                  <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{cell.day}</span>
+                  <span className="text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{cell.day}</span>
                   {amountText && (
-                    <span className={`text-[10px] sm:text-xs md:text-sm truncate block mt-auto ${textAccent}`}>
+                    <span className={`text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs md:text-sm font-semibold tracking-tighter sm:tracking-normal block mt-auto leading-none ${textAccent}`}>
                       {getCurrencySymbol(currency)}{Math.abs(Number(amountText))}
                     </span>
                   )}

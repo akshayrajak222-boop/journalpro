@@ -1,0 +1,11 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[user]
+	email = akshayrajpanamthode@gmail.com
+	name = Akshay Raj
+[remote "origin"]
+	url = https://github.com/akshayrajak222-boop/journalpro.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
