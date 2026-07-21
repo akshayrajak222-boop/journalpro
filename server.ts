@@ -833,10 +833,15 @@ const PORT = 3000;
   // TRADING JOURNAL / TRADES ROUTES
   // ==========================================
 
-  app.get('/api/trades', (req, res) => {
+  app.get('/api/trades', async (req, res) => {
     const { accountId } = req.query;
     if (!accountId) {
       return res.status(400).json({ error: 'accountId query param is required' });
+    }
+
+    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
     }
 
     // Verify account ownership
@@ -852,7 +857,12 @@ const PORT = 3000;
     res.json({ trades: accountTrades });
   });
 
-  app.post('/api/trades', (req, res) => {
+  app.post('/api/trades', async (req, res) => {
+    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
+
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { 
       accountId, 
@@ -885,18 +895,19 @@ const PORT = 3000;
       return res.status(404).json({ error: 'Trading account not found or access denied' });
     }
 
-    // Prevent duplicate trades (e.g., frontend double clicks)
+    // Prevent immediate accidental double clicks (2 seconds window)
+    const nowMs = Date.now();
     const duplicateExists = db.trades.some((t: any) => 
       t.accountId === accountId &&
       t.symbol === symbol.toUpperCase() &&
       t.type === type &&
       t.entryPrice === parseFloat(entryPrice) &&
       t.profit === parseFloat(profit) &&
-      new Date().getTime() - new Date(t.date).getTime() < 60000 // within 60 seconds
+      nowMs - new Date(t.date).getTime() < 2000 // within 2 seconds
     );
 
     if (duplicateExists) {
-      return res.status(400).json({ error: 'Duplicate trade detected. You recently added an identical trade.' });
+      return res.status(400).json({ error: 'Duplicate trade submission detected. Please wait a moment.' });
     }
 
     const newTrade: Trade = {
@@ -928,11 +939,16 @@ const PORT = 3000;
     db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + netProfit).toFixed(2));
     db.accounts[accountIdx].equity = db.accounts[accountIdx].currentBalance;
 
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ message: 'Trade logged successfully', trade: newTrade, updatedAccount: db.accounts[accountIdx] });
   });
 
-  app.put('/api/trades/:id', (req, res) => {
+  app.put('/api/trades/:id', async (req, res) => {
+    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
+
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const updateData = req.body;
@@ -976,11 +992,16 @@ const PORT = 3000;
       db.accounts[accIdx].equity = db.accounts[accIdx].currentBalance;
     }
 
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ message: 'Trade updated successfully', trade: db.trades[tradeIdx] });
   });
 
-  app.delete('/api/trades/:id', (req, res) => {
+  app.delete('/api/trades/:id', async (req, res) => {
+    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
+
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
 
@@ -997,7 +1018,7 @@ const PORT = 3000;
     db.accounts[accIdx].equity = db.accounts[accIdx].currentBalance;
 
     db.trades.splice(tradeIdx, 1);
-    saveDatabase(db);
+    await saveDatabase(db);
 
     res.json({ message: 'Trade deleted successfully', updatedAccount: db.accounts[accIdx] });
   });

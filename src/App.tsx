@@ -405,13 +405,13 @@ export default function App() {
 
   const fetchTradesAndParams = async (accId: string) => {
     try {
-      const tradesRes = await fetch(`/api/trades?accountId=${accId}`);
+      const tradesRes = await authFetch(`/api/trades?accountId=${accId}`);
       const tradesData = await tradesRes.json();
-      setTrades(tradesData.trades);
+      setTrades(tradesData.trades || []);
 
-      const riskRes = await fetch(`/api/risk-settings/${accId}`);
+      const riskRes = await authFetch(`/api/risk-settings/${accId}`);
       const riskData = await riskRes.json();
-      setRiskSettings(riskData.riskSettings);
+      setRiskSettings(riskData.riskSettings || null);
     } catch (e) {
       console.error(e);
     }
@@ -785,7 +785,7 @@ export default function App() {
     try {
       let res;
       if (editingTradeId) {
-        res = await fetch(`/api/trades/${editingTradeId}`, {
+        res = await authFetch(`/api/trades/${editingTradeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tradeData)
@@ -800,14 +800,19 @@ export default function App() {
 
       if (res.ok) {
         setShowTradeModal(false);
-        fetchTradesAndParams(selectedAccountId);
+        setEditingTradeId(null);
+        await fetchTradesAndParams(selectedAccountId);
         // Refresh accounts to get new balance/equity calculations
         const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
+        setAccounts(accsData.accounts || []);
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || 'Error saving trade record');
       }
-    } catch (err) {
-      alert('Error saving trade record');
+    } catch (err: any) {
+      console.error('Error saving trade:', err);
+      alert('Error saving trade record: ' + (err?.message || err));
     } finally {
       setActionLoading(false);
     }
@@ -816,16 +821,19 @@ export default function App() {
   const handleDeleteTrade = async (tradeId: string) => {
     if (!confirm('Are you sure you want to delete this trade? This will reverse its financial impact from your account balance.')) return;
     try {
-      const res = await fetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
       if (res.ok) {
-        fetchTradesAndParams(selectedAccountId);
+        await fetchTradesAndParams(selectedAccountId);
         // Refresh accounts
         const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
+        setAccounts(accsData.accounts || []);
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || 'Error deleting trade');
       }
-    } catch (e) {
-      alert('Error deleting trade');
+    } catch (e: any) {
+      alert('Error deleting trade: ' + (e?.message || e));
     }
   };
 
