@@ -358,10 +358,11 @@ let isLoaded = false;
 
 // Loader and saver specifically for user-scoped databases on Supabase
 async function ensureUserDbLoaded(email: string) {
+  if (!email) return loadDatabaseFromFile();
   const normalizedEmail = email.toLowerCase().trim();
   const dbKey = `db_json_${normalizedEmail}`;
 
-  if (db && db.users && db.users.some((u: any) => u.email.toLowerCase() === normalizedEmail)) {
+  if (db && db.users && Array.isArray(db.users) && db.users.some((u: any) => u.email?.toLowerCase() === normalizedEmail)) {
     return db;
   }
 
@@ -376,12 +377,12 @@ async function ensureUserDbLoaded(email: string) {
 
       if (error) {
         console.error(`[AxyFx Journal Server] Supabase query error for ${normalizedEmail}:`, error);
-        return loadDatabaseFromFile();
+        db = loadDatabaseFromFile();
+        return db;
       } else if (!data) {
         console.log(`[AxyFx Journal Server] No database found in Supabase for user: ${normalizedEmail}. Initializing new user DB...`);
         const initial = loadDatabaseFromFile();
         
-        // Setup fresh data for this specific user
         initial.users = [{
           id: `user_${Date.now()}`,
           email: normalizedEmail,
@@ -399,21 +400,47 @@ async function ensureUserDbLoaded(email: string) {
         initial.mt5Connections = [];
         initial.payments = [];
 
+        db = initial;
         await supabase!
           .from('journal_settings')
-          .upsert({ key: dbKey, value: initial });
+          .upsert({ key: dbKey, value: initial }, { onConflict: 'key' });
         
-        return initial;
+        return db;
       } else {
         console.log(`[AxyFx Journal Server] Loaded database for user: ${normalizedEmail} from Supabase successfully!`);
-        return data.value;
+        let loaded = data.value;
+        if (typeof loaded === 'string') {
+          try { loaded = JSON.parse(loaded); } catch (e) {}
+        }
+        if (!loaded || typeof loaded !== 'object') loaded = {};
+        loaded.users = Array.isArray(loaded.users) ? loaded.users : [{
+          id: `user_${Date.now()}`,
+          email: normalizedEmail,
+          name: normalizedEmail.split('@')[0],
+          experience: 'Intermediate',
+          tradingStyle: 'Day Trading',
+          mainMarkets: ['Forex', 'Gold'],
+          onboardingCompleted: false,
+          isPro: false
+        }];
+        loaded.accounts = Array.isArray(loaded.accounts) ? loaded.accounts : [];
+        loaded.trades = Array.isArray(loaded.trades) ? loaded.trades : [];
+        loaded.riskSettings = Array.isArray(loaded.riskSettings) ? loaded.riskSettings : [];
+        loaded.supportTickets = Array.isArray(loaded.supportTickets) ? loaded.supportTickets : [];
+        loaded.mt5Connections = Array.isArray(loaded.mt5Connections) ? loaded.mt5Connections : [];
+        loaded.payments = Array.isArray(loaded.payments) ? loaded.payments : [];
+
+        db = loaded;
+        return db;
       }
     } catch (err: any) {
       console.error(`[AxyFx Journal Server] Failed to load user database from Supabase for ${normalizedEmail}:`, err);
-      return loadDatabaseFromFile();
+      db = loadDatabaseFromFile();
+      return db;
     }
   } else {
-    return loadDatabaseFromFile();
+    db = loadDatabaseFromFile();
+    return db;
   }
 }
 
@@ -431,20 +458,6 @@ async function ensureDbLoaded() {
 
       if (error) {
         console.error('[AxyFx Journal Server] Supabase query error, falling back to local file:', error);
-        if (error.message && (error.message.includes('relation "journal_settings" does not exist') || error.code === '42P01')) {
-          console.warn('\n============================================================\n' +
-                       '   ACTION REQUIRED: SUPABASE TABLE "journal_settings" MISSING\n' +
-                       '============================================================\n' +
-                       'Please run the following SQL query in your Supabase SQL Editor\n' +
-                       'to create the required table for data persistence:\n\n' +
-                       'CREATE TABLE IF NOT EXISTS journal_settings (\n' +
-                       '  key text PRIMARY KEY,\n' +
-                       '  value jsonb DEFAULT \'{}\'::jsonb,\n' +
-                       '  created_at timestamp with time zone DEFAULT timezone(\'utc\'::text, now()) NOT NULL\n' +
-                       ');\n\n' +
-                       'This will enable seamless database persistence on Vercel!\n' +
-                       '============================================================\n');
-        }
         db = loadDatabaseFromFile();
       } else if (!data) {
         console.log('[AxyFx Journal Server] No data found in Supabase. Seeding initial database...');
@@ -452,7 +465,11 @@ async function ensureDbLoaded() {
         await supabase!.from('journal_settings').insert({ key: 'db_json', value: initial });
         db = initial;
       } else {
-        db = data.value;
+        let loaded = data.value;
+        if (typeof loaded === 'string') {
+          try { loaded = JSON.parse(loaded); } catch (e) {}
+        }
+        db = loaded;
         console.log('[AxyFx Journal Server] Loaded database from Supabase successfully!');
       }
     } catch (err: any) {
@@ -468,14 +485,9 @@ async function ensureDbLoaded() {
     console.warn('[AxyFx Journal Server] Loaded database is invalid or lacks users array. Self-healing with default seed data...');
     db = loadDatabaseFromFile();
     if (useSupabase) {
-      // Background async update to heal the record in Supabase
       supabase!
         .from('journal_settings')
-        .upsert({ key: 'db_json', value: db })
-        .then(({ error }: { error: any }) => {
-          if (error) console.error('[AxyFx Journal Server] Supabase database healing upsert error:', error);
-          else console.log('[AxyFx Journal Server] Supabase database healed successfully!');
-        })
+        .upsert({ key: 'db_json', value: db }, { onConflict: 'key' })
         .catch((err: any) => console.error('[AxyFx Journal Server] Exception healing database:', err));
     }
   }
@@ -493,27 +505,24 @@ async function saveDatabase(data: any, overrideEmail?: string) {
   }
 
   if (useSupabase) {
-    const activeEmail = overrideEmail || currentUser?.email || data.users?.[0]?.email;
+    const activeEmail = overrideEmail || currentUser?.email || data?.users?.[0]?.email;
     if (activeEmail) {
       const normalizedEmail = activeEmail.toLowerCase().trim();
+      const dbKey = `db_json_${normalizedEmail}`;
       try {
         const { error } = await supabase!
           .from('journal_settings')
-          .upsert({ key: `db_json_${normalizedEmail}`, value: data });
+          .upsert({ key: dbKey, value: data }, { onConflict: 'key' });
         if (error) {
           console.error(`[AxyFx Journal Server] Supabase save error for ${normalizedEmail}:`, error);
         } else {
-          console.log(`[AxyFx Journal Server] Saved user database for ${normalizedEmail} to Supabase successfully!`);
+          console.log(`[AxyFx Journal Server] Saved user database for ${normalizedEmail} (key: ${dbKey}, trades: ${data.trades?.length || 0}) to Supabase successfully!`);
         }
       } catch (err) {
         console.error(`[AxyFx Journal Server] Exception saving to Supabase for ${normalizedEmail}:`, err);
       }
     } else {
-      try {
-        const { error } = await supabase!
-          .from('journal_settings')
-          .upsert({ key: 'db_json', value: data });
-      } catch (err) {}
+      console.warn('[AxyFx Journal Server] saveDatabase called but no active user email found!');
     }
   }
 }
@@ -659,7 +668,11 @@ const PORT = 3000;
     return res.status(401).json({ error: 'Not authenticated' });
   });
 
-  app.post('/api/auth/onboarding', (req, res) => {
+  app.post('/api/auth/onboarding', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { experience, tradingStyle, markets } = req.body;
 
@@ -703,7 +716,7 @@ const PORT = 3000;
         db.riskSettings.push(newRisk);
       }
 
-      saveDatabase(db);
+      await saveDatabase(db, authEmail);
       currentUser = db.users[userIdx];
       res.json({ message: 'Onboarding completed successfully', user: currentUser });
     } else {
@@ -711,7 +724,11 @@ const PORT = 3000;
     }
   });
 
-  app.post('/api/auth/update-profile', (req, res) => {
+  app.post('/api/auth/update-profile', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { name, email, isPro } = req.body;
 
@@ -721,7 +738,7 @@ const PORT = 3000;
       if (email) db.users[userIdx].email = email;
       if (typeof isPro === 'boolean') db.users[userIdx].isPro = isPro;
       
-      saveDatabase(db);
+      await saveDatabase(db, authEmail);
       currentUser = db.users[userIdx];
       res.json({ message: 'Profile updated successfully', user: currentUser });
     } else {
@@ -733,13 +750,21 @@ const PORT = 3000;
   // TRADING ACCOUNTS ROUTES
   // ==========================================
 
-  app.get('/api/accounts', (req, res) => {
+  app.get('/api/accounts', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.json({ accounts: [] });
     const userAccounts = db.accounts.filter((acc: any) => acc.userId === currentUser?.id);
     res.json({ accounts: userAccounts });
   });
 
-  app.post('/api/accounts', (req, res) => {
+  app.post('/api/accounts', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     
     // Plan enforcement
@@ -785,11 +810,15 @@ const PORT = 3000;
     };
     db.riskSettings.push(newRisk);
 
-    saveDatabase(db);
+    await saveDatabase(db, authEmail);
     res.json({ message: 'Trading account created', account: newAcc });
   });
 
-  app.put('/api/accounts/:id', (req, res) => {
+  app.put('/api/accounts/:id', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const { name, broker, status, currentBalance, equity, currency, startingBalance } = req.body;
@@ -804,14 +833,18 @@ const PORT = 3000;
       if (currentBalance !== undefined) db.accounts[accIdx].currentBalance = parseFloat(currentBalance);
       if (equity !== undefined) db.accounts[accIdx].equity = parseFloat(equity);
 
-      saveDatabase(db);
+      await saveDatabase(db, authEmail);
       res.json({ message: 'Account updated successfully', account: db.accounts[accIdx] });
     } else {
       res.status(404).json({ error: 'Account not found' });
     }
   });
 
-  app.delete('/api/accounts/:id', (req, res) => {
+  app.delete('/api/accounts/:id', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
 
@@ -822,7 +855,7 @@ const PORT = 3000;
       // Clean up trades associated with this account
       db.trades = db.trades.filter((t: any) => t.accountId !== id);
       db.riskSettings = db.riskSettings.filter((r: any) => r.accountId !== id);
-      saveDatabase(db);
+      await saveDatabase(db, authEmail);
       res.json({ message: 'Account and associated trades deleted successfully' });
     } else {
       res.status(404).json({ error: 'Account not found' });
@@ -939,12 +972,12 @@ const PORT = 3000;
     db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + netProfit).toFixed(2));
     db.accounts[accountIdx].equity = db.accounts[accountIdx].currentBalance;
 
-    await saveDatabase(db);
+    await saveDatabase(db, authEmail);
     res.json({ message: 'Trade logged successfully', trade: newTrade, updatedAccount: db.accounts[accountIdx] });
   });
 
   app.put('/api/trades/:id', async (req, res) => {
-    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
     if (authEmail) {
       db = await ensureUserDbLoaded(authEmail);
     }
@@ -992,12 +1025,12 @@ const PORT = 3000;
       db.accounts[accIdx].equity = db.accounts[accIdx].currentBalance;
     }
 
-    await saveDatabase(db);
+    await saveDatabase(db, authEmail);
     res.json({ message: 'Trade updated successfully', trade: db.trades[tradeIdx] });
   });
 
   app.delete('/api/trades/:id', async (req, res) => {
-    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
     if (authEmail) {
       db = await ensureUserDbLoaded(authEmail);
     }
@@ -1018,7 +1051,7 @@ const PORT = 3000;
     db.accounts[accIdx].equity = db.accounts[accIdx].currentBalance;
 
     db.trades.splice(tradeIdx, 1);
-    await saveDatabase(db);
+    await saveDatabase(db, authEmail);
 
     res.json({ message: 'Trade deleted successfully', updatedAccount: db.accounts[accIdx] });
   });
@@ -1027,7 +1060,11 @@ const PORT = 3000;
   // RISK SETTINGS ROUTES
   // ==========================================
 
-  app.get('/api/risk-settings/:accountId', (req, res) => {
+  app.get('/api/risk-settings/:accountId', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     const { accountId } = req.params;
     const settings = db.riskSettings.find((r: any) => r.accountId === accountId);
     if (!settings) {
@@ -1051,7 +1088,11 @@ const PORT = 3000;
     res.json({ riskSettings: settings });
   });
 
-  app.put('/api/risk-settings/:accountId', (req, res) => {
+  app.put('/api/risk-settings/:accountId', async (req, res) => {
+    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
+    if (authEmail) {
+      db = await ensureUserDbLoaded(authEmail);
+    }
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId } = req.params;
     const { riskPerTradeLimit, dailyLossLimit, weeklyLossLimit, maxDrawdownLimit, disciplineEnabled, maxTradesPerDay } = req.body;
@@ -1064,7 +1105,7 @@ const PORT = 3000;
       db.riskSettings[idx].maxDrawdownLimit = parseFloat(maxDrawdownLimit);
       db.riskSettings[idx].disciplineEnabled = !!disciplineEnabled;
       db.riskSettings[idx].maxTradesPerDay = parseInt(maxTradesPerDay) || 5;
-      saveDatabase(db);
+      await saveDatabase(db, authEmail);
       res.json({ message: 'Risk parameters saved', riskSettings: db.riskSettings[idx] });
     } else {
       const newRisk: RiskSettings = {
@@ -1078,7 +1119,7 @@ const PORT = 3000;
         maxTradesPerDay: parseInt(maxTradesPerDay || 5)
       };
       db.riskSettings.push(newRisk);
-      saveDatabase(db);
+      await saveDatabase(db, authEmail);
       res.json({ message: 'Risk parameters created', riskSettings: newRisk });
     }
   });
