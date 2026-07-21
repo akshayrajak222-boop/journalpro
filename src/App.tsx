@@ -1231,8 +1231,9 @@ export default function App() {
             <div className="absolute inset-x-6 top-6 h-24 rounded-full bg-blue-100/40 blur-3xl pointer-events-none"></div>
 
             <div className="relative text-center space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-blue-700">
-                Instant Sandbox Trial
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/80 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-blue-700 shadow-sm">
+                <Sparkles className="h-3.5 w-3.5" />
+                Premium trading workspace
               </div>
               <Logo size={48} className="mx-auto" />
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display flex items-center justify-center gap-1.5">
@@ -1243,15 +1244,28 @@ export default function App() {
                   ? 'Create your institutional trading journal account' 
                   : isForgotPassword 
                   ? 'Reset your secure login password' 
-                  : 'Sign in to access your trading analytics dashboard'
-                }
+                : 'Sign in to access your trading analytics dashboard'
+              }
               </p>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                {['Fast sign-in', 'Trade journal', 'Google ready'].map((label) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-semibold text-slate-500 shadow-[0_8px_20px_-14px_rgba(15,23,42,0.35)]"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
             </div>
 
             {/* Alert announcement bar */}
-            <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-4 text-center shadow-sm">
-              <span className="text-[10px] font-bold text-blue-700 block uppercase tracking-[0.26em]">Instant Sandbox Trial</span>
-              <p className="text-[11px] text-blue-600 mt-1">Simply enter any email to immediately log in and explore!</p>
+            <div className="rounded-[1.4rem] border border-blue-100/80 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-4 text-center shadow-[0_14px_40px_-26px_rgba(37,99,235,0.55)]">
+              <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-blue-100">
+                <Sparkles className="h-4 w-4 text-blue-600" />
+              </div>
+              <span className="text-[10px] font-bold text-blue-700 block uppercase tracking-[0.28em]">Instant Sandbox Trial</span>
+              <p className="text-[11px] text-blue-600 mt-1 leading-5">Simply enter any email to immediately log in and explore.</p>
             </div>
 
             {isForgotPassword ? (
