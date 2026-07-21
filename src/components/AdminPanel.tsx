@@ -274,7 +274,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
               <tbody>
                 <tr className="border-b border-slate-50 hover:bg-slate-50/50">
                   <td className="py-3 pl-2 font-mono text-blue-600">pay_rzp_82910_akshay</td>
-                  <td className="py-3">akshayrajpanamthode@gmail.com</td>
+                  <td className="py-3">akshayrajak222@gmail.com</td>
                   <td className="py-3 font-semibold text-slate-800">₹99.00 INR</td>
                   <td className="py-3 text-slate-500">2026-07-11 12:00:00</td>
                   <td className="py-3 text-right">

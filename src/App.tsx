@@ -153,6 +153,42 @@ export default function App() {
   // Selected currency
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
 
+  const isSupabaseConfigured = Boolean(
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_KEY &&
+    !import.meta.env.VITE_SUPABASE_URL.includes('your-project.supabase.co') &&
+    !import.meta.env.VITE_SUPABASE_KEY.includes('your-anon-key')
+  );
+  const siteUrl = import.meta.env.VITE_SITE_URL?.trim();
+  const authRedirectUrl =
+    siteUrl ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
+
+  const syncSupabaseUser = async (sessionUser: any) => {
+    const email = sessionUser?.email || '';
+    if (!email) {
+      setLoading(false);
+      return;
+    }
+
+    const name =
+      sessionUser?.user_metadata?.full_name ||
+      sessionUser?.user_metadata?.name ||
+      email.split('@')[0] ||
+      '';
+
+    localStorage.setItem('auth_email', email);
+    setUser({
+      id: sessionUser?.id || `supabase_${email}`,
+      email,
+      name,
+      onboardingCompleted: false,
+      isPro: false,
+    });
+
+    await fetchAccountData();
+  };
+
   // Notifications
   const [dailyTradingReminder, setDailyTradingReminder] = useState(true);
   const [maxDailyLossAlert, setMaxDailyLossAlert] = useState(true);
@@ -229,102 +265,50 @@ export default function App() {
     });
   };
 
-  // Fetch current user session
-  const checkUserSession = async () => {
-    try {
-      const storedEmail = localStorage.getItem('auth_email');
-      const res = await authFetch('/api/auth/me', {
-        headers: storedEmail ? { 'x-auth-email': storedEmail } : {},
-      });
-      const data = await res.json();
-      if (data.user) {
-        setUser(data.user);
-        if (data.user.onboardingCompleted) {
-          fetchAccountData();
-        }
-      } else {
-        setLoading(false);
-      }
-    } catch (e) {
-      console.error(e);
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    // Check if there is an active Supabase session (e.g. from Google OAuth redirect)
-    const syncSupabaseOAuth = async () => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
+    const bootstrapSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session && session.user) {
-          const email = session.user.email;
-          const name = session.user.user_metadata?.full_name || session.user.user_metadata?.name || email?.split('@')[0] || '';
-          if (email) {
-            const response = await authFetch('/api/auth/oauth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, name })
-            });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.user) {
-                setUser(data.user);
-                localStorage.setItem('auth_email', data.user.email);
-                if (data.user.onboardingCompleted) {
-                  fetchAccountData();
-                } else {
-                  setOnboardingStep(1);
-                }
-                return; // successfully handled via Supabase OAuth
-              }
-            }
-          }
+        if (session?.user) {
+          await syncSupabaseUser(session.user);
+          return;
         }
       } catch (err) {
-        console.error('Error syncing Supabase session:', err);
+        console.error('Error loading Supabase session:', err);
       }
-      
-      // Fallback to checking normal Express backend session
-      checkUserSession();
+      setLoading(false);
     };
 
-    syncSupabaseOAuth();
+    bootstrapSession();
 
-    // Subscribe to changes in auth state (especially useful when completing OAuth flow redirects)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session && session.user) {
-        const email = session.user.email;
-        const name = session.user.user_metadata?.full_name || session.user.user_metadata?.name || email?.split('@')[0] || '';
-        if (email) {
-          try {
-            const response = await authFetch('/api/auth/oauth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, name })
-            });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.user) {
-                setUser(data.user);
-                localStorage.setItem('auth_email', data.user.email);
-                if (data.user.onboardingCompleted) {
-                  fetchAccountData();
-                } else {
-                  setOnboardingStep(1);
-                }
-              }
-            }
-          } catch (err) {
-            console.error('Error syncing OAuth session on state change:', err);
-          }
-        }
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+        await syncSupabaseUser(session.user);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('auth_email');
+        localStorage.removeItem('selected_account_id');
+        setUser(null);
+        setAccounts([]);
+        setTrades([]);
+        setSelectedAccountId('');
+        setTickets([]);
+        setAnnouncements([]);
+        setRiskSettings(null);
+        setLoading(false);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [isSupabaseConfigured]);
 
   // Fetch all user accounts, active trades, risk params, support queues
   const fetchAccountData = async (overrideAccountId?: string) => {
@@ -394,49 +378,18 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      // 1) Use supabase.auth.signInWithPassword({ email, password })
-      const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+      if (!isSupabaseConfigured) {
+        setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable sign in.');
+        return;
+      }
+
+      const { error: supabaseError } = await supabase.auth.signInWithPassword({
         email: authEmail,
         password: authPassword
       });
 
       if (supabaseError) {
         setAuthError(supabaseError.message);
-        setActionLoading(false);
-        return;
-      }
-
-      // 2) Sync login session with the Express server
-      const response = await authFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        console.error('[AxyFx] Login server sync error:', errorText);
-        try {
-          const errData = JSON.parse(errorText);
-          setAuthError(`Server sync error: ${errData.error || response.statusText}`);
-        } catch {
-          const cleanSnippet = errorText.replace(/<[^>]*>/g, ' ').trim().slice(0, 150);
-          setAuthError(`Server sync error: HTTP ${response.status} ${response.statusText}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      if (data.user) {
-        setUser(data.user);
-        localStorage.setItem('auth_email', data.user.email);
-        if (data.user.onboardingCompleted) {
-          fetchAccountData();
-        } else {
-          setOnboardingStep(1);
-        }
-      } else {
-        setAuthError(data.error || 'Login failed: Invalid server response structure.');
       }
     } catch (err: any) {
       console.error('[AxyFx] Login connection error:', err);
@@ -452,8 +405,12 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      // 1) Use supabase.auth.signUp({ email, password })
-      const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
+      if (!isSupabaseConfigured) {
+        setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable sign up.');
+        return;
+      }
+
+      const { error: supabaseError } = await supabase.auth.signUp({
         email: authEmail,
         password: authPassword,
         options: {
@@ -465,37 +422,7 @@ export default function App() {
 
       if (supabaseError) {
         setAuthError(supabaseError.message);
-        setActionLoading(false);
         return;
-      }
-
-      // 2) Sync registration session with Express server
-      const response = await authFetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        console.error('[AxyFx] Register server sync error:', errorText);
-        try {
-          const errData = JSON.parse(errorText);
-          setAuthError(`Server sync error: ${errData.error || response.statusText}`);
-        } catch {
-          const cleanSnippet = errorText.replace(/<[^>]*>/g, ' ').trim().slice(0, 150);
-          setAuthError(`Server sync error: HTTP ${response.status} ${response.statusText}.${cleanSnippet ? ' Details: ' + cleanSnippet : ''}`);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      if (data.user) {
-        setUser(data.user);
-        localStorage.setItem('auth_email', data.user.email);
-        setOnboardingStep(1);
-      } else if (data.error) {
-        setAuthError(data.error);
       }
     } catch (err: any) {
       console.error('[AxyFx] Registration connection error:', err);
@@ -522,30 +449,6 @@ export default function App() {
 
       if (supabaseError) {
         setAuthError(supabaseError.message);
-        setActionLoading(false);
-        return;
-      }
-
-      // Sync registration session with Express server after OTP
-      const response = await authFetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        console.error('[AxyFx] Register server sync error:', errorText);
-        setAuthError('Server sync error after OTP verification.');
-        return;
-      }
-
-      const data = await response.json();
-      if (data.user) {
-        setUser(data.user);
-        setOnboardingStep(1);
-      } else if (data.error) {
-        setAuthError(data.error);
       }
     } catch (err: any) {
       setAuthError(`OTP Verification error: ${err?.message || err}`);
@@ -560,7 +463,6 @@ export default function App() {
     } catch (e) {
       console.error('[AxyFx] Error during Supabase signout:', e);
     }
-    await authFetch('/api/auth/logout', { method: 'POST' });
     localStorage.removeItem('auth_email');
     localStorage.removeItem('selected_account_id');
     setUser(null);
@@ -909,19 +811,17 @@ export default function App() {
     }
     setActionLoading(true);
     try {
-      const res = await authFetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user?.email })
+      const { error } = await supabase.auth.updateUser({
+        password: settingsNewPassword
       });
-      if (res.ok) {
+      if (!error) {
         alert('Password updated successfully.');
         setSettingsCurrPassword('');
         setSettingsNewPassword('');
         setSettingsConfirmPassword('');
         setShowPasswordChange(false);
       } else {
-        alert('Failed to update password.');
+        alert(error.message || 'Failed to update password.');
       }
     } catch (e) {
       alert('Error changing password.');
@@ -1528,7 +1428,12 @@ export default function App() {
                   }}
                   className="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg p-2.5 text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
                 >
-                  <Compass className="h-4 w-4 text-slate-500" />
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z" />
+                    <path fill="#34A853" d="M3.67 7.72 6.76 10a6.1 6.1 0 0 1 5.24-3.04c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 8.1 2 4.72 4.21 3.67 7.72z" opacity="0.15" />
+                    <path fill="#FBBC05" d="M12 22c2.68 0 4.94-.88 6.59-2.39l-3.05-2.5c-.84.57-1.94.97-3.54.97-4.09 0-5.24-2.43-5.5-3.72H3.45C4.24 19.12 7.65 22 12 22z" opacity="0.15" />
+                    <path fill="#4285F4" d="M21.55 12.29c0-.65-.07-1.15-.16-1.65H12v3.9h5.5c-.26 1.37-1.1 2.58-2.41 3.46l3.05 2.5C19.96 18.86 21.55 15.92 21.55 12.29z" opacity="0.15" />
+                  </svg>
                   Sign In with Google Account
                 </button>
               </div>
