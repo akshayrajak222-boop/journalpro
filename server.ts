@@ -484,16 +484,16 @@ async function ensureDbLoaded() {
   return db;
 }
 
-async function saveDatabase(data: any) {
+async function saveDatabase(data: any, overrideEmail?: string) {
   db = data;
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Failed to write db.json locally:', err);
+    // Ignore read-only filesystem issues
   }
 
   if (useSupabase) {
-    const activeEmail = currentUser?.email || data.users?.[0]?.email;
+    const activeEmail = overrideEmail || currentUser?.email || data.users?.[0]?.email;
     if (activeEmail) {
       const normalizedEmail = activeEmail.toLowerCase().trim();
       try {
@@ -582,17 +582,21 @@ const PORT = 3000;
           email: normalizedEmail,
           name: name || normalizedEmail.split('@')[0],
           password: password || '',
+          experience: 'Intermediate',
+          tradingStyle: 'Day Trading',
+          mainMarkets: ['Forex', 'Gold'],
           onboardingCompleted: false,
           isPro: false
         };
         db.users.push(user);
-        await saveDatabase(db);
       } else if (name) {
         user.name = name;
-        await saveDatabase(db);
+        if (password) user.password = password;
       }
 
       currentUser = user;
+      await saveDatabase(db, normalizedEmail);
+
       res.json({ message: 'Registration successful', user });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Register endpoint error:', err);
@@ -617,14 +621,18 @@ const PORT = 3000;
           email: normalizedEmail,
           name: normalizedEmail.split('@')[0],
           password: password || '',
+          experience: 'Intermediate',
+          tradingStyle: 'Day Trading',
+          mainMarkets: ['Forex', 'Gold'],
           onboardingCompleted: false,
           isPro: false
         };
         db.users.push(user);
-        await saveDatabase(db);
       }
 
       currentUser = user;
+      await saveDatabase(db, normalizedEmail);
+
       res.json({ message: 'Login successful', user });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Login endpoint error:', err);
@@ -632,19 +640,22 @@ const PORT = 3000;
     }
   });
 
-  app.get('/api/auth/me', (req, res) => {
-    if (currentUser) {
-      return res.json({ user: currentUser });
-    }
+  app.get('/api/auth/me', async (req, res) => {
     const authEmail = req.headers['x-auth-email'] as string | undefined;
     if (authEmail) {
       const email = authEmail.toLowerCase().trim();
+      db = await ensureUserDbLoaded(email);
       const dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
       if (dbUser) {
         currentUser = dbUser;
         return res.json({ user: currentUser });
       }
     }
+
+    if (currentUser) {
+      return res.json({ user: currentUser });
+    }
+
     return res.status(401).json({ error: 'Not authenticated' });
   });
 
