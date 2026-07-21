@@ -1189,14 +1189,16 @@ export default function App() {
   // Auth Layout (if no user)
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-50 relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-800">
+      <div className="min-h-screen bg-[#f5f7fb] relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-800">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-400/10 blur-3xl"></div>
-          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl"></div>
+          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-cyan-400/8 blur-3xl"></div>
         </div>
-        <div className="relative w-full max-w-md">
-          <div className="bg-white/95 backdrop-blur border border-slate-200 rounded-[2rem] shadow-[0_24px_70px_-30px_rgba(15,23,42,0.28)] p-8 space-y-6">
-            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2rem] bg-gradient-to-r from-blue-600 to-indigo-500"></div>
+        <div className="relative w-full max-w-[560px]">
+          <div className="relative bg-[#fffefb] backdrop-blur border border-slate-200 rounded-[2.3rem] shadow-[0_28px_80px_-32px_rgba(15,23,42,0.22)] p-8 md:p-10 space-y-6 overflow-hidden">
+            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2.3rem] bg-gradient-to-r from-blue-600 to-indigo-500"></div>
+            <div className="absolute inset-y-8 left-6 w-px bg-slate-200/70"></div>
+            <div className="absolute inset-y-8 right-6 w-px bg-slate-100/70"></div>
             <div className="text-center space-y-3">
               <Logo size={46} className="mx-auto" />
               <div>
@@ -1211,9 +1213,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-700">Professional trading journal</span>
-              <p className="mt-1 text-[11px] leading-5 text-slate-500">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.32em] text-blue-700">Professional trading journal</span>
+              <p className="mt-2 text-[11px] leading-5 text-slate-500">
                 Simple login, clean layout, and quick access to your dashboard.
               </p>
             </div>
@@ -1231,7 +1233,7 @@ export default function App() {
               </div>
               <button 
                 type="submit"
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition shadow-sm"
               >
                 Send Password Reset Instructions
               </button>
@@ -1263,7 +1265,7 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading || otpCode.length !== 6}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Verifying...' : 'Verify Code & Login'}
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1332,7 +1334,7 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Creating Workspace...' : 'Register Secure Account'}
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -1391,7 +1393,7 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Verifying Authorization...' : 'Authenticate & Sign In'}
                 <ArrowRight className="h-3.5 w-3.5" />
