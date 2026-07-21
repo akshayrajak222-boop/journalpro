@@ -1,0 +1,649 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Custom scrollbars for a cleaner SaaS interface */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+
+/* Custom styling for Trading Performance Calendar Card */
+#trading-calendar-card {
+  background-color: #f0f4f8 !important;
+  background-image: none !important; /* Clear Tailwind gradient in light mode */
+  border: 1px solid #d1dce8 !important;
+}
+html.dark #trading-calendar-card,
+.dark #trading-calendar-card {
+  background-color: #060913 !important;
+  background-image: none !important;
+  border: 1px solid #1e293b !important;
+}
+
+/* Light mode — force all calendar day buttons to soft off-white */
+#trading-calendar-card button {
+  background-color: #f5f7fa !important;
+  background-image: none !important;
+  border: 1px solid #d8e0ea !important;
+  color: #0f172a !important;
+}
+/* Keep profit days green */
+#trading-calendar-card button.border-emerald-200 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+/* Keep loss days red */
+#trading-calendar-card button.border-rose-200 {
+  background-color: #fff1f2 !important;
+  border-color: #fda4af !important;
+}
+
+/* Dark mode — revert day buttons to dark */
+html.dark #trading-calendar-card button,
+.dark #trading-calendar-card button {
+  background-color: rgba(30, 41, 59, 0.35) !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  color: #f1f5f9 !important;
+}
+html.dark #trading-calendar-card button.border-emerald-200,
+.dark #trading-calendar-card button.border-emerald-200 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+html.dark #trading-calendar-card button.border-rose-200,
+.dark #trading-calendar-card button.border-rose-200 {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Light mode sidebar / stats panels */
+#trading-calendar-card .lg\:col-span-1 > div {
+  background-color: #eef1f6 !important;
+  background-image: none !important;
+  border: 1px solid #d1dce8 !important;
+}
+html.dark #trading-calendar-card .lg\:col-span-1 > div,
+.dark #trading-calendar-card .lg\:col-span-1 > div {
+  background-color: rgba(30, 41, 59, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* Explicit high-contrast text styles for light theme to guarantee visibility */
+#trading-calendar-card .trading-calendar-title,
+#trading-calendar-card h2 {
+  color: #000000 !important;
+}
+#trading-calendar-card .trading-calendar-desc,
+#trading-calendar-card p {
+  color: #1e293b !important;
+}
+#trading-calendar-card .trading-calendar-month {
+  color: #000000 !important;
+}
+#trading-calendar-card .calendar-day-name {
+  color: #334155 !important;
+}
+
+/* Dark mode resets for the custom calendar classes */
+html.dark #trading-calendar-card .trading-calendar-title,
+.dark #trading-calendar-card .trading-calendar-title,
+html.dark #trading-calendar-card h2,
+.dark #trading-calendar-card h2 {
+  color: #ffffff !important;
+}
+html.dark #trading-calendar-card .trading-calendar-desc,
+.dark #trading-calendar-card .trading-calendar-desc,
+html.dark #trading-calendar-card p,
+.dark #trading-calendar-card p {
+  color: #cbd5e1 !important;
+}
+html.dark #trading-calendar-card .trading-calendar-month,
+.dark #trading-calendar-card .trading-calendar-month {
+  color: #ffffff !important;
+}
+html.dark #trading-calendar-card .calendar-day-name,
+.dark #trading-calendar-card .calendar-day-name {
+  color: #f1f5f9 !important;
+}
+
+/* Explicit date numbers inside day boxes - Black in light theme, off-white in dark theme */
+#trading-calendar-card .calendar-day-number {
+  color: #000000 !important;
+}
+html.dark #trading-calendar-card .calendar-day-number,
+.dark #trading-calendar-card .calendar-day-number {
+  color: #f8fafc !important;
+}
+
+/* Calendar padding boxes (empty slots) */
+.calendar-day-box {
+  background-color: #e8ecf2 !important;
+  background-image: none !important;
+  border: 1px solid #d1dce8 !important;
+}
+html.dark .calendar-day-box,
+.dark .calendar-day-box {
+  background-color: rgba(30, 41, 59, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Calendar Sidebar/Stats Boxes - Crisp white inside, clear borders in light mode */
+.calendar-sidebar-box {
+  background-color: #eef1f6 !important;
+  background-image: none !important;
+  border: 1.5px solid #d1dce8 !important;
+}
+html.dark .calendar-sidebar-box,
+.dark .calendar-sidebar-box {
+  background-color: rgba(30, 41, 59, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Comprehensive Dark Mode Overrides - Premium Obsidian & Indigo Glow Theme */
+html.dark, html.dark body {
+  background-color: #03060d !important;
+  color: #f8fafc !important;
+  background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.04) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.01) 0px, transparent 50%) !important;
+}
+
+/* Base layouts */
+.dark .bg-\[\#FBFBFA\]\/40,
+.dark .bg-slate-50,
+.dark .bg-slate-100\/50,
+.dark .bg-slate-100\/30,
+.dark .bg-[#FBFBFA]\/40 {
+  background-color: #1a1e2a !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #050811 !important;
+}
+
+.dark .bg-white {
+  background-color: #060913 !important;
+  border-color: #1e293b !important;
+}
+
+.dark .bg-\[\#FBFBFA\] {
+  background-color: #04060b !important;
+}
+
+.dark .bg-\[\#f4f4f3\] {
+  background-color: #060913 !important;
+}
+
+.dark .bg-\[\#efefee\] {
+  background-color: #090d19 !important;
+}
+
+/* Sidebar navigation active/inactive states */
+.dark .bg-\[\#efefee\] {
+  background-color: rgba(99, 102, 241, 0.12) !important;
+  color: #a5b4fc !important;
+  border: 1px solid rgba(99, 102, 241, 0.22) !important;
+}
+
+.dark .hover\:bg-\[\#efefee\]\/60:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  color: #f8fafc !important;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-slate-100\/40:hover {
+  background-color: #060913 !important;
+}
+
+/* Text Overrides - High-contrast premium typography */
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-indigo-600,
+.dark .text-indigo-700 {
+  color: #818cf8 !important;
+}
+
+/* Borders - Elegant, high-fidelity thin borders */
+.dark .border,
+.dark .border-slate-50,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-200\/80,
+.dark .border-slate-300,
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-slate-200\/60,
+.dark .border-slate-200\/50,
+.dark .border-slate-100\/80 {
+  border-color: #334155 !important;
+}
+
+.dark .border-b, 
+.dark .border-t, 
+.dark .border-r, 
+.dark .border-l {
+  border-color: #334155 !important;
+}
+
+/* Inputs, Selects, Textareas - Premium field styling */
+.dark input, 
+.dark select, 
+.dark textarea {
+  background-color: #04060d !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+.dark input:focus, 
+.dark select:focus, 
+.dark textarea:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important;
+  outline: none;
+}
+
+.dark input::placeholder, 
+.dark select::placeholder, 
+.dark textarea::placeholder {
+  color: #475569 !important;
+}
+
+/* Interactive badges, indicators, & alert boxes */
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/50,
+.dark .bg-emerald-100\/50,
+.dark .bg-emerald-100,
+.dark .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.06) !important;
+  border: 1px solid rgba(16, 185, 129, 0.15) !important;
+}
+.dark .text-emerald-950,
+.dark .text-emerald-800,
+.dark .text-emerald-700,
+.dark .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+.dark .bg-indigo-50,
+.dark .bg-indigo-100\/50,
+.dark .bg-indigo-100,
+.dark .bg-indigo-50\/70,
+.dark .bg-[#efefee] {
+  background-color: rgba(99, 102, 241, 0.06) !important;
+  border: 1px solid rgba(99, 102, 241, 0.15) !important;
+}
+.dark .text-indigo-900,
+.dark .text-indigo-800,
+.dark .text-indigo-700,
+.dark .text-indigo-950\/90 {
+  color: #a5b4fc !important;
+}
+
+.dark .bg-blue-50,
+.dark .bg-blue-50\/40,
+.dark .bg-blue-100\/50,
+.dark .bg-blue-100,
+.dark .bg-blue-50\/60 {
+  background-color: rgba(59, 130, 246, 0.06) !important;
+  border: 1px solid rgba(59, 130, 246, 0.15) !important;
+}
+.dark .text-blue-900,
+.dark .text-blue-800,
+.dark .text-blue-700,
+.dark .text-blue-700\/80 {
+  color: #60a5fa !important;
+}
+
+.dark .bg-rose-50,
+.dark .bg-rose-100\/50,
+.dark .bg-rose-100,
+.dark .bg-rose-50\/70 {
+  background-color: rgba(239, 68, 68, 0.06) !important;
+  border: 1px solid rgba(239, 68, 68, 0.15) !important;
+}
+.dark .text-rose-950,
+.dark .text-rose-900,
+.dark .text-rose-800,
+.dark .text-rose-700,
+.dark .text-rose-600 {
+  color: #f87171 !important;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-100\/50,
+.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.06) !important;
+  border: 1px solid rgba(245, 158, 11, 0.15) !important;
+}
+.dark .text-amber-900,
+.dark .text-amber-800,
+.dark .text-amber-700 {
+  color: #fbbf24 !important;
+}
+
+/* Color Badge & Border Overrides */
+.dark .border-emerald-100,
+.dark .border-emerald-200 {
+  border-color: rgba(16, 185, 129, 0.15) !important;
+}
+
+.dark .border-blue-100,
+.dark .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.dark .border-rose-100,
+.dark .border-rose-200 {
+  border-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+.dark .border-amber-100,
+.dark .border-amber-200 {
+  border-color: rgba(245, 158, 11, 0.15) !important;
+}
+
+/* Count badges and tag badges */
+.dark .bg-slate-200,
+.dark .bg-slate-200\/50,
+.dark .bg-slate-200\/80 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Hover background lists and tags */
+.dark .hover\:bg-slate-50\/50:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Premium Buttons in Dark Mode */
+.dark button.bg-slate-900,
+.dark .bg-slate-900[type="button"],
+.dark .bg-slate-900[type="submit"] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.4) !important;
+}
+
+.dark button.bg-slate-900:hover,
+.dark .bg-slate-900[type="button"]:hover,
+.dark .bg-slate-900[type="submit"]:hover {
+  background-color: #4338ca !important;
+  box-shadow: 0 6px 20px 0 rgba(79, 70, 229, 0.5) !important;
+}
+
+.dark button.bg-white,
+.dark button.bg-slate-50,
+.dark button.bg-slate-100 {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.dark button.bg-white:hover,
+.dark button.bg-slate-50:hover,
+.dark button.bg-slate-100:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+/* Cards & UI Panels */
+.dark .rounded-xl.bg-white,
+.dark .rounded-2xl.bg-white,
+.dark .rounded-3xl.bg-white {
+  background-color: #060913 !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Primary indigo buttons glow */
+.dark .bg-indigo-600,
+.dark .bg-indigo-700 {
+  background-color: #4f46e5 !important;
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.3) !important;
+}
+.dark .bg-indigo-600:hover,
+.dark .bg-indigo-700:hover {
+  background-color: #4338ca !important;
+  box-shadow: 0 6px 20px 0 rgba(79, 70, 229, 0.4) !important;
+}
+
+.dark .bg-slate-900 {
+  background-color: #03060d !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Scrollbars & Recharts Tooltip in Dark */
+.dark ::-webkit-scrollbar-thumb {
+  background: #1e293b;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.dark .recharts-default-tooltip {
+  background-color: #060913 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+  color: #f1f5f9 !important;
+}
+.dark .recharts-tooltip-item {
+  color: #f1f5f9 !important;
+}
+
+/* Beautiful grid lines in dark mode */
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.04) !important;
+}
+
+.dark .recharts-text {
+  fill: #64748b !important;
+}
+
+/* Accent glass borders */
+.dark .glass-panel {
+  background: rgba(6, 9, 19, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Direct specific overrides for opacity backgrounds inside layout nodes */
+.dark .bg-slate-50\/95 {
+  background-color: rgba(6, 9, 19, 0.95) !important;
+}
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/70 {
+  background-color: rgba(6, 9, 19, 0.5) !important;
+}
+.dark .bg-white\/80 {
+  background-color: rgba(6, 9, 19, 0.8) !important;
+}
+
+/* ───── AI Mentor / AI Insights - Light Mode Overrides ───── */
+/* Ensure the premium teaser renders correctly in light mode */
+#ai-insights-premium-teaser {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.dark #ai-insights-premium-teaser,
+.dark #ai-insights-premium-teaser {
+  background: linear-gradient(135deg, #0f172a 0%, #020617 100%) !important;
+  border: 1px solid #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Light mode heading and paragraph text in AI teaser */
+#ai-insights-premium-teaser h2,
+#ai-insights-premium-teaser h3 {
+  color: #0f172a !important;
+}
+#ai-insights-premium-teaser p {
+  color: #475569 !important;
+}
+html.dark #ai-insights-premium-teaser h2,
+html.dark #ai-insights-premium-teaser h3,
+.dark #ai-insights-premium-teaser h2,
+.dark #ai-insights-premium-teaser h3 {
+  color: #f1f5f9 !important;
+}
+html.dark #ai-insights-premium-teaser p,
+.dark #ai-insights-premium-teaser p {
+  color: #94a3b8 !important;
+}
+
+/* ───── AI Mentor Chat (Pro) - Light / Dark Mode Overrides ───── */
+
+/* Outer card */
+#ai-mentor-card {
+  background-color: #f0f4f8 !important;
+  background-image: none !important;
+  border: 1px solid #d1dce8 !important;
+}
+html.dark #ai-mentor-card,
+.dark #ai-mentor-card {
+  background-color: #060913 !important;
+  background-image: none !important;
+  border: 1px solid #1e293b !important;
+}
+
+/* Header bar */
+#ai-mentor-card > div:first-child {
+  background-color: #e8edf4 !important;
+  background-image: none !important;
+  border-bottom-color: #d1dce8 !important;
+}
+html.dark #ai-mentor-card > div:first-child,
+.dark #ai-mentor-card > div:first-child {
+  background-color: rgba(6, 9, 19, 0.6) !important;
+  border-bottom-color: #1e293b !important;
+}
+
+/* Header text */
+#ai-mentor-card h2 {
+  color: #0f172a !important;
+}
+#ai-mentor-card p {
+  color: #475569 !important;
+}
+html.dark #ai-mentor-card h2,
+.dark #ai-mentor-card h2 {
+  color: #f1f5f9 !important;
+}
+html.dark #ai-mentor-card p,
+.dark #ai-mentor-card p {
+  color: #94a3b8 !important;
+}
+
+/* Chat message area (scrollable body) */
+#ai-mentor-card .flex-1.overflow-y-auto {
+  background-color: #eef2f7 !important;
+  background-image: none !important;
+}
+html.dark #ai-mentor-card .flex-1.overflow-y-auto,
+.dark #ai-mentor-card .flex-1.overflow-y-auto {
+  background-color: rgba(3, 6, 13, 0.5) !important;
+}
+
+/* Mentor message bubble (bg-white inside chat) */
+#ai-mentor-card .rounded-tl-none {
+  background-color: #ffffff !important;
+  border-color: #d1dce8 !important;
+  color: #1e293b !important;
+}
+html.dark #ai-mentor-card .rounded-tl-none,
+.dark #ai-mentor-card .rounded-tl-none {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+  border-color: rgba(255,255,255,0.07) !important;
+  color: #cbd5e1 !important;
+}
+
+/* User avatar circle */
+#ai-mentor-card .bg-slate-200 {
+  background-color: #dde3ec !important;
+}
+html.dark #ai-mentor-card .bg-slate-200,
+.dark #ai-mentor-card .bg-slate-200 {
+  background-color: rgba(51, 65, 85, 0.8) !important;
+}
+
+/* Input footer bar */
+#ai-mentor-card > div:last-child {
+  background-color: #e8edf4 !important;
+  background-image: none !important;
+  border-top-color: #d1dce8 !important;
+}
+html.dark #ai-mentor-card > div:last-child,
+.dark #ai-mentor-card > div:last-child {
+  background-color: #060913 !important;
+  border-top-color: #1e293b !important;
+}
+
+/* Input field */
+#ai-mentor-card input[type="text"] {
+  background-color: #f5f7fa !important;
+  border-color: #c8d3e0 !important;
+  color: #0f172a !important;
+}
+#ai-mentor-card input[type="text"]::placeholder {
+  color: #94a3b8 !important;
+}
+html.dark #ai-mentor-card input[type="text"],
+.dark #ai-mentor-card input[type="text"] {
+  background-color: #04060d !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+html.dark #ai-mentor-card input[type="text"]::placeholder,
+.dark #ai-mentor-card input[type="text"]::placeholder {
+  color: #475569 !important;
+}
