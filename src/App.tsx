@@ -1189,89 +1189,39 @@ export default function App() {
   // Auth Layout (if no user)
   if (!user) {
     return (
-      <div className="min-h-screen relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.10),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#eef4ff_100%)] flex items-center justify-center p-4 font-sans antialiased text-slate-800">
+      <div className="min-h-screen bg-slate-50 relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-800">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-blue-400/10 blur-3xl"></div>
-          <div className="absolute -bottom-16 right-8 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl"></div>
+          <div className="absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-400/10 blur-3xl"></div>
+          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl"></div>
         </div>
-        <div className="relative w-full max-w-5xl grid gap-6 md:grid-cols-[1.05fr_0.95fr] items-center">
-          <div className="hidden md:flex flex-col justify-between rounded-[2rem] border border-slate-200/70 bg-slate-950 text-white p-8 lg:p-10 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.55)] min-h-[620px] relative overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(96,165,250,0.22),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(59,130,246,0.18),_transparent_28%)]"></div>
-            <div className="relative space-y-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200">
-                Trusted trading workspace
-              </div>
-              <div className="space-y-4">
-                <Logo size={54} className="text-white" />
-                <h2 className="max-w-sm text-4xl font-bold tracking-tight font-display">Clean, focused journaling for serious traders.</h2>
-                <p className="max-w-md text-sm leading-6 text-slate-300">
-                  Capture every trade, review performance faster, and keep your workflow simple with a polished dashboard built for discipline.
+        <div className="relative w-full max-w-md">
+          <div className="bg-white/95 backdrop-blur border border-slate-200 rounded-[2rem] shadow-[0_24px_70px_-30px_rgba(15,23,42,0.28)] p-8 space-y-6">
+            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2rem] bg-gradient-to-r from-blue-600 to-indigo-500"></div>
+            <div className="text-center space-y-3">
+              <Logo size={46} className="mx-auto" />
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display">FX Journal Pro</h1>
+                <p className="mt-2 text-sm text-slate-500">
+                  {isRegistering
+                    ? 'Create your account'
+                    : isForgotPassword
+                    ? 'Reset your password'
+                    : 'Sign in to continue'}
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  ['Fast login', 'Google or email'],
-                  ['Track trades', 'One clear dashboard'],
-                  ['Stay organized', 'Notes and analytics'],
-                ].map(([title, desc]) => (
-                  <div key={title} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-                    <div className="text-sm font-semibold text-white">{title}</div>
-                    <div className="mt-1 text-xs leading-5 text-slate-300">{desc}</div>
-                  </div>
-                ))}
-              </div>
             </div>
-            <div className="relative mt-10 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300">
-              Designed for a premium, distraction-free first impression.
-            </div>
-          </div>
-          <div className="bg-white/90 backdrop-blur-xl border border-white/70 rounded-[2rem] shadow-[0_30px_100px_-35px_rgba(37,99,235,0.35)] w-full max-w-md mx-auto p-8 space-y-6 relative overflow-hidden">
-            {/* Subtle branding accent */}
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600"></div>
-            <div className="absolute inset-x-6 top-6 h-24 rounded-full bg-blue-100/40 blur-3xl pointer-events-none"></div>
 
-            <div className="relative text-center space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/80 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-blue-700 shadow-sm">
-                <Sparkles className="h-3.5 w-3.5" />
-                Premium trading workspace
-              </div>
-              <Logo size={48} className="mx-auto" />
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display flex items-center justify-center gap-1.5">
-                FX Journal Pro
-              </h1>
-              <p className="text-xs text-slate-500">
-                {isRegistering 
-                  ? 'Create your institutional trading journal account' 
-                  : isForgotPassword 
-                  ? 'Reset your secure login password' 
-                : 'Sign in to access your trading analytics dashboard'
-              }
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-700">Professional trading journal</span>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                Simple login, clean layout, and quick access to your dashboard.
               </p>
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                {['Fast sign-in', 'Trade journal', 'Google ready'].map((label) => (
-                  <span
-                    key={label}
-                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-semibold text-slate-500 shadow-[0_8px_20px_-14px_rgba(15,23,42,0.35)]"
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Alert announcement bar */}
-            <div className="rounded-[1.4rem] border border-blue-100/80 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-4 text-center shadow-[0_14px_40px_-26px_rgba(37,99,235,0.55)]">
-              <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-blue-100">
-                <Sparkles className="h-4 w-4 text-blue-600" />
-              </div>
-              <span className="text-[10px] font-bold text-blue-700 block uppercase tracking-[0.28em]">Instant Sandbox Trial</span>
-              <p className="text-[11px] text-blue-600 mt-1 leading-5">Simply enter any email to immediately log in and explore.</p>
             </div>
 
             {isForgotPassword ? (
             <form onSubmit={(e) => { e.preventDefault(); alert('Reset link triggered!'); setIsForgotPassword(false); }} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Registration Email</label>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Email Address</label>
                 <input 
                   type="email" 
                   required 
@@ -1281,7 +1231,7 @@ export default function App() {
               </div>
               <button 
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition"
               >
                 Send Password Reset Instructions
               </button>
@@ -1295,7 +1245,7 @@ export default function App() {
             </form>
           ) : isOtpMode ? (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-center mb-4 text-xs text-blue-800">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center mb-4 text-xs text-slate-600">
                 A 6-digit confirmation code has been sent to <br/><strong className="font-bold">{authEmail}</strong>
               </div>
               <div>
@@ -1313,14 +1263,14 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading || otpCode.length !== 6}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {actionLoading ? 'Verifying...' : 'Verify Code & Login'}
                 <CheckCircle2 className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 border border-red-100 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
@@ -1366,7 +1316,7 @@ export default function App() {
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-white border border-slate-300 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-slate-50 border border-slate-200 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter password"
                   />
                   <button
@@ -1382,14 +1332,14 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {actionLoading ? 'Creating Workspace...' : 'Register Secure Account'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 border border-red-100 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
@@ -1441,14 +1391,14 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {actionLoading ? 'Verifying Authorization...' : 'Authenticate & Sign In'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 border border-red-100 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
@@ -1491,7 +1441,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
+            <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
                 <span>New to FX Journal Pro?</span>
                 <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Create free account</button>
               </div>
