@@ -1189,21 +1189,21 @@ export default function App() {
   // Auth Layout (if no user)
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#f5f7fb] relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-800">
+      <div className="min-h-screen bg-[#05070d] relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-100">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-400/10 blur-3xl"></div>
-          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-cyan-400/8 blur-3xl"></div>
+          <div className="absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-500/15 blur-3xl"></div>
+          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl"></div>
         </div>
         <div className="relative w-full max-w-[560px]">
-          <div className="relative bg-[#fffefb] backdrop-blur border border-slate-200 rounded-[2.3rem] shadow-[0_28px_80px_-32px_rgba(15,23,42,0.22)] p-8 md:p-10 space-y-6 overflow-hidden">
-            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2.3rem] bg-gradient-to-r from-blue-600 to-indigo-500"></div>
-            <div className="absolute inset-y-8 left-6 w-px bg-slate-200/70"></div>
-            <div className="absolute inset-y-8 right-6 w-px bg-slate-100/70"></div>
+          <div className="relative bg-[#090d16] backdrop-blur border border-white/10 rounded-[2.3rem] shadow-[0_28px_80px_-32px_rgba(0,0,0,0.75)] p-8 md:p-10 space-y-6 overflow-hidden">
+            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2.3rem] bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500"></div>
+            <div className="absolute inset-y-8 left-6 w-px bg-white/5"></div>
+            <div className="absolute inset-y-8 right-6 w-px bg-white/5"></div>
             <div className="text-center space-y-3">
               <Logo size={46} className="mx-auto" />
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display">FX Journal Pro</h1>
-                <p className="mt-2 text-sm text-slate-500">
+                <h1 className="text-2xl font-bold tracking-tight text-white font-display">FX Journal Pro</h1>
+                <p className="mt-2 text-sm text-slate-400">
                   {isRegistering
                     ? 'Create your account'
                     : isForgotPassword
@@ -1213,9 +1213,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-              <span className="text-[10px] font-bold uppercase tracking-[0.32em] text-blue-700">Professional trading journal</span>
-              <p className="mt-2 text-[11px] leading-5 text-slate-500">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-300">Professional trading journal</span>
+              <p className="mt-2 text-[11px] leading-5 text-slate-400">
                 Simple login, clean layout, and quick access to your dashboard.
               </p>
             </div>
@@ -1223,56 +1223,56 @@ export default function App() {
             {isForgotPassword ? (
             <form onSubmit={(e) => { e.preventDefault(); alert('Reset link triggered!'); setIsForgotPassword(false); }} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Email Address</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Email Address</label>
                 <input 
                   type="email" 
                   required 
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="name@email.com"
                 />
               </div>
               <button 
                 type="submit"
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition shadow-sm"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition shadow-sm"
               >
                 Send Password Reset Instructions
               </button>
               <button 
                 type="button" 
                 onClick={() => setIsForgotPassword(false)}
-                className="w-full text-slate-500 hover:text-slate-800 text-xs font-medium block text-center"
+                className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center"
               >
                 Back to Sign In
               </button>
             </form>
           ) : isOtpMode ? (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center mb-4 text-xs text-slate-600">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center mb-4 text-xs text-slate-300">
                 A 6-digit confirmation code has been sent to <br/><strong className="font-bold">{authEmail}</strong>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Enter 6-Digit Code</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Enter 6-Digit Code</label>
                 <input 
                   type="text" 
                   required 
                   maxLength={6}
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  className="bg-slate-50 border border-slate-200 text-lg text-center tracking-[0.5em] rounded-lg p-3 w-full font-mono focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-lg text-center tracking-[0.5em] rounded-xl p-3 w-full font-mono text-slate-100 focus:ring-cyan-500 focus:border-cyan-500"
                   placeholder="------"
                 />
               </div>
               <button 
                 type="submit" 
                 disabled={actionLoading || otpCode.length !== 6}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Verifying...' : 'Verify Code & Login'}
                 <CheckCircle2 className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
@@ -1281,7 +1281,7 @@ export default function App() {
               <button 
                 type="button" 
                 onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
-                className="w-full text-slate-500 hover:text-slate-800 text-xs font-medium block text-center mt-2"
+                className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center mt-2"
               >
                 Change Email
               </button>
@@ -1289,36 +1289,36 @@ export default function App() {
           ) : isRegistering ? (
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Full Name</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Full Name</label>
                 <input 
                   type="text" 
                   required 
                   value={authName}
                   onChange={(e) => setAuthName(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="Your Name"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Email</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Email</label>
                 <input 
                   type="email" 
                   required 
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="name@email.com"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Password</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Password</label>
                 <div className="relative">
                   <input 
                     type={showPassword ? "text" : "password"} 
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 pr-10 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                     placeholder="Enter password"
                   />
                   <button
@@ -1334,14 +1334,14 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Creating Workspace...' : 'Register Secure Account'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
@@ -1349,26 +1349,26 @@ export default function App() {
 
               <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
                 <span>Already have an account?</span>
-                <button type="button" onClick={() => { setIsRegistering(false); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Sign In</button>
+                <button type="button" onClick={() => { setIsRegistering(false); setAuthError(null); }} className="text-cyan-300 hover:underline font-semibold">Sign In</button>
               </div>
             </form>
           ) : (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Email Address</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Email Address</label>
                 <input 
                   type="email" 
                   required 
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="name@email.com"
                 />
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-600">Password</label>
-                  <button type="button" onClick={() => setIsForgotPassword(true)} className="text-blue-600 hover:underline text-[11px] font-medium">Forgot Password?</button>
+                  <label className="text-xs font-semibold text-slate-300">Password</label>
+                  <button type="button" onClick={() => setIsForgotPassword(true)} className="text-cyan-300 hover:underline text-[11px] font-medium">Forgot Password?</button>
                 </div>
                 <div className="relative">
                   <input 
@@ -1376,7 +1376,7 @@ export default function App() {
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-white border border-slate-300 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 pr-10 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                     placeholder="Enter password"
                   />
                   <button
@@ -1393,21 +1393,21 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Verifying Authorization...' : 'Authenticate & Sign In'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
               )}
 
               {/* Google Sign In */}
-              <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
+              <div className="border-t border-white/10 pt-4 flex flex-col gap-2">
                 <button
                   type="button"
                   disabled={actionLoading}
@@ -1431,7 +1431,7 @@ export default function App() {
                       setActionLoading(false);
                     }
                   }}
-                  className="w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl p-3 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50"
+                  className="w-full border border-white/10 bg-[#0f1420] hover:bg-[#111827] text-slate-100 rounded-xl p-3 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z" />
@@ -1443,9 +1443,9 @@ export default function App() {
                 </button>
               </div>
 
-            <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
+              <div className="flex justify-between items-center text-[11px] text-slate-400 mt-2">
                 <span>New to FX Journal Pro?</span>
-                <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Create free account</button>
+                <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-cyan-300 hover:underline font-semibold">Create free account</button>
               </div>
             </form>
           )}
