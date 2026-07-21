@@ -32,7 +32,7 @@ import Logo from './components/Logo';
 export default function App() {
   // Auth states
   const [user, setUser] = useState<UserType | null>(null);
-  const [authEmail, setAuthEmail] = useState('akshayrajpanamthode@gmail.com');
+  const [authEmail, setAuthEmail] = useState('');
   const [authName, setAuthName] = useState('Akshay Raj');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
