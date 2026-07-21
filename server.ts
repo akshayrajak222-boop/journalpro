@@ -555,12 +555,7 @@ const PORT = 3000;
         currentUser = dbUser;
       } else {
         await ensureDbLoaded();
-        const fallbackEmail = 'akshayrajpanamthode@gmail.com';
-        let fallbackUser = db.users.find((u: any) => u.email.toLowerCase() === fallbackEmail);
-        if (!fallbackUser && db.users && db.users.length > 0) {
-          fallbackUser = db.users[0];
-        }
-        currentUser = fallbackUser;
+        currentUser = null;
       }
 
       next();
@@ -646,6 +641,39 @@ const PORT = 3000;
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Login endpoint error:', err);
       res.status(500).json({ error: `Server login error: ${err?.message || err}` });
+    }
+  });
+
+  app.post('/api/auth/oauth', async (req, res) => {
+    try {
+      const { email, name } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      db = await ensureUserDbLoaded(normalizedEmail);
+
+      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+      if (!user) {
+        // Create user dynamically if they signed in via OAuth for the first time
+        user = {
+          id: `user_${Date.now()}`,
+          email: normalizedEmail,
+          name: name || email.split('@')[0],
+          password: '',
+          onboardingCompleted: false,
+          isPro: false
+        };
+        db.users.push(user);
+        await saveDatabase(db);
+      }
+
+      currentUser = user;
+      res.json({ message: 'OAuth login successful', user });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] OAuth endpoint error:', err);
+      res.status(500).json({ error: `Server OAuth login error: ${err?.message || err}` });
     }
   });
 

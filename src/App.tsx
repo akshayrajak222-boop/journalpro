@@ -252,7 +252,78 @@ export default function App() {
   };
 
   useEffect(() => {
-    checkUserSession();
+    // Check if there is an active Supabase session (e.g. from Google OAuth redirect)
+    const syncSupabaseOAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          const email = session.user.email;
+          const name = session.user.user_metadata?.full_name || session.user.user_metadata?.name || email?.split('@')[0] || '';
+          if (email) {
+            const response = await authFetch('/api/auth/oauth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, name })
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.user) {
+                setUser(data.user);
+                localStorage.setItem('auth_email', data.user.email);
+                if (data.user.onboardingCompleted) {
+                  fetchAccountData();
+                } else {
+                  setOnboardingStep(1);
+                }
+                return; // successfully handled via Supabase OAuth
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing Supabase session:', err);
+      }
+      
+      // Fallback to checking normal Express backend session
+      checkUserSession();
+    };
+
+    syncSupabaseOAuth();
+
+    // Subscribe to changes in auth state (especially useful when completing OAuth flow redirects)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session && session.user) {
+        const email = session.user.email;
+        const name = session.user.user_metadata?.full_name || session.user.user_metadata?.name || email?.split('@')[0] || '';
+        if (email) {
+          try {
+            const response = await authFetch('/api/auth/oauth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, name })
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.user) {
+                setUser(data.user);
+                localStorage.setItem('auth_email', data.user.email);
+                if (data.user.onboardingCompleted) {
+                  fetchAccountData();
+                } else {
+                  setOnboardingStep(1);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error syncing OAuth session on state change:', err);
+          }
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Fetch all user accounts, active trades, risk params, support queues
@@ -1430,24 +1501,32 @@ export default function App() {
                 </div>
               )}
 
-              {/* Google Sign In simulation */}
+              {/* Google Sign In */}
               <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAuthEmail('akshayrajpanamthode@gmail.com');
-                    setAuthName('Akshay Raj');
-                    // auto trigger login
-                    setUser({
-                      id: 'user_akshay',
-                      email: 'akshayrajpanamthode@gmail.com',
-                      name: 'Akshay Raj',
-                      onboardingCompleted: true,
-                      isPro: true
-                    });
-                    fetchAccountData();
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    setAuthError(null);
+                    try {
+                      const { error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                          redirectTo: window.location.origin,
+                        },
+                      });
+                      if (error) {
+                        setAuthError(error.message);
+                        setActionLoading(false);
+                      }
+                    } catch (err: any) {
+                      console.error('[AxyFx] Google Sign-In error:', err);
+                      setAuthError(`Google Sign-In error: ${err?.message || err}`);
+                      setActionLoading(false);
+                    }
                   }}
-                  className="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg p-2.5 text-xs font-semibold flex items-center justify-center gap-2 transition"
+                  className="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg p-2.5 text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
                 >
                   <Compass className="h-4 w-4 text-slate-500" />
                   Sign In with Google Account
