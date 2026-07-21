@@ -1189,33 +1189,72 @@ export default function App() {
   // Auth Layout (if no user)
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans antialiased text-slate-800">
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-xl w-full max-w-md p-8 space-y-6 relative overflow-hidden">
-          {/* Subtle branding accent */}
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-600"></div>
-
-          <div className="text-center space-y-3">
-            <Logo size={48} className="mx-auto" />
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display flex items-center justify-center gap-1.5">
-              FX Journal Pro
-            </h1>
-            <p className="text-xs text-slate-500">
-              {isRegistering 
-                ? 'Create your institutional trading journal account' 
-                : isForgotPassword 
-                ? 'Reset your secure login password' 
-                : 'Sign in to access your trading analytics dashboard'
-              }
-            </p>
+      <div className="min-h-screen relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.10),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#eef4ff_100%)] flex items-center justify-center p-4 font-sans antialiased text-slate-800">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-blue-400/10 blur-3xl"></div>
+          <div className="absolute -bottom-16 right-8 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl"></div>
+        </div>
+        <div className="relative w-full max-w-5xl grid gap-6 md:grid-cols-[1.05fr_0.95fr] items-center">
+          <div className="hidden md:flex flex-col justify-between rounded-[2rem] border border-slate-200/70 bg-slate-950 text-white p-8 lg:p-10 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.55)] min-h-[620px] relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(96,165,250,0.22),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(59,130,246,0.18),_transparent_28%)]"></div>
+            <div className="relative space-y-8">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200">
+                Trusted trading workspace
+              </div>
+              <div className="space-y-4">
+                <Logo size={54} className="text-white" />
+                <h2 className="max-w-sm text-4xl font-bold tracking-tight font-display">Clean, focused journaling for serious traders.</h2>
+                <p className="max-w-md text-sm leading-6 text-slate-300">
+                  Capture every trade, review performance faster, and keep your workflow simple with a polished dashboard built for discipline.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  ['Fast login', 'Google or email'],
+                  ['Track trades', 'One clear dashboard'],
+                  ['Stay organized', 'Notes and analytics'],
+                ].map(([title, desc]) => (
+                  <div key={title} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+                    <div className="text-sm font-semibold text-white">{title}</div>
+                    <div className="mt-1 text-xs leading-5 text-slate-300">{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="relative mt-10 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300">
+              Designed for a premium, distraction-free first impression.
+            </div>
           </div>
+          <div className="bg-white/90 backdrop-blur-xl border border-white/70 rounded-[2rem] shadow-[0_30px_100px_-35px_rgba(37,99,235,0.35)] w-full max-w-md mx-auto p-8 space-y-6 relative overflow-hidden">
+            {/* Subtle branding accent */}
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600"></div>
+            <div className="absolute inset-x-6 top-6 h-24 rounded-full bg-blue-100/40 blur-3xl pointer-events-none"></div>
 
-          {/* Alert announcement bar */}
-          <div className="bg-blue-50/70 border border-blue-100 rounded-lg p-3 text-center">
-            <span className="text-[10px] font-bold text-blue-700 block uppercase tracking-wider">Instant Sandbox Trial</span>
-            <p className="text-[11px] text-blue-600 mt-0.5">Simply enter any email to immediately log in and explore!</p>
-          </div>
+            <div className="relative text-center space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-blue-700">
+                Instant Sandbox Trial
+              </div>
+              <Logo size={48} className="mx-auto" />
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display flex items-center justify-center gap-1.5">
+                FX Journal Pro
+              </h1>
+              <p className="text-xs text-slate-500">
+                {isRegistering 
+                  ? 'Create your institutional trading journal account' 
+                  : isForgotPassword 
+                  ? 'Reset your secure login password' 
+                  : 'Sign in to access your trading analytics dashboard'
+                }
+              </p>
+            </div>
 
-          {isForgotPassword ? (
+            {/* Alert announcement bar */}
+            <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-4 text-center shadow-sm">
+              <span className="text-[10px] font-bold text-blue-700 block uppercase tracking-[0.26em]">Instant Sandbox Trial</span>
+              <p className="text-[11px] text-blue-600 mt-1">Simply enter any email to immediately log in and explore!</p>
+            </div>
+
+            {isForgotPassword ? (
             <form onSubmit={(e) => { e.preventDefault(); alert('Reset link triggered!'); setIsForgotPassword(false); }} className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Registration Email</label>
@@ -1426,7 +1465,7 @@ export default function App() {
                       setActionLoading(false);
                     }
                   }}
-                  className="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg p-2.5 text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                  className="w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl p-3 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z" />
@@ -1444,6 +1483,7 @@ export default function App() {
               </div>
             </form>
           )}
+          </div>
         </div>
       </div>
     );
