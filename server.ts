@@ -565,6 +565,89 @@ const PORT = 3000;
     }
   });
 
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { email, name, password } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      db = await ensureUserDbLoaded(normalizedEmail);
+
+      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+      if (!user) {
+        user = {
+          id: `user_${Date.now()}`,
+          email: normalizedEmail,
+          name: name || normalizedEmail.split('@')[0],
+          password: password || '',
+          onboardingCompleted: false,
+          isPro: false
+        };
+        db.users.push(user);
+        await saveDatabase(db);
+      } else if (name) {
+        user.name = name;
+        await saveDatabase(db);
+      }
+
+      currentUser = user;
+      res.json({ message: 'Registration successful', user });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Register endpoint error:', err);
+      res.status(500).json({ error: `Server register error: ${err?.message || err}` });
+    }
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      db = await ensureUserDbLoaded(normalizedEmail);
+
+      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+      if (!user) {
+        user = {
+          id: `user_${Date.now()}`,
+          email: normalizedEmail,
+          name: normalizedEmail.split('@')[0],
+          password: password || '',
+          onboardingCompleted: false,
+          isPro: false
+        };
+        db.users.push(user);
+        await saveDatabase(db);
+      }
+
+      currentUser = user;
+      res.json({ message: 'Login successful', user });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Login endpoint error:', err);
+      res.status(500).json({ error: `Server login error: ${err?.message || err}` });
+    }
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    if (currentUser) {
+      return res.json({ user: currentUser });
+    }
+    const authEmail = req.headers['x-auth-email'] as string | undefined;
+    if (authEmail) {
+      const email = authEmail.toLowerCase().trim();
+      const dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
+      if (dbUser) {
+        currentUser = dbUser;
+        return res.json({ user: currentUser });
+      }
+    }
+    return res.status(401).json({ error: 'Not authenticated' });
+  });
+
   app.post('/api/auth/onboarding', (req, res) => {
     if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
     const { experience, tradingStyle, markets } = req.body;

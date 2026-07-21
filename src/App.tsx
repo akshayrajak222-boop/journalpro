@@ -178,6 +178,30 @@ export default function App() {
       '';
 
     localStorage.setItem('auth_email', email);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': email },
+        body: JSON.stringify({ email, name })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          if (data.user.onboardingCompleted) {
+            await fetchAccountData();
+          } else {
+            setOnboardingStep(1);
+          }
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Error syncing user with backend:', e);
+    }
+
     setUser({
       id: sessionUser?.id || `supabase_${email}`,
       email,
@@ -187,6 +211,7 @@ export default function App() {
     });
 
     await fetchAccountData();
+    setLoading(false);
   };
 
   // Notifications
@@ -266,47 +291,75 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-
     const bootstrapSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await syncSupabaseUser(session.user);
-          return;
+        if (isSupabaseConfigured) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await syncSupabaseUser(session.user);
+            return;
+          }
         }
       } catch (err) {
         console.error('Error loading Supabase session:', err);
       }
+
+      const storedEmail = localStorage.getItem('auth_email');
+      if (storedEmail) {
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { 'x-auth-email': storedEmail }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.user) {
+              setUser(data.user);
+              if (data.user.onboardingCompleted) {
+                await fetchAccountData();
+              } else {
+                setOnboardingStep(1);
+              }
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error('Error loading stored session:', e);
+        }
+      }
+
       setLoading(false);
     };
 
     bootstrapSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
-        await syncSupabaseUser(session.user);
-      }
+    let subscription: any = null;
+    if (isSupabaseConfigured) {
+      const subObj = supabase.auth.onAuthStateChange(async (event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+          await syncSupabaseUser(session.user);
+        }
 
-      if (event === 'SIGNED_OUT') {
-        localStorage.removeItem('auth_email');
-        localStorage.removeItem('selected_account_id');
-        setUser(null);
-        setAccounts([]);
-        setTrades([]);
-        setSelectedAccountId('');
-        setTickets([]);
-        setAnnouncements([]);
-        setRiskSettings(null);
-        setLoading(false);
-      }
-    });
+        if (event === 'SIGNED_OUT') {
+          localStorage.removeItem('auth_email');
+          localStorage.removeItem('selected_account_id');
+          setUser(null);
+          setAccounts([]);
+          setTrades([]);
+          setSelectedAccountId('');
+          setTickets([]);
+          setAnnouncements([]);
+          setRiskSettings(null);
+          setLoading(false);
+        }
+      });
+      subscription = subObj.data?.subscription;
+    }
 
     return () => {
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, [isSupabaseConfigured]);
 
@@ -378,21 +431,49 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      if (!isSupabaseConfigured) {
-        setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable sign in.');
+      if (isSupabaseConfigured) {
+        const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword
+        });
+
+        if (supabaseError) {
+          setAuthError(supabaseError.message);
+          setActionLoading(false);
+          return;
+        }
+
+        if (supabaseData?.session?.user) {
+          await syncSupabaseUser(supabaseData.session.user);
+          return;
+        }
+      }
+
+      // Login/Sync with Express backend
+      localStorage.setItem('auth_email', authEmail);
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        setAuthError(errorData.error || 'Login failed.');
         return;
       }
 
-      const { error: supabaseError } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: authPassword
-      });
-
-      if (supabaseError) {
-        setAuthError(supabaseError.message);
+      const data = await res.json();
+      if (data.user) {
+        setUser(data.user);
+        if (data.user.onboardingCompleted) {
+          await fetchAccountData();
+        } else {
+          setOnboardingStep(1);
+        }
       }
     } catch (err: any) {
-      console.error('[AxyFx] Login connection error:', err);
+      console.error('[AxyFx] Login error:', err);
       setAuthError(`Login connection error: ${err?.message || err || 'Network or Parsing error'}`);
     } finally {
       setActionLoading(false);
@@ -405,28 +486,58 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      if (!isSupabaseConfigured) {
-        setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable sign up.');
+      // 1. First register with Supabase Auth if Supabase is configured
+      if (isSupabaseConfigured) {
+        const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+          options: {
+            data: {
+              full_name: authName
+            }
+          }
+        });
+
+        if (supabaseError) {
+          setAuthError(supabaseError.message);
+          setActionLoading(false);
+          return;
+        }
+
+        if (supabaseData?.session?.user) {
+          await syncSupabaseUser(supabaseData.session.user);
+          return;
+        }
+      }
+
+      // 2. Register/Sync with Express Backend API
+      localStorage.setItem('auth_email', authEmail);
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        setAuthError(errorData.error || 'Failed to create account.');
         return;
       }
 
-      const { error: supabaseError } = await supabase.auth.signUp({
-        email: authEmail,
-        password: authPassword,
-        options: {
-          data: {
-            full_name: authName
-          }
+      const data = await res.json();
+      if (data.user) {
+        setUser(data.user);
+        if (data.user.onboardingCompleted) {
+          await fetchAccountData();
+        } else {
+          setOnboardingStep(1);
         }
-      });
-
-      if (supabaseError) {
-        setAuthError(supabaseError.message);
-        return;
+      } else {
+        setAuthError('Unexpected response from registration server.');
       }
     } catch (err: any) {
       console.error('[AxyFx] Registration connection error:', err);
-      setAuthError(`Registration connection error: ${err?.message || err || 'Network or Parsing error'}`);
+      setAuthError(`Registration error: ${err?.message || err || 'Network error'}`);
     } finally {
       setActionLoading(false);
     }
