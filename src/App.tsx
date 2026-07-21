@@ -432,20 +432,18 @@ export default function App() {
     setAuthError(null);
     try {
       if (isSupabaseConfigured) {
-        const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: authPassword
-        });
+        try {
+          const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+            email: authEmail,
+            password: authPassword
+          });
 
-        if (supabaseError) {
-          setAuthError(supabaseError.message);
-          setActionLoading(false);
-          return;
-        }
-
-        if (supabaseData?.session?.user) {
-          await syncSupabaseUser(supabaseData.session.user);
-          return;
+          if (!supabaseError && supabaseData?.session?.user) {
+            await syncSupabaseUser(supabaseData.session.user);
+            return;
+          }
+        } catch (sErr) {
+          console.warn('[AxyFx] Supabase login warning, falling back to backend:', sErr);
         }
       }
 
@@ -486,31 +484,29 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      // 1. First register with Supabase Auth if Supabase is configured
+      // 1. Try registering with Supabase Auth if configured
       if (isSupabaseConfigured) {
-        const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
-          email: authEmail,
-          password: authPassword,
-          options: {
-            data: {
-              full_name: authName
+        try {
+          const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
+            email: authEmail,
+            password: authPassword,
+            options: {
+              data: {
+                full_name: authName
+              }
             }
+          });
+
+          if (!supabaseError && supabaseData?.session?.user) {
+            await syncSupabaseUser(supabaseData.session.user);
+            return;
           }
-        });
-
-        if (supabaseError) {
-          setAuthError(supabaseError.message);
-          setActionLoading(false);
-          return;
-        }
-
-        if (supabaseData?.session?.user) {
-          await syncSupabaseUser(supabaseData.session.user);
-          return;
+        } catch (sErr) {
+          console.warn('[AxyFx] Supabase register warning, falling back to backend:', sErr);
         }
       }
 
-      // 2. Register/Sync with Express Backend API
+      // 2. Register/Sync with Express Backend API (bypasses email rate limits and allows immediate login)
       localStorage.setItem('auth_email', authEmail);
       const res = await fetch('/api/auth/register', {
         method: 'POST',
