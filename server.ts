@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { 
   User, 
@@ -365,10 +367,16 @@ function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-async function sendOtpEmail(email, otp) {
+async function sendOtpEmail(email, otp, subject = 'Your FX Journal Pro Verification Code') {
   const sendgridKey = process.env.SENDGRID_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.SENDER_EMAIL || 'noreply@fxjournalpro.com';
+  const isReset = subject.toLowerCase().includes('reset');
+  const heading = isReset ? 'Reset your password' : 'Verify your email address';
+  const bodyText = isReset
+    ? 'You requested a password reset for your FX Journal Pro account. Use the code below to set a new password. This code expires in 10 minutes.'
+    : 'Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.';
+  const emailHtml = `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">${heading}</h2><p>${bodyText}</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">${otp}</span></div><p>If you did not request this code, please ignore this email.</p></div>`;
 
   // 1. Try SendGrid if API Key is configured
   if (sendgridKey && sendgridKey !== 'YOUR_SENDGRID_API_KEY' && !sendgridKey.startsWith('SG.xxxx')) {
@@ -390,11 +398,11 @@ async function sendOtpEmail(email, otp) {
             email: fromEmail,
             name: 'FX Journal Pro'
           },
-          subject: 'Your FX Journal Pro Verification Code',
+          subject: subject,
           content: [
             {
               type: 'text/html',
-              value: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">Verify your email address</h2><p>Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">' + otp + '</span></div><p>If you did not request this code, please ignore this email.</p></div>'
+              value: emailHtml
             }
           ]
         })
@@ -428,8 +436,8 @@ async function sendOtpEmail(email, otp) {
         body: JSON.stringify({
           from: 'FX Journal Pro <onboarding@resend.dev>',
           to: email,
-          subject: 'Your FX Journal Pro Verification Code',
-          html: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">Verify your email address</h2><p>Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">' + otp + '</span></div><p>If you did not request this code, please ignore this email.</p></div>'
+          subject: subject,
+          html: emailHtml
         })
       });
       const data = await response.json();
@@ -677,6 +685,15 @@ async function saveDatabase(data: any, overrideEmail?: string) {
 const app = express();
 const PORT = 3000;
 
+  // Rate limiter for auth endpoints (prevents brute force / OTP spam)
+  const authRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,
+    message: { error: 'Too many requests. Please wait a few minutes and try again.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   // Middleware
   app.use(express.json({ limit: '15mb' }));
 
@@ -691,7 +708,9 @@ const PORT = 3000;
                           req.path.startsWith('/api/auth/login') ||
                           req.path.startsWith('/api/auth/me') ||
                           req.path.startsWith('/api/auth/verify-otp') ||
-                          req.path.startsWith('/api/auth/resend-otp');
+                          req.path.startsWith('/api/auth/resend-otp') ||
+                          req.path.startsWith('/api/auth/forgot-password') ||
+                          req.path.startsWith('/api/auth/reset-password');
       
       if (authEmail) {
         const email = authEmail.toLowerCase().trim();
@@ -757,7 +776,7 @@ const PORT = 3000;
           id: `user_${Date.now()}`,
           email: normalizedEmail,
           name: name || normalizedEmail.split('@')[0],
-          password: password || '',
+          password: password ? await bcrypt.hash(password, 10) : '',
           experience: 'Intermediate',
           tradingStyle: 'Day Trading',
           mainMarkets: ['Forex', 'Gold'],
@@ -772,7 +791,7 @@ const PORT = 3000;
         db.users.push(user);
       } else {
         if (name) user.name = name;
-        if (password) user.password = password;
+        if (password) user.password = await bcrypt.hash(password, 10);
         user.isEmailVerified = user.isEmailVerified || false;
         user.emailOtp = otp;
         user.otpExpiresAt = otpExpiresAt;
@@ -865,6 +884,86 @@ const PORT = 3000;
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Resend OTP error:', err);
       return res.status(500).json({ error: `Server resend OTP error: ${err?.message || err}` });
+    }
+  });
+
+  // ==========================================
+  // FORGOT PASSWORD / RESET PASSWORD ROUTES
+  // ==========================================
+
+  app.post('/api/auth/forgot-password', authRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const db = await ensureUserDbLoaded(normalizedEmail);
+      const user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+
+      // If user not found or not verified, respond with neutral message (prevent account enumeration)
+      if (!user || !user.isEmailVerified) {
+        return res.json({ message: 'If this email is registered, a password reset code has been sent.' });
+      }
+
+      const otp = generateOtp();
+      user.resetOtp = otp;
+      user.resetOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      await saveDatabase(db, normalizedEmail);
+
+      const emailResult = await sendOtpEmail(normalizedEmail, otp, 'Password Reset Code');
+      console.log(`[Auth] Password reset OTP sent to ${normalizedEmail}, emailSent: ${emailResult.success}`);
+
+      return res.json({ 
+        message: 'If this email is registered, a password reset code has been sent.',
+        // In dev/fallback mode only, expose the OTP so it can be shown in UI
+        devOtp: emailResult.otp
+      });
+    } catch (err: any) {
+      console.error('[Auth] Forgot password error:', err);
+      return res.status(500).json({ error: 'Server error during password reset request.' });
+    }
+  });
+
+  app.post('/api/auth/reset-password', authRateLimiter, async (req, res) => {
+    try {
+      const { email, otp, newPassword } = req.body;
+      if (!email || !otp || !newPassword) {
+        return res.status(400).json({ error: 'Email, reset code, and new password are all required.' });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const db = await ensureUserDbLoaded(normalizedEmail);
+      const user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired reset code.' });
+      }
+
+      if (!user.resetOtp || user.resetOtp !== otp.toString().trim()) {
+        return res.status(400).json({ error: 'Invalid reset code. Please check the code sent to your email.' });
+      }
+
+      const expiry = user.resetOtpExpiresAt ? new Date(user.resetOtpExpiresAt).getTime() : 0;
+      if (Date.now() > expiry) {
+        return res.status(400).json({ error: 'Reset link expired. Please request a new password reset.' });
+      }
+
+      // Hash and update password
+      user.password = await bcrypt.hash(newPassword, 10);
+      delete user.resetOtp;
+      delete user.resetOtpExpiresAt;
+
+      await saveDatabase(db, normalizedEmail);
+      console.log(`[Auth] Password successfully reset for ${normalizedEmail}`);
+
+      return res.json({ message: 'Password updated successfully. You can now log in with your new password.' });
+    } catch (err: any) {
+      console.error('[Auth] Reset password error:', err);
+      return res.status(500).json({ error: 'Server error during password reset.' });
     }
   });
 
