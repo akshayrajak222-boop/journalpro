@@ -701,6 +701,32 @@ export default function App() {
     }
   };
 
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!window.confirm('Are you sure you want to delete this account and ALL associated trades? This cannot be undone.')) return;
+    setActionLoading(true);
+    try {
+      const res = await authFetch(`/api/accounts/${accountId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setShowEditAccountModal(false);
+        setEditingAccount(null);
+        if (selectedAccountId === accountId) {
+          setSelectedAccountId('');
+          localStorage.removeItem('selected_account_id');
+        }
+        fetchAccountData();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Error deleting account');
+      }
+    } catch (err) {
+      alert('Error deleting account');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Trade Operations
   const handleOpenTradeModal = (trade?: Trade) => {
     if (trade) {
@@ -3732,18 +3758,27 @@ export default function App() {
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
+                  onClick={() => handleDeleteAccount(editingAccount.id)}
+                  disabled={actionLoading}
+                  className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  title="Delete Account"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setShowEditAccountModal(false);
                     setEditingAccount(null);
                   }}
-                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg py-2.5 px-4 transition"
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg py-2.5 px-4 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="w-1/2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  className="flex-[2] bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
                 >
                   {actionLoading ? 'Saving...' : 'Save Changes'}
                 </button>
