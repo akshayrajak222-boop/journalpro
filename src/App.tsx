@@ -188,6 +188,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
+          if (localStorage.getItem('onboardingCompleted') === 'true') {
+            data.user.onboardingCompleted = true;
+          }
           setUser(data.user);
           if (data.user.onboardingCompleted) {
             await fetchAccountData();
@@ -206,7 +209,7 @@ export default function App() {
       id: sessionUser?.id || `supabase_${email}`,
       email,
       name,
-      onboardingCompleted: false,
+      onboardingCompleted: localStorage.getItem('onboardingCompleted') === 'true',
       isPro: false,
     });
 
@@ -313,7 +316,10 @@ export default function App() {
           if (res.ok) {
             const data = await res.json();
             if (data.user) {
-              setUser(data.user);
+              if (localStorage.getItem('onboardingCompleted') === 'true') {
+            data.user.onboardingCompleted = true;
+          }
+          setUser(data.user);
               if (data.user.onboardingCompleted) {
                 await fetchAccountData();
               } else {
@@ -593,6 +599,7 @@ export default function App() {
       const data = await res.json();
       if (data.user) {
         setUser(data.user);
+        localStorage.setItem('onboardingCompleted', 'true');
         fetchAccountData();
       }
     } catch (err) {
@@ -907,6 +914,9 @@ export default function App() {
       const verifyData = await verifyRes.json();
       if (verifyData.success) {
         alert('Payment Verified! Congratulations, you have unlocked FX Journal Pro features.');
+        if (localStorage.getItem('onboardingCompleted') === 'true') {
+          verifyData.user.onboardingCompleted = true;
+        }
         setUser(verifyData.user);
         fetchAccountData();
       }
