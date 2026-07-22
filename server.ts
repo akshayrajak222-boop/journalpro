@@ -353,26 +353,29 @@ function loadDatabaseFromFile() {
   return initialDB;
 }
 
-let db: any = null;
+const userDatabases = new Map();
 let isLoaded = false;
+let currentUser: any = null;
+let isGlobalLoaded = false;
+let db: any = null;
 
 // Loader and saver specifically for user-scoped databases on Supabase
 async function ensureUserDbLoaded(email: string) {
   if (!email) {
-    if (!db) db = loadDatabaseFromFile();
-    if (db.users && db.users.length > 0) currentUser = db.users[0];
-    return db;
+    let globalDb = loadDatabaseFromFile();
+    return globalDb;
   }
   const normalizedEmail = email.toLowerCase().trim();
-  const dbKey = `db_json_${normalizedEmail}`;
+  const dbKey = 'db_json_' + normalizedEmail;
+
+  if (userDatabases.has(normalizedEmail)) {
+    return userDatabases.get(normalizedEmail);
+  }
 
   let loadedDb = null;
-
-  if (db && db.users && Array.isArray(db.users) && db.users.some((u: any) => u.email?.toLowerCase() === normalizedEmail)) {
-    loadedDb = db;
-  } else if (useSupabase) {
+  if (useSupabase) {
     try {
-      console.log(`[AxyFx Journal Server] Loading database from Supabase for user: ${normalizedEmail}...`);
+      console.log('[AxyFx Journal Server] Loading database from Supabase for user: ' + normalizedEmail + '...');
       const { data, error } = await supabase!
         .from('journal_settings')
         .select('value')
@@ -380,13 +383,13 @@ async function ensureUserDbLoaded(email: string) {
         .maybeSingle();
 
       if (error) {
-        console.error(`[AxyFx Journal Server] Supabase query error for ${normalizedEmail}:`, error);
+        console.error('[AxyFx Journal Server] Supabase query error for ' + normalizedEmail + ':', error);
         loadedDb = loadDatabaseFromFile();
       } else if (!data) {
-        console.log(`[AxyFx Journal Server] No database found in Supabase for user: ${normalizedEmail}. Initializing new user DB...`);
+        console.log('[AxyFx Journal Server] No database found in Supabase for user: ' + normalizedEmail + '. Initializing new user DB...');
         const initial = loadDatabaseFromFile();
         
-        const newUserId = `user_${Date.now()}`;
+        const newUserId = 'user_' + Date.now();
         initial.users = [{
           id: newUserId,
           email: normalizedEmail,
@@ -406,14 +409,14 @@ async function ensureUserDbLoaded(email: string) {
 
         loadedDb = initial;
       } else {
-        console.log(`[AxyFx Journal Server] Loaded database for user: ${normalizedEmail} from Supabase successfully!`);
+        console.log('[AxyFx Journal Server] Loaded database for user: ' + normalizedEmail + ' from Supabase successfully!');
         let loaded = data.value;
         if (typeof loaded === 'string') {
           try { loaded = JSON.parse(loaded); } catch (e) {}
         }
         if (!loaded || typeof loaded !== 'object') loaded = {};
         loaded.users = Array.isArray(loaded.users) && loaded.users.length > 0 ? loaded.users : [{
-          id: `user_${Date.now()}`,
+          id: 'user_' + Date.now(),
           email: normalizedEmail,
           name: normalizedEmail.split('@')[0],
           experience: 'Intermediate',
@@ -432,39 +435,37 @@ async function ensureUserDbLoaded(email: string) {
         loadedDb = loaded;
       }
     } catch (err: any) {
-      console.error(`[AxyFx Journal Server] Failed to load user database from Supabase for ${normalizedEmail}:`, err);
+      console.error('[AxyFx Journal Server] Failed to load user database from Supabase for ' + normalizedEmail + ':', err);
       loadedDb = loadDatabaseFromFile();
     }
   } else {
     loadedDb = loadDatabaseFromFile();
   }
 
-  db = loadedDb;
-
   // Set currentUser reliably
-  const matchedUser = db.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
-  if (matchedUser) {
-    currentUser = matchedUser;
-  } else if (db.users && db.users.length > 0) {
-    currentUser = db.users[0];
-  } else {
-    currentUser = {
-      id: `user_${Date.now()}`,
-      email: normalizedEmail,
-      name: normalizedEmail.split('@')[0],
-      experience: 'Intermediate',
-      tradingStyle: 'Day Trading',
-      mainMarkets: ['Forex', 'Gold'],
-      onboardingCompleted: false,
-      isPro: false
-    };
-    db.users = [currentUser];
+  let currentUser = loadedDb.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
+  if (!currentUser) {
+    if (loadedDb.users && loadedDb.users.length > 0) {
+      currentUser = loadedDb.users[0];
+    } else {
+      currentUser = {
+        id: 'user_' + Date.now(),
+        email: normalizedEmail,
+        name: normalizedEmail.split('@')[0],
+        experience: 'Intermediate',
+        tradingStyle: 'Day Trading',
+        mainMarkets: ['Forex', 'Gold'],
+        onboardingCompleted: false,
+        isPro: false
+      };
+      loadedDb.users = [currentUser];
+    }
   }
 
   // Ensure user has at least 1 trading account
-  if (!db.accounts || db.accounts.length === 0) {
-    const defaultAccId = `acc_${Date.now()}`;
-    db.accounts = [{
+  if (!loadedDb.accounts || loadedDb.accounts.length === 0) {
+    const defaultAccId = 'acc_' + Date.now();
+    loadedDb.accounts = [{
       id: defaultAccId,
       userId: currentUser.id,
       name: 'Main Trading Account',
@@ -476,8 +477,8 @@ async function ensureUserDbLoaded(email: string) {
       status: 'Active',
       createdAt: new Date().toISOString()
     }];
-    db.riskSettings = [{
-      id: `risk_${Date.now()}`,
+    loadedDb.riskSettings = [{
+      id: 'risk_' + Date.now(),
       accountId: defaultAccId,
       riskPerTradeLimit: 2,
       dailyLossLimit: 5,
@@ -487,15 +488,14 @@ async function ensureUserDbLoaded(email: string) {
       maxTradesPerDay: 5
     }];
   } else {
-    // Ensure all accounts in user DB belong to currentUser.id
-    db.accounts.forEach((acc: any) => {
+    loadedDb.accounts.forEach((acc: any) => {
       acc.userId = currentUser.id;
     });
   }
 
-  return db;
+  userDatabases.set(normalizedEmail, loadedDb);
+  return loadedDb;
 }
-
 async function ensureDbLoaded() {
   if (isLoaded && db && db.users && Array.isArray(db.users)) return db;
 
@@ -549,36 +549,39 @@ async function ensureDbLoaded() {
 }
 
 async function saveDatabase(data: any, overrideEmail?: string) {
-  db = data;
+  const activeEmail = overrideEmail || data?.users?.[0]?.email;
+  if (activeEmail) {
+    const normalizedEmail = activeEmail.toLowerCase().trim();
+    userDatabases.set(normalizedEmail, data);
+  }
+
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
-    // Ignore read-only filesystem issues
+    // Ignore
   }
 
   if (useSupabase) {
-    const activeEmail = overrideEmail || currentUser?.email || data?.users?.[0]?.email;
     if (activeEmail) {
       const normalizedEmail = activeEmail.toLowerCase().trim();
-      const dbKey = `db_json_${normalizedEmail}`;
+      const dbKey = 'db_json_' + normalizedEmail;
       try {
         const { error } = await supabase!
           .from('journal_settings')
           .upsert({ key: dbKey, value: data }, { onConflict: 'key' });
         if (error) {
-          console.error(`[AxyFx Journal Server] Supabase save error for ${normalizedEmail}:`, error);
+          console.error('[AxyFx Journal Server] Supabase save error for ' + normalizedEmail + ':', error);
         } else {
-          console.log(`[AxyFx Journal Server] Saved user database for ${normalizedEmail} (key: ${dbKey}, trades: ${data.trades?.length || 0}) to Supabase successfully!`);
+          console.log('[AxyFx Journal Server] Saved user database for ' + normalizedEmail + ' (key: ' + dbKey + ', trades: ' + (data.trades?.length || 0) + ') to Supabase successfully!');
         }
       } catch (err) {
-        console.error(`[AxyFx Journal Server] Exception saving to Supabase for ${normalizedEmail}:`, err);
+        console.error('[AxyFx Journal Server] Exception saving to Supabase for ' + normalizedEmail + ':', err);
       }
     } else {
       console.warn('[AxyFx Journal Server] saveDatabase called but no active user email found!');
     }
   }
 }
-
 const app = express();
 const PORT = 3000;
 
@@ -586,7 +589,7 @@ const PORT = 3000;
   app.use(express.json({ limit: '15mb' }));
 
   // Helper auth session simulation (simplest session cookies or custom token validation via headers)
-  let currentUser: User | null = null;
+  // // Removed global currentUser // Removed global state
 
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
@@ -596,7 +599,7 @@ const PORT = 3000;
       
       if (authEmail) {
         const email = authEmail.toLowerCase().trim();
-        db = await ensureUserDbLoaded(email);
+        let db = await ensureUserDbLoaded(email);
         
         let dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
         if (!dbUser) {
@@ -634,7 +637,7 @@ const PORT = 3000;
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      db = await ensureUserDbLoaded(normalizedEmail);
+      let db = await ensureUserDbLoaded(normalizedEmail);
 
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
       if (!user) {
@@ -673,7 +676,7 @@ const PORT = 3000;
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      db = await ensureUserDbLoaded(normalizedEmail);
+      let db = await ensureUserDbLoaded(normalizedEmail);
 
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
       if (!user) {
@@ -705,7 +708,7 @@ const PORT = 3000;
     const authEmail = req.headers['x-auth-email'] as string | undefined;
     if (authEmail) {
       const email = authEmail.toLowerCase().trim();
-      db = await ensureUserDbLoaded(email);
+      let db = await ensureUserDbLoaded(email);
       const dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
       if (dbUser) {
         currentUser = dbUser;
@@ -721,11 +724,11 @@ const PORT = 3000;
   });
 
   app.post('/api/auth/onboarding', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { experience, tradingStyle, markets } = req.body;
 
     const userIdx = db.users.findIndex((u: any) => u.id === currentUser?.id);
@@ -777,11 +780,11 @@ const PORT = 3000;
   });
 
   app.post('/api/auth/update-profile', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { name, email, isPro } = req.body;
 
     const userIdx = db.users.findIndex((u: any) => u.id === currentUser?.id);
@@ -803,20 +806,17 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/accounts', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
+    
     if (!currentUser) return res.json({ accounts: [] });
     res.json({ accounts: db.accounts || [] });
   });
 
   app.post('/api/accounts', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     
     // Plan enforcement
     const userAccounts = db.accounts || [];
@@ -866,11 +866,11 @@ const PORT = 3000;
   });
 
   app.put('/api/accounts/:id', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const { name, broker, status, currentBalance, equity, currency, startingBalance } = req.body;
 
@@ -892,11 +892,11 @@ const PORT = 3000;
   });
 
   app.delete('/api/accounts/:id', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
 
     const initialLength = db.accounts.length;
@@ -918,10 +918,7 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/trades', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
+    
 
     const { accountId } = req.query;
     let accountTrades = [];
@@ -940,12 +937,12 @@ const PORT = 3000;
   });
 
   app.post('/api/trades', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
+    
 
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { 
       accountId, 
       date, 
@@ -1045,12 +1042,12 @@ const PORT = 3000;
   });
 
   app.put('/api/trades/:id', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
+    
 
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const updateData = req.body;
 
@@ -1098,12 +1095,12 @@ const PORT = 3000;
   });
 
   app.delete('/api/trades/:id', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
+    
 
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
 
     const tradeIdx = db.trades.findIndex((t: any) => t.id === id);
@@ -1130,10 +1127,7 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/risk-settings/:accountId', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
+    
     const { accountId } = req.params;
     const settings = db.riskSettings.find((r: any) => r.accountId === accountId);
     if (!settings) {
@@ -1158,11 +1152,11 @@ const PORT = 3000;
   });
 
   app.put('/api/risk-settings/:accountId', async (req, res) => {
-    const authEmail = (req.headers['x-auth-email'] as string | undefined) || currentUser?.email;
-    if (authEmail) {
-      db = await ensureUserDbLoaded(authEmail);
-    }
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId } = req.params;
     const { riskPerTradeLimit, dailyLossLimit, weeklyLossLimit, maxDrawdownLimit, disciplineEnabled, maxTradesPerDay } = req.body;
 
@@ -1211,7 +1205,10 @@ const PORT = 3000;
 
   // Connect MT5 via local Python Bridge (investor password — free, no MetaApi)
   app.post('/api/mt5/connect-investor', async (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { loginNumber, brokerServer, investorPassword, autoSync } = req.body;
 
     if (!loginNumber || !brokerServer || !investorPassword) {
@@ -1329,7 +1326,10 @@ const PORT = 3000;
 
   // Connect MT5 Expert Advisor (Method A) - automatically creates a new dedicated account
   app.post('/api/mt5/connect-ea', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { loginNumber, brokerName, startingBalance, historyMonths } = req.body;
 
     const num = loginNumber || `${Math.floor(1000000 + Math.random() * 9000000)}`;
@@ -1395,7 +1395,10 @@ const PORT = 3000;
 
   // Update MT5 Connection historical import settings
   app.post('/api/mt5/connections/:id/update-history', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const { historyMonths } = req.body;
 
@@ -1414,7 +1417,10 @@ const PORT = 3000;
 
   // Sync now — fetches new deals from Python Bridge since last sync
   app.post('/api/mt5/sync-investor', async (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId, investorPassword } = req.body;
 
     const account = db.accounts.find((acc: any) => acc.id === accountId && acc.userId === currentUser?.id);
@@ -1501,7 +1507,10 @@ const PORT = 3000;
 
   // Disconnect
   app.post('/api/mt5/disconnect-investor', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId } = req.body;
 
     const idx = db.mt5Connections.findIndex((conn: any) => conn.accountId === accountId && conn.userId === currentUser?.id);
@@ -1514,7 +1523,10 @@ const PORT = 3000;
 
   // Toggle Auto Sync
   app.post('/api/mt5/toggle-auto-sync', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId, autoSync } = req.body;
 
     const connection = db.mt5Connections.find((conn: any) => conn.accountId === accountId && conn.userId === currentUser?.id);
@@ -1527,7 +1539,10 @@ const PORT = 3000;
 
   // Developer mock action to trigger a trade sync from the Expert Advisor simulation
   app.post('/api/mt5/connections/test-sync', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId, symbol } = req.body;
 
     const account = db.accounts.find((acc: any) => acc.id === accountId && acc.userId === currentUser?.id);
@@ -1601,7 +1616,7 @@ const PORT = 3000;
 
     const email = req.query.email as string;
     if (email) {
-      db = await ensureUserDbLoaded(email);
+      let db = await ensureUserDbLoaded(email);
     }
 
     // Locate connection
@@ -1722,7 +1737,10 @@ const PORT = 3000;
   // ==========================================
 
   app.post('/api/ai/mentor', async (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     
     // Pro Plan requirement
     if (!currentUser.isPro) {
@@ -1830,7 +1848,10 @@ RESTRICTIONS:
   });
 
   app.post('/api/tickets', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { title, description, category } = req.body;
 
     if (!title || !description) return res.status(400).json({ error: 'Title and description are required' });
@@ -1852,7 +1873,10 @@ RESTRICTIONS:
   });
 
   app.put('/api/tickets/:id', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const { status } = req.body;
 
@@ -1875,7 +1899,10 @@ RESTRICTIONS:
   // ==========================================
 
   app.post('/api/payments/checkout', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     
     // Simulate Razorpay checkout creation
     const orderId = `order_${Date.now()}_razorpay`;
@@ -1888,7 +1915,10 @@ RESTRICTIONS:
   });
 
   app.post('/api/payments/verify', (req, res) => {
-    if (!currentUser) return res.status(401).json({ error: 'Not authenticated' });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { razorpay_payment_id, status } = req.body;
 
     const userIdx = db.users.findIndex((u: any) => u.id === currentUser?.id);
