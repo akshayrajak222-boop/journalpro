@@ -360,6 +360,46 @@ let isGlobalLoaded = false;
 let db: any = null;
 
 // Loader and saver specifically for user-scoped databases on Supabase
+
+function generateOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function sendOtpEmail(email, otp) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey || apiKey === 'YOUR_RESEND_API_KEY' || apiKey.startsWith('re_xxxx')) {
+    console.log('\n============================================================');
+    console.log('[DEVELOPMENT MODE] Resend API Key not set. OTP for ' + email + ' is: ' + otp);
+    console.log('============================================================\n');
+    return true;
+  }
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        from: 'FX Journal Pro <onboarding@resend.dev>',
+        to: email,
+        subject: 'Your FX Journal Pro Verification Code',
+        html: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">Verify your email address</h2><p>Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">' + otp + '</span></div><p>If you did not request this code, please ignore this email.</p></div>'
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('[Resend Email Error]', data);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('[Resend Email Exception]', error);
+    return false;
+  }
+}
+
 async function ensureUserDbLoaded(email: string) {
   if (!email) {
     let globalDb = loadDatabaseFromFile();
@@ -594,8 +634,12 @@ const PORT = 3000;
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
     try {
-      // Always try to resolve user from x-auth-email header first
       const authEmail = req.headers['x-auth-email'] as string | undefined;
+      const isAuthRoute = req.path.startsWith('/api/auth/register') ||
+                          req.path.startsWith('/api/auth/login') ||
+                          req.path.startsWith('/api/auth/me') ||
+                          req.path.startsWith('/api/auth/verify-otp') ||
+                          req.path.startsWith('/api/auth/resend-otp');
       
       if (authEmail) {
         const email = authEmail.toLowerCase().trim();
@@ -611,15 +655,23 @@ const PORT = 3000;
             tradingStyle: 'Day Trading',
             mainMarkets: ['Forex', 'Gold'],
             onboardingCompleted: false,
-            isPro: false
+            isPro: false,
+            isEmailVerified: false
           };
           db.users.push(dbUser);
           await saveDatabase(db);
         }
-        currentUser = dbUser;
+        (req as any).userDb = db;
+        (req as any).currentUser = dbUser;
+
+        // Block unverified users from accessing trading/account journal APIs
+        if (dbUser && dbUser.isEmailVerified === false && !isAuthRoute && req.path.startsWith('/api/')) {
+          return res.status(403).json({ error: 'Email verification required', emailUnverified: true });
+        }
       } else {
         await ensureDbLoaded();
-        currentUser = null;
+        (req as any).currentUser = null;
+        (req as any).userDb = null;
       }
 
       next();
@@ -640,6 +692,10 @@ const PORT = 3000;
       let db = await ensureUserDbLoaded(normalizedEmail);
 
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+      
+      const otp = generateOtp();
+      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+
       if (!user) {
         user = {
           id: `user_${Date.now()}`,
@@ -650,77 +706,32 @@ const PORT = 3000;
           tradingStyle: 'Day Trading',
           mainMarkets: ['Forex', 'Gold'],
           onboardingCompleted: false,
-          isPro: false
+          isPro: false,
+          isEmailVerified: false,
+          emailOtp: otp,
+          otpExpiresAt: otpExpiresAt,
+          otpAttempts: 0,
+          otpSentAt: new Date().toISOString()
         };
         db.users.push(user);
-      } else if (name) {
-        user.name = name;
+      } else {
+        if (name) user.name = name;
         if (password) user.password = password;
+        user.isEmailVerified = user.isEmailVerified || false;
+        user.emailOtp = otp;
+        user.otpExpiresAt = otpExpiresAt;
+        user.otpAttempts = 0;
+        user.otpSentAt = new Date().toISOString();
       }
 
-      currentUser = user;
       await saveDatabase(db, normalizedEmail);
+      await sendOtpEmail(normalizedEmail, otp);
 
-      res.json({ message: 'Registration successful', user });
+      res.json({ message: 'Registration successful. OTP sent successfully.', user });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Register endpoint error:', err);
       res.status(500).json({ error: `Server register error: ${err?.message || err}` });
     }
-  });
-
-  app.post('/api/auth/login', async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      if (!email) {
-        return res.status(400).json({ error: 'Email is required' });
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      let db = await ensureUserDbLoaded(normalizedEmail);
-
-      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
-      if (!user) {
-        user = {
-          id: `user_${Date.now()}`,
-          email: normalizedEmail,
-          name: normalizedEmail.split('@')[0],
-          password: password || '',
-          experience: 'Intermediate',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold'],
-          onboardingCompleted: false,
-          isPro: false
-        };
-        db.users.push(user);
-      }
-
-      currentUser = user;
-      await saveDatabase(db, normalizedEmail);
-
-      res.json({ message: 'Login successful', user });
-    } catch (err: any) {
-      console.error('[AxyFx Journal Server] Login endpoint error:', err);
-      res.status(500).json({ error: `Server login error: ${err?.message || err}` });
-    }
-  });
-
-  app.get('/api/auth/me', async (req, res) => {
-    const authEmail = req.headers['x-auth-email'] as string | undefined;
-    if (authEmail) {
-      const email = authEmail.toLowerCase().trim();
-      let db = await ensureUserDbLoaded(email);
-      const dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
-      if (dbUser) {
-        currentUser = dbUser;
-        return res.json({ user: currentUser });
-      }
-    }
-
-    if (currentUser) {
-      return res.json({ user: currentUser });
-    }
-
-    return res.status(401).json({ error: 'Not authenticated' });
   });
 
   app.post('/api/auth/onboarding', async (req, res) => {

@@ -28,6 +28,7 @@ import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
+import { EmailVerificationScreen } from './components/EmailVerificationScreen';
 
 export default function App() {
   // Auth states
@@ -1603,6 +1604,17 @@ export default function App() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Email Verification Step
+  if (user && user.isEmailVerified === false) {
+    return (
+      <EmailVerificationScreen 
+        email={user.email} 
+        onVerified={(updatedUser) => setUser(updatedUser)} 
+        onLogout={handleLogout}
+      />
     );
   }
 

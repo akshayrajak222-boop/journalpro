@@ -8,6 +8,11 @@ export interface User {
   mainMarkets?: ('Forex' | 'Gold' | 'Crypto' | 'Indices')[];
   onboardingCompleted: boolean;
   isPro: boolean;
+  isEmailVerified?: boolean;
+  emailOtp?: string;
+  otpExpiresAt?: string;
+  otpAttempts?: number;
+  otpSentAt?: string;
   onboardingData?: {
     experience: string;
     tradingStyle: string;
