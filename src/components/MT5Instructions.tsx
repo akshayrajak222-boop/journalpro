@@ -79,7 +79,7 @@ export default function MT5Instructions({
         return window.location.origin;
       }
     }
-    return 'https://journalpro-iota.vercel.app'; // Default to their production Vercel url
+    return 'https://fxjournalpro.com'; // Default to their production Vercel url
   });
   const [customOriginInput, setCustomOriginInput] = useState('');
 
@@ -657,9 +657,9 @@ void SendTradesToFXJournalPro() {
 
                 <button
                   type="button"
-                  onClick={() => setApiOrigin('https://journalpro-iota.vercel.app')}
+                  onClick={() => setApiOrigin('https://fxjournalpro.com')}
                   className={`text-left text-xs p-2 rounded-lg border transition flex flex-col ${
-                    apiOrigin === 'https://journalpro-iota.vercel.app'
+                    apiOrigin === 'https://fxjournalpro.com'
                       ? 'bg-[#1e1b4b] border-indigo-500 text-white font-bold shadow-sm'
                       : 'bg-slate-900/50 border-indigo-950 text-indigo-400/80 hover:bg-[#131b2e] hover:text-indigo-300'
                   }`}
@@ -668,18 +668,18 @@ void SendTradesToFXJournalPro() {
                     Production Vercel Domain
                     <span className="bg-emerald-950 text-emerald-400 text-[8px] font-bold px-1 rounded border border-emerald-900/30">STABLE</span>
                   </span>
-                  <span className="font-mono text-[10px] mt-0.5">https://journalpro-iota.vercel.app</span>
+                  <span className="font-mono text-[10px] mt-0.5">https://fxjournalpro.com</span>
                 </button>
 
                 <div className="border-t border-indigo-950 pt-2 mt-1">
                   <span className="text-[9px] font-bold text-indigo-400/80 uppercase tracking-wider block mb-1">Custom Host URL Override</span>
                   <input
                     type="text"
-                    placeholder="https://journalpro-iota.vercel.app"
+                    placeholder="https://fxjournalpro.com"
                     value={customOriginInput}
                     onChange={(e) => {
                       setCustomOriginInput(e.target.value);
-                      setApiOrigin(e.target.value || 'https://journalpro-iota.vercel.app');
+                      setApiOrigin(e.target.value || 'https://fxjournalpro.com');
                     }}
                     className="bg-slate-950 border border-indigo-900/50 text-xs font-mono text-indigo-200 rounded-lg p-2 w-full focus:ring-indigo-500 focus:border-indigo-500 font-semibold"
                   />
