@@ -28,7 +28,6 @@ import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
-import { EmailVerificationScreen } from './components/EmailVerificationScreen';
 
 export default function App() {
   // Auth states
@@ -189,9 +188,6 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
-          if (localStorage.getItem('onboardingCompleted') === 'true') {
-            data.user.onboardingCompleted = true;
-          }
           setUser(data.user);
           if (data.user.onboardingCompleted) {
             await fetchAccountData();
@@ -210,7 +206,7 @@ export default function App() {
       id: sessionUser?.id || `supabase_${email}`,
       email,
       name,
-      onboardingCompleted: localStorage.getItem('onboardingCompleted') === 'true',
+      onboardingCompleted: false,
       isPro: false,
     });
 
@@ -317,10 +313,7 @@ export default function App() {
           if (res.ok) {
             const data = await res.json();
             if (data.user) {
-              if (localStorage.getItem('onboardingCompleted') === 'true') {
-            data.user.onboardingCompleted = true;
-          }
-          setUser(data.user);
+              setUser(data.user);
               if (data.user.onboardingCompleted) {
                 await fetchAccountData();
               } else {
@@ -491,10 +484,10 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      // 1. Try registering with Supabase Auth if configured
+      // 1. Try registering with Supabase Auth in background if configured
       if (isSupabaseConfigured) {
         try {
-          const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
+          await supabase.auth.signUp({
             email: authEmail,
             password: authPassword,
             options: {
@@ -503,17 +496,12 @@ export default function App() {
               }
             }
           });
-
-          if (!supabaseError && supabaseData?.session?.user) {
-            await syncSupabaseUser(supabaseData.session.user);
-            return;
-          }
         } catch (sErr) {
-          console.warn('[AxyFx] Supabase register warning, falling back to backend:', sErr);
+          console.warn('[AxyFx] Supabase register background warning:', sErr);
         }
       }
 
-      // 2. Register/Sync with Express Backend API (bypasses email rate limits and allows immediate login)
+      // 2. Register with Express Backend API (sends 6-digit OTP code via SendGrid / Resend)
       localStorage.setItem('auth_email', authEmail);
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -528,16 +516,14 @@ export default function App() {
       }
 
       const data = await res.json();
-      if (data.user) {
-        setUser(data.user);
-        if (data.user.onboardingCompleted) {
-          await fetchAccountData();
-        } else {
-          setOnboardingStep(1);
-        }
+      // Prompt user for 6-digit OTP Verification code
+      setIsOtpMode(true);
+      if (data.devOtp) {
+        setOtpCode(data.devOtp);
       } else {
-        setAuthError('Unexpected response from registration server.');
+        setOtpCode('');
       }
+      setAuthError(null);
     } catch (err: any) {
       console.error('[AxyFx] Registration connection error:', err);
       setAuthError(`Registration error: ${err?.message || err || 'Network error'}`);
@@ -555,17 +541,74 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      const { data: supabaseData, error: supabaseError } = await supabase.auth.verifyOtp({
-        email: authEmail,
-        token: otpCode,
-        type: 'signup'
+      // 1. Verify 6-digit OTP code via backend API
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail, otp: otpCode })
       });
 
-      if (supabaseError) {
-        setAuthError(supabaseError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error || 'Invalid or expired OTP code.');
+        return;
+      }
+
+      if (data.user) {
+        setUser(data.user);
+        setIsOtpMode(false);
+        setOtpCode('');
+        if (data.user.onboardingCompleted) {
+          await fetchAccountData();
+        } else {
+          setOnboardingStep(1);
+        }
+        return;
+      }
+
+      // 2. Also attempt Supabase verifyOtp in parallel if configured
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.auth.verifyOtp({
+            email: authEmail,
+            token: otpCode,
+            type: 'signup'
+          });
+        } catch (sErr) {
+          console.warn('[AxyFx] Supabase OTP verify warning:', sErr);
+        }
       }
     } catch (err: any) {
       setAuthError(`OTP Verification error: ${err?.message || err}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!authEmail) return;
+    setActionLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch('/api/auth/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Failed to resend verification code.');
+      } else {
+        if (data.devOtp) {
+          setOtpCode(data.devOtp);
+          alert(`Code generated: ${data.devOtp} (Email provider sender unverified or pending setup)`);
+        } else {
+          alert(`A new 6-digit verification code has been sent to ${authEmail}`);
+        }
+      }
+    } catch (err: any) {
+      setAuthError(`Resend error: ${err?.message || err}`);
     } finally {
       setActionLoading(false);
     }
@@ -600,7 +643,6 @@ export default function App() {
       const data = await res.json();
       if (data.user) {
         setUser(data.user);
-        localStorage.setItem('onboardingCompleted', 'true');
         fetchAccountData();
       }
     } catch (err) {
@@ -704,32 +746,6 @@ export default function App() {
       }
     } catch (err) {
       alert('Error updating account');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async (accountId: string) => {
-    if (!window.confirm('Are you sure you want to delete this account and ALL associated trades? This cannot be undone.')) return;
-    setActionLoading(true);
-    try {
-      const res = await authFetch(`/api/accounts/${accountId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setShowEditAccountModal(false);
-        setEditingAccount(null);
-        if (selectedAccountId === accountId) {
-          setSelectedAccountId('');
-          localStorage.removeItem('selected_account_id');
-        }
-        fetchAccountData();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Error deleting account');
-      }
-    } catch (err) {
-      alert('Error deleting account');
     } finally {
       setActionLoading(false);
     }
@@ -915,9 +931,6 @@ export default function App() {
       const verifyData = await verifyRes.json();
       if (verifyData.success) {
         alert('Payment Verified! Congratulations, you have unlocked FX Journal Pro features.');
-        if (localStorage.getItem('onboardingCompleted') === 'true') {
-          verifyData.user.onboardingCompleted = true;
-        }
         setUser(verifyData.user);
         fetchAccountData();
       }
@@ -1430,13 +1443,23 @@ export default function App() {
                 </div>
               )}
 
-              <button 
-                type="button" 
-                onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
-                className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center mt-2"
-              >
-                Change Email
-              </button>
+              <div className="flex items-center justify-between text-xs pt-2">
+                <button 
+                  type="button" 
+                  onClick={handleResendOtp}
+                  disabled={actionLoading}
+                  className="text-cyan-400 hover:text-cyan-300 font-medium"
+                >
+                  Resend 6-Digit Code
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
+                  className="text-slate-400 hover:text-slate-200 font-medium"
+                >
+                  Change Email
+                </button>
+              </div>
             </form>
           ) : isRegistering ? (
             <form onSubmit={handleRegister} className="space-y-4">
@@ -1604,17 +1627,6 @@ export default function App() {
           </div>
         </div>
       </div>
-    );
-  }
-
-  // Email Verification Step
-  if (user && user.isEmailVerified === false) {
-    return (
-      <EmailVerificationScreen 
-        email={user.email} 
-        onVerified={(updatedUser) => setUser(updatedUser)} 
-        onLogout={handleLogout}
-      />
     );
   }
 
@@ -3780,27 +3792,18 @@ export default function App() {
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => handleDeleteAccount(editingAccount.id)}
-                  disabled={actionLoading}
-                  className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
-                  title="Delete Account"
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     setShowEditAccountModal(false);
                     setEditingAccount(null);
                   }}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg py-2.5 px-4 transition"
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg py-2.5 px-4 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="flex-[2] bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  className="w-1/2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
                 >
                   {actionLoading ? 'Saving...' : 'Save Changes'}
                 </button>

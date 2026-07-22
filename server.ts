@@ -366,38 +366,90 @@ function generateOtp() {
 }
 
 async function sendOtpEmail(email, otp) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey || apiKey === 'YOUR_RESEND_API_KEY' || apiKey.startsWith('re_xxxx')) {
-    console.log('\n============================================================');
-    console.log('[DEVELOPMENT MODE] Resend API Key not set. OTP for ' + email + ' is: ' + otp);
-    console.log('============================================================\n');
-    return true;
+  const sendgridKey = process.env.SENDGRID_API_KEY;
+  const resendKey = process.env.RESEND_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.SENDER_EMAIL || 'noreply@fxjournalpro.com';
+
+  // 1. Try SendGrid if API Key is configured
+  if (sendgridKey && sendgridKey !== 'YOUR_SENDGRID_API_KEY' && !sendgridKey.startsWith('SG.xxxx')) {
+    try {
+      console.log(`[SendGrid] Attempting to send OTP email to ${email} from ${fromEmail}...`);
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + sendgridKey
+        },
+        body: JSON.stringify({
+          personalizations: [
+            {
+              to: [{ email: email }]
+            }
+          ],
+          from: {
+            email: fromEmail,
+            name: 'FX Journal Pro'
+          },
+          subject: 'Your FX Journal Pro Verification Code',
+          content: [
+            {
+              type: 'text/html',
+              value: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">Verify your email address</h2><p>Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">' + otp + '</span></div><p>If you did not request this code, please ignore this email.</p></div>'
+            }
+          ]
+        })
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        console.log('[SendGrid] Email OTP sent successfully to ' + email);
+        return { success: true, provider: 'SendGrid' };
+      } else {
+        const errorText = await response.text();
+        console.error('[SendGrid Email Error] Status ' + response.status + ':', errorText);
+        if (response.status === 403 || errorText.includes('Sender Identity') || errorText.includes('from address')) {
+          console.error('[SendGrid Troubleshooting] Make sure SENDGRID_FROM_EMAIL matches the email address verified in SendGrid Single Sender Verification, and that you clicked the verification link sent by SendGrid!');
+        }
+      }
+    } catch (err: any) {
+      console.error('[SendGrid Email Exception]', err);
+    }
   }
 
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey
-      },
-      body: JSON.stringify({
-        from: 'FX Journal Pro <onboarding@resend.dev>',
-        to: email,
-        subject: 'Your FX Journal Pro Verification Code',
-        html: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">Verify your email address</h2><p>Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">' + otp + '</span></div><p>If you did not request this code, please ignore this email.</p></div>'
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('[Resend Email Error]', data);
-      return false;
+  // 2. Try Resend if API Key is configured
+  if (resendKey && resendKey !== 'YOUR_RESEND_API_KEY' && !resendKey.startsWith('re_xxxx')) {
+    try {
+      console.log(`[Resend] Attempting to send OTP email to ${email}...`);
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + resendKey
+        },
+        body: JSON.stringify({
+          from: 'FX Journal Pro <onboarding@resend.dev>',
+          to: email,
+          subject: 'Your FX Journal Pro Verification Code',
+          html: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2 style="color: #0f172a; text-align: center;">Verify your email address</h2><p>Thank you for registering with FX Journal Pro. Please use the following one-time password (OTP) to activate your account. This code is valid for 10 minutes.</p><div style="text-align: center; margin: 30px 0;"><span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #2563eb; background-color: #f1f5f9; padding: 10px 20px; border-radius: 8px;">' + otp + '</span></div><p>If you did not request this code, please ignore this email.</p></div>'
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('[Resend Email Error]', data);
+      } else {
+        console.log('[Resend] Email OTP sent successfully to ' + email);
+        return { success: true, provider: 'Resend' };
+      }
+    } catch (error) {
+      console.error('[Resend Email Exception]', error);
     }
-    return true;
-  } catch (error) {
-    console.error('[Resend Email Exception]', error);
-    return false;
   }
+
+  // 3. Development / Fallback Mode
+  console.log('\n============================================================');
+  console.log('[DEVELOPMENT / FALLBACK MODE] Email not sent via SMTP/API.');
+  console.log('Target Email: ' + email + ' | OTP Code: ' + otp);
+  console.log('============================================================\n');
+  return { success: false, provider: 'None', otp: otp };
 }
 
 async function ensureUserDbLoaded(email: string) {
@@ -725,12 +777,90 @@ const PORT = 3000;
       }
 
       await saveDatabase(db, normalizedEmail);
-      await sendOtpEmail(normalizedEmail, otp);
+      const emailResult = await sendOtpEmail(normalizedEmail, otp);
 
-      res.json({ message: 'Registration successful. OTP sent successfully.', user });
+      res.json({ 
+        message: emailResult.success ? 'Registration successful. OTP sent to your email.' : 'Registration successful. Please enter your 6-digit verification code.', 
+        user, 
+        requiresOtp: true,
+        emailSent: emailResult.success,
+        devOtp: emailResult.otp
+      });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Register endpoint error:', err);
       res.status(500).json({ error: `Server register error: ${err?.message || err}` });
+    }
+  });
+
+  app.post('/api/auth/verify-otp', async (req, res) => {
+    try {
+      const { email, otp } = req.body;
+      if (!email || !otp) {
+        return res.status(400).json({ error: 'Email and 6-digit OTP code are required.' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      let db = await ensureUserDbLoaded(normalizedEmail);
+      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({ error: 'Account not found. Please register first.' });
+      }
+
+      if (user.emailOtp && user.emailOtp === otp.toString().trim()) {
+        const expiresAt = user.otpExpiresAt ? new Date(user.otpExpiresAt).getTime() : 0;
+        if (Date.now() > expiresAt) {
+          return res.status(400).json({ error: 'Verification code has expired. Please click resend to get a new code.' });
+        }
+
+        user.isEmailVerified = true;
+        delete user.emailOtp;
+        delete user.otpExpiresAt;
+
+        await saveDatabase(db, normalizedEmail);
+        return res.json({ message: 'Email verified successfully.', user });
+      } else {
+        return res.status(400).json({ error: 'Invalid 6-digit verification code.' });
+      }
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Verify OTP error:', err);
+      return res.status(500).json({ error: `Server verify OTP error: ${err?.message || err}` });
+    }
+  });
+
+  app.post('/api/auth/resend-otp', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required.' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      let db = await ensureUserDbLoaded(normalizedEmail);
+      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({ error: 'User account not found.' });
+      }
+
+      const newOtp = generateOtp();
+      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      user.emailOtp = newOtp;
+      user.otpExpiresAt = otpExpiresAt;
+      user.otpSentAt = new Date().toISOString();
+
+      await saveDatabase(db, normalizedEmail);
+      const emailResult = await sendOtpEmail(normalizedEmail, newOtp);
+
+      return res.json({ 
+        message: emailResult.success ? 'New verification code sent to ' + normalizedEmail : 'New verification code generated.',
+        emailSent: emailResult.success,
+        devOtp: emailResult.otp
+      });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Resend OTP error:', err);
+      return res.status(500).json({ error: `Server resend OTP error: ${err?.message || err}` });
     }
   });
 
