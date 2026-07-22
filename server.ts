@@ -745,6 +745,10 @@ const PORT = 3000;
 
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
       
+      if (user && user.isEmailVerified) {
+        return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
+      }
+      
       const otp = generateOtp();
       const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
