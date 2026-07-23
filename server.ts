@@ -822,6 +822,67 @@ const PORT = 3000;
     }
   });
 
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      let db = await ensureUserDbLoaded(normalizedEmail);
+      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({ error: 'No account found with this email. Please register first.' });
+      }
+
+      if (user.password && password) {
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+          return res.status(401).json({ error: 'Invalid password. Please check your credentials and try again.' });
+        }
+      } else if (password && !user.password) {
+        user.password = await bcrypt.hash(password, 10);
+        await saveDatabase(db, normalizedEmail);
+      }
+
+      // Ensure user database has at least one default account
+      if (!db.accounts || db.accounts.length === 0) {
+        const defaultAcc = {
+          id: `acc_${Date.now()}`,
+          userId: user.id,
+          name: 'Primary Portfolio',
+          broker: 'Default Broker',
+          platform: 'MT5',
+          accountType: 'Live',
+          currency: 'USD',
+          startingBalance: 10000,
+          currentBalance: 10000,
+          equity: 10000,
+          status: 'Active'
+        };
+        db.accounts = [defaultAcc];
+        db.riskSettings = [{
+          id: `r_${Date.now()}`,
+          accountId: defaultAcc.id,
+          riskPerTradeLimit: 2.0,
+          dailyLossLimit: 500,
+          weeklyLossLimit: 1000,
+          maxDrawdownLimit: 10.0,
+          disciplineEnabled: true,
+          maxTradesPerDay: 5
+        }];
+        await saveDatabase(db, normalizedEmail);
+      }
+
+      return res.json({ message: 'Login successful', user });
+    } catch (err: any) {
+      console.error('[AxyFx Journal Server] Login endpoint error:', err);
+      return res.status(500).json({ error: `Server login error: ${err?.message || err}` });
+    }
+  });
+
   app.post('/api/auth/verify-otp', async (req, res) => {
     try {
       const { email, otp } = req.body;
@@ -1064,25 +1125,20 @@ const PORT = 3000;
   });
 
   app.post('/api/accounts', async (req, res) => {
-    
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
     if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     
-    // Plan enforcement
-    const userAccounts = db.accounts || [];
-    if (!currentUser.isPro && userAccounts.length >= 1) {
-      return res.status(403).json({ 
-        error: 'Free Plan limits you to 1 trading account. Upgrade to Pro for unlimited accounts!',
-        limitReached: true
-      });
-    }
+    if (!db.accounts) db.accounts = [];
+    if (!db.riskSettings) db.riskSettings = [];
 
     const { name, broker, platform, accountType, currency, startingBalance } = req.body;
-    if (!name || !broker || !startingBalance) {
-      return res.status(400).json({ error: 'Missing account fields' });
+    if (!name || !broker || startingBalance === undefined || startingBalance === null) {
+      return res.status(400).json({ error: 'Account name, broker, and starting balance are required.' });
     }
+
+    const startBal = parseFloat(startingBalance) || 10000;
 
     const newAcc: TradingAccount = {
       id: `acc_${Date.now()}`,
@@ -1092,21 +1148,21 @@ const PORT = 3000;
       platform: platform || 'MT5',
       accountType: accountType || 'Live',
       currency: currency || 'USD',
-      startingBalance: parseFloat(startingBalance),
-      currentBalance: parseFloat(startingBalance),
-      equity: parseFloat(startingBalance),
+      startingBalance: startBal,
+      currentBalance: startBal,
+      equity: startBal,
       status: 'Active'
     };
 
     db.accounts.push(newAcc);
 
-    // Create defaults risk settings
+    // Create default risk settings
     const newRisk: RiskSettings = {
       id: `r_${Date.now()}`,
       accountId: newAcc.id,
       riskPerTradeLimit: 2.0,
-      dailyLossLimit: parseFloat(startingBalance) * 0.05, // 5% default
-      weeklyLossLimit: parseFloat(startingBalance) * 0.10, // 10% default
+      dailyLossLimit: startBal * 0.05,
+      weeklyLossLimit: startBal * 0.10,
       maxDrawdownLimit: 10.0,
       disciplineEnabled: true,
       maxTradesPerDay: 5
@@ -1588,6 +1644,10 @@ const PORT = 3000;
     const authEmail = currentUser?.email;
     if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { loginNumber, brokerName, startingBalance, historyMonths } = req.body;
+
+    if (!db.accounts) db.accounts = [];
+    if (!db.riskSettings) db.riskSettings = [];
+    if (!db.mt5Connections) db.mt5Connections = [];
 
     const num = loginNumber || `${Math.floor(1000000 + Math.random() * 9000000)}`;
     const broker = brokerName || 'MetaQuotes-Demo';
