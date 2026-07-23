@@ -1057,8 +1057,9 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/accounts', async (req, res) => {
-    
-    if (!currentUser) return res.json({ accounts: [] });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.json({ accounts: [] });
     res.json({ accounts: db.accounts || [] });
   });
 
@@ -1169,16 +1170,16 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/trades', async (req, res) => {
-    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.json({ trades: [] });
 
     const { accountId } = req.query;
     let accountTrades = [];
     if (accountId) {
-      accountTrades = db.trades.filter((t: any) => t.accountId === accountId);
-    }
-
-    if (accountTrades.length === 0 && db.trades.length > 0) {
-      accountTrades = db.trades;
+      accountTrades = (db.trades || []).filter((t: any) => t.accountId === accountId);
+    } else {
+      accountTrades = db.trades || [];
     }
 
     // Sort descending by date
@@ -1378,9 +1379,12 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/risk-settings/:accountId', async (req, res) => {
-    
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
     const { accountId } = req.params;
-    const settings = db.riskSettings.find((r: any) => r.accountId === accountId);
+    const settings = (db.riskSettings || []).find((r: any) => r.accountId === accountId);
     if (!settings) {
       // Return default
       const defaultSettings: RiskSettings = {
@@ -1443,8 +1447,10 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/mt5/connections', (req, res) => {
-    if (!currentUser) return res.json({ connections: [] });
-    const userConns = db.mt5Connections.filter((conn: any) => conn.userId === currentUser?.id);
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.json({ connections: [] });
+    const userConns = (db.mt5Connections || []).filter((conn: any) => conn.userId === currentUser?.id);
     res.json({ connections: userConns });
   });
 
@@ -2089,12 +2095,14 @@ RESTRICTIONS:
   // ==========================================
 
   app.get('/api/tickets', (req, res) => {
-    if (!currentUser) return res.json({ tickets: [] });
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.json({ tickets: [] });
     // Admins see all tickets, regular users see their own
     if (currentUser.email === 'admin@axyfx.com') {
-      return res.json({ tickets: db.supportTickets });
+      return res.json({ tickets: db.supportTickets || [] });
     }
-    const userTickets = db.supportTickets.filter((t: any) => t.userId === currentUser?.id);
+    const userTickets = (db.supportTickets || []).filter((t: any) => t.userId === currentUser?.id);
     res.json({ tickets: userTickets });
   });
 
@@ -2142,7 +2150,8 @@ RESTRICTIONS:
   });
 
   app.get('/api/announcements', (req, res) => {
-    res.json({ announcements: db.announcements });
+    let db = (req as any).userDb;
+    res.json({ announcements: db?.announcements || [] });
   });
 
   // ==========================================

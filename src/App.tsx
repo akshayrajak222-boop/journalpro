@@ -795,7 +795,13 @@ export default function App() {
         setShowAccountModal(false);
         setNewAccName('');
         setNewAccBroker('');
-        fetchAccountData();
+        if (data.account?.id) {
+          setSelectedAccountId(data.account.id);
+          localStorage.setItem('selected_account_id', data.account.id);
+          await fetchAccountData(data.account.id);
+        } else {
+          await fetchAccountData();
+        }
       } else if (data.error) {
         alert(data.error);
       }
