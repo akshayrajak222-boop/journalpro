@@ -1,0 +1,59 @@
+{
+  "users": [
+    {
+      "id": "uid_user_B_1784810838337",
+      "email": "userb_1784810838337@test.com",
+      "name": "User B",
+      "experience": "Beginner",
+      "tradingStyle": "Day Trading",
+      "mainMarkets": [
+        "Gold"
+      ],
+      "onboardingCompleted": true,
+      "isPro": false,
+      "isEmailVerified": true,
+      "emailOtp": "474466",
+      "otpExpiresAt": "2026-07-23T12:57:18.377Z",
+      "otpAttempts": 0,
+      "otpSentAt": "2026-07-23T12:47:18.377Z",
+      "onboardingData": {
+        "experience": "Beginner",
+        "tradingStyle": "Day Trading",
+        "markets": [
+          "Gold"
+        ]
+      }
+    }
+  ],
+  "accounts": [
+    {
+      "id": "acc_1784810838383",
+      "userId": "uid_user_B_1784810838337",
+      "name": "Primary Trading Account",
+      "broker": "MT5 Demo Broker",
+      "platform": "MT5",
+      "accountType": "Demo",
+      "currency": "USD",
+      "startingBalance": 10000,
+      "currentBalance": 10000,
+      "equity": 10000,
+      "status": "Active"
+    }
+  ],
+  "trades": [],
+  "riskSettings": [
+    {
+      "id": "r_1784810838383",
+      "accountId": "acc_1784810838383",
+      "riskPerTradeLimit": 2,
+      "dailyLossLimit": 500,
+      "weeklyLossLimit": 1500,
+      "maxDrawdownLimit": 10,
+      "disciplineEnabled": true,
+      "maxTradesPerDay": 5
+    }
+  ],
+  "supportTickets": [],
+  "mt5Connections": [],
+  "payments": []
+}

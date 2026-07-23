@@ -12,5 +12,11 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://your-project.
 // 2. Your Supabase Anon/Public Key:
 const SUPABASE_PUBLIC_KEY = import.meta.env.VITE_SUPABASE_KEY || "your-anon-key";
 
-// Initialize and export the Supabase client
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+// Initialize and export the Supabase client with sessionStorage for tab-isolated authentication
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
+  auth: {
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});

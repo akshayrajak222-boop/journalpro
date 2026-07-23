@@ -184,6 +184,8 @@ export default function App() {
       sessionUser?.user_metadata?.name ||
       (email ? email.split('@')[0] : 'Trader');
 
+    sessionStorage.setItem('auth_user_id', userId);
+    if (email) sessionStorage.setItem('auth_email', email);
     localStorage.setItem('auth_user_id', userId);
     if (email) localStorage.setItem('auth_email', email);
 
@@ -291,8 +293,8 @@ export default function App() {
 
   // authFetch — wraps native fetch and injects x-auth-user-id and x-auth-email headers
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
-    const storedUserId = localStorage.getItem('auth_user_id') || user?.id || '';
-    const storedEmail = localStorage.getItem('auth_email') || user?.email || '';
+    const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id') || user?.id || '';
+    const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || user?.email || '';
     const method = (options.method || 'GET').toUpperCase();
     const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
     return fetch(url, {
@@ -320,8 +322,8 @@ export default function App() {
         console.error('Error loading Supabase session:', err);
       }
 
-      const storedUserId = localStorage.getItem('auth_user_id');
-      const storedEmail = localStorage.getItem('auth_email');
+      const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id');
+      const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email');
       if (storedUserId || storedEmail) {
         try {
           const headers: Record<string, string> = {};
@@ -396,7 +398,7 @@ export default function App() {
 
       if (loadedAccs.length > 0) {
         // Automatically select the first active account if none is chosen
-        const storedSelectedId = localStorage.getItem('selected_account_id');
+        const storedSelectedId = sessionStorage.getItem('selected_account_id') || localStorage.getItem('selected_account_id');
         const defaultId = overrideAccountId 
           ? overrideAccountId 
           : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
@@ -404,12 +406,14 @@ export default function App() {
             : loadedAccs[0].id);
         
         setSelectedAccountId(defaultId);
+        sessionStorage.setItem('selected_account_id', defaultId);
         localStorage.setItem('selected_account_id', defaultId);
         await fetchTradesAndParams(defaultId);
       } else {
         setSelectedAccountId('');
         setTrades([]);
         setRiskSettings(null);
+        sessionStorage.removeItem('selected_account_id');
         localStorage.removeItem('selected_account_id');
       }
 
@@ -447,6 +451,7 @@ export default function App() {
   const handleAccountChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const accId = e.target.value;
     setSelectedAccountId(accId);
+    sessionStorage.setItem('selected_account_id', accId);
     localStorage.setItem('selected_account_id', accId);
     await fetchTradesAndParams(accId);
   };
@@ -475,6 +480,7 @@ export default function App() {
       }
 
       // Login/Sync with Express backend
+      sessionStorage.setItem('auth_email', authEmail);
       localStorage.setItem('auth_email', authEmail);
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -493,6 +499,8 @@ export default function App() {
 
       const data = await res.json();
       if (data.user) {
+        sessionStorage.setItem('auth_user_id', data.user.id);
+        sessionStorage.setItem('auth_email', data.user.email || authEmail);
         localStorage.setItem('auth_user_id', data.user.id);
         localStorage.setItem('auth_email', data.user.email || authEmail);
         setUser(data.user);
@@ -534,6 +542,7 @@ export default function App() {
       }
 
       // 2. Register with Express Backend API (sends 6-digit OTP code via SendGrid / Resend)
+      sessionStorage.setItem('auth_email', authEmail);
       localStorage.setItem('auth_email', authEmail);
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -840,6 +849,7 @@ export default function App() {
         setNewAccBroker('');
         if (data.account?.id) {
           setSelectedAccountId(data.account.id);
+          sessionStorage.setItem('selected_account_id', data.account.id);
           localStorage.setItem('selected_account_id', data.account.id);
           await fetchAccountData(data.account.id);
         } else {
@@ -902,6 +912,7 @@ export default function App() {
         if (selectedAccountId === editingAccount.id) {
           const nextId = remaining.length > 0 ? remaining[0].id : '';
           setSelectedAccountId(nextId);
+          sessionStorage.setItem('selected_account_id', nextId);
           localStorage.setItem('selected_account_id', nextId);
           await fetchAccountData(nextId);
         } else {
@@ -2761,6 +2772,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setSelectedAccountId(acc.id);
+                            sessionStorage.setItem('selected_account_id', acc.id);
                             localStorage.setItem('selected_account_id', acc.id);
                             fetchTradesAndParams(acc.id);
                           }}
