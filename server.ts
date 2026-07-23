@@ -2073,6 +2073,9 @@ const PORT = 3000;
       return res.status(400).json({ error: 'messages array is required' });
     }
 
+    const targetAcc = db.accounts?.find((a: any) => a.id === accountId);
+    const accountName = targetAcc ? targetAcc.name : 'Primary Portfolio';
+
     // Fetch trades
     const accountTrades = db.trades.filter((t: any) => t.accountId === accountId);
     
@@ -2090,11 +2093,92 @@ const PORT = 3000;
     }));
 
     const geminiKey = process.env.GEMINI_API_KEY;
+    const userMessage = messages.length > 0 ? (messages[messages.length - 1]?.content || '') : '';
+
+    const generateSmartMentorFallback = (msgText: string, trades: any[], accName: string) => {
+      const msg = msgText.toLowerCase().trim();
+      const totalTrades = trades.length;
+
+      if (totalTrades === 0) {
+        return `Hello! I noticed you don't have any logged trades yet in "${accName}". To get personalized AI feedback on your discipline, win rate, and risk management, start logging your trades in the Trading Journal or connect your MT5 account!`;
+      }
+
+      const wins = trades.filter((t: any) => (t.profit || 0) > 0);
+      const losses = trades.filter((t: any) => (t.profit || 0) < 0);
+      const totalProfit = trades.reduce((acc: number, t: any) => acc + (t.profit || 0), 0);
+      const winRate = totalTrades > 0 ? ((wins.length / totalTrades) * 100).toFixed(1) : '0';
+      
+      const totalWinAmount = wins.reduce((acc: number, t: any) => acc + (t.profit || 0), 0);
+      const totalLossAmount = Math.abs(losses.reduce((acc: number, t: any) => acc + (t.profit || 0), 0));
+      const avgWin = wins.length > 0 ? (totalWinAmount / wins.length).toFixed(2) : '0.00';
+      const avgLoss = losses.length > 0 ? (totalLossAmount / losses.length).toFixed(2) : '0.00';
+      const profitFactor = totalLossAmount > 0 ? (totalWinAmount / totalLossAmount).toFixed(2) : (totalWinAmount > 0 ? 'Inf' : '1.0');
+
+      const symbolsCount: Record<string, number> = {};
+      trades.forEach((t: any) => {
+        if (t.symbol) symbolsCount[t.symbol] = (symbolsCount[t.symbol] || 0) + 1;
+      });
+      const topSymbol = Object.entries(symbolsCount).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+      const emotionCount: Record<string, number> = {};
+      trades.forEach((t: any) => {
+        if (t.emotion) emotionCount[t.emotion] = (emotionCount[t.emotion] || 0) + 1;
+      });
+      const topEmotion = Object.entries(emotionCount).sort((a,b) => b[1] - a[1])[0]?.[0] || 'Neutral';
+
+      if (/^(hy|hi|hello|hey|greetings|hola|sup|good morning|good afternoon)/.test(msg)) {
+        return `Hello! I am your AI Trading Mentor analyzing your **"${accName}"** portfolio.\n\n` +
+          `Here is a snapshot of your account performance across **${totalTrades} logged trade${totalTrades > 1 ? 's' : ''}**:\n` +
+          `• **Total P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
+          `• **Win Rate**: ${winRate}% (${wins.length} Wins / ${losses.length} Losses)\n` +
+          `• **Most Traded Symbol**: ${topSymbol}\n` +
+          `• **Dominant Emotion**: ${topEmotion}\n\n` +
+          `How can I help you improve today? Feel free to ask me about your win rate, risk management, trade execution, or psychology strategies!`;
+      }
+
+      if (msg.includes('risk') || msg.includes('lot') || msg.includes('money management') || msg.includes('drawdown')) {
+        const avgRisk = (trades.reduce((acc: number, t: any) => acc + (t.riskPercentage || 1), 0) / totalTrades).toFixed(1);
+        return `### 🛡️ Risk Management Analysis for "${accName}"\n\n` +
+          `• **Average Risk Per Trade**: ${avgRisk}%\n` +
+          `• **Average Win vs Average Loss**: $${avgWin} vs $${avgLoss}\n` +
+          `• **Profit Factor**: ${profitFactor}\n\n` +
+          `**Mentor Recommendations**:\n` +
+          `1. Maintain strict risk per trade under **1.0% - 2.0%** of your total capital.\n` +
+          `2. Target a Minimum Reward-to-Risk ratio of **1:1.5** or higher.\n` +
+          `3. Avoid increasing lot sizes after a losing trade (revenge trading).`;
+      }
+
+      if (msg.includes('psychology') || msg.includes('fomo') || msg.includes('emotion') || msg.includes('discipline') || msg.includes('mindset')) {
+        return `### 🧠 Trading Psychology & Emotional Control\n\n` +
+          `Across your ${totalTrades} trades, your most recorded emotional state is **${topEmotion}**.\n\n` +
+          `**Key Guidelines**:\n` +
+          `• **FOMO Control**: Never enter a trade after momentum has already extended; wait for price to retest structural support or resistance.\n` +
+          `• **Session Cutoff**: Stop trading after 2 consecutive losses in a session to prevent emotional spiraling.\n` +
+          `• **Process Focus**: Evaluate trade quality on plan execution rather than immediate financial outcome.`;
+      }
+
+      if (msg.includes('win') || msg.includes('loss') || msg.includes('stat') || msg.includes('performance') || msg.includes('analyze') || msg.includes('summary')) {
+        return `### 📊 Performance Analysis for "${accName}"\n\n` +
+          `• **Total Trades Analyzed**: ${totalTrades}\n` +
+          `• **Win Rate**: ${winRate}%\n` +
+          `• **Net P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
+          `• **Average Win**: $${avgWin}\n` +
+          `• **Average Loss**: $${avgLoss}\n` +
+          `• **Top Pair**: ${topSymbol}\n\n` +
+          `**Insight**: ${parseFloat(winRate) >= 50 ? 'Your win rate is strong! Focus on letting winners run to your predefined Take-Profit zones.' : 'Work on filtering trade entries at higher-timeframe confluence zones to boost your win percentage.'}`;
+      }
+
+      return `I have analyzed your **${totalTrades} trade${totalTrades > 1 ? 's' : ''}** logged in **"${accName}"**:\n\n` +
+        `• **Net P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
+        `• **Win Rate**: ${winRate}% (${wins.length} Wins, ${losses.length} Losses)\n` +
+        `• **Average Win / Loss**: $${avgWin} / $${avgLoss}\n` +
+        `• **Top Traded Pair**: ${topSymbol}\n\n` +
+        `Based on your trading history, focus on executing trades with consistent risk, sticking to your core strategy, and tagging your trading emotions for every trade. What specific area would you like to discuss next?`;
+    };
 
     if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
-      return res.json({ 
-        reply: `I am running in offline mode. I can see you have logged ${accountTrades.length} trades. Please configure a valid Gemini API key in the environment to enable full mentoring capabilities.`
-      });
+      const fallbackReply = generateSmartMentorFallback(userMessage, accountTrades, accountName);
+      return res.json({ reply: fallbackReply });
     }
 
     try {
@@ -2131,22 +2215,21 @@ RESTRICTIONS:
       }));
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: conversation,
         config: {
           systemInstruction
         }
       });
 
-      const replyText = response.text || "I'm sorry, I couldn't generate a response.";
+      const replyText = response.text || generateSmartMentorFallback(userMessage, accountTrades, accountName);
 
       res.json({ reply: replyText });
 
     } catch (err: any) {
-      console.error('Gemini API Error:', err);
-      res.json({
-        reply: "I am currently experiencing connection issues. Please try again in a few moments."
-      });
+      console.error('Gemini API Error, using smart mentor fallback:', err);
+      const fallbackReply = generateSmartMentorFallback(userMessage, accountTrades, accountName);
+      res.json({ reply: fallbackReply });
     }
   });
 
