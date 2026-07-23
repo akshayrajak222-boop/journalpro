@@ -460,142 +460,175 @@ async function sendOtpEmail(email, otp, subject = 'Your FX Journal Pro Verificat
   return { success: false, provider: 'None', otp: otp };
 }
 
-async function ensureUserDbLoaded(email: string) {
-  if (!email) {
-    let globalDb = loadDatabaseFromFile();
-    return globalDb;
-  }
-  const normalizedEmail = email.toLowerCase().trim();
-  const dbKey = 'db_json_' + normalizedEmail;
+function createEmptyUserDb(userId?: string, email?: string) {
+  const cleanUserId = userId?.trim() || `user_${Date.now()}`;
+  const cleanEmail = email ? email.toLowerCase().trim() : '';
+  const isDemo = cleanEmail === 'admin@axyfx.com' || cleanEmail === 'demo@axyfx.com';
 
-  if (userDatabases.has(normalizedEmail)) {
-    return userDatabases.get(normalizedEmail);
-  }
-
-  let loadedDb = null;
-  if (useSupabase) {
-    try {
-      console.log('[AxyFx Journal Server] Loading database from Supabase for user: ' + normalizedEmail + '...');
-      const { data, error } = await supabase!
-        .from('journal_settings')
-        .select('value')
-        .eq('key', dbKey)
-        .maybeSingle();
-
-      if (error) {
-        console.error('[AxyFx Journal Server] Supabase query error for ' + normalizedEmail + ':', error);
-        loadedDb = loadDatabaseFromFile();
-      } else if (!data) {
-        console.log('[AxyFx Journal Server] No database found in Supabase for user: ' + normalizedEmail + '. Initializing new user DB...');
-        const initial = loadDatabaseFromFile();
-        
-        const newUserId = 'user_' + Date.now();
-        initial.users = [{
-          id: newUserId,
-          email: normalizedEmail,
-          name: normalizedEmail.split('@')[0],
-          experience: 'Intermediate',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold'],
-          onboardingCompleted: false,
-          isPro: false
-        }];
-        initial.accounts = [];
-        initial.trades = [];
-        initial.riskSettings = [];
-        initial.supportTickets = [];
-        initial.mt5Connections = [];
-        initial.payments = [];
-
-        loadedDb = initial;
-      } else {
-        console.log('[AxyFx Journal Server] Loaded database for user: ' + normalizedEmail + ' from Supabase successfully!');
-        let loaded = data.value;
-        if (typeof loaded === 'string') {
-          try { loaded = JSON.parse(loaded); } catch (e) {}
-        }
-        if (!loaded || typeof loaded !== 'object') loaded = {};
-        loaded.users = Array.isArray(loaded.users) && loaded.users.length > 0 ? loaded.users : [{
-          id: 'user_' + Date.now(),
-          email: normalizedEmail,
-          name: normalizedEmail.split('@')[0],
-          experience: 'Intermediate',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold'],
-          onboardingCompleted: false,
-          isPro: false
-        }];
-        loaded.accounts = Array.isArray(loaded.accounts) ? loaded.accounts : [];
-        loaded.trades = Array.isArray(loaded.trades) ? loaded.trades : [];
-        loaded.riskSettings = Array.isArray(loaded.riskSettings) ? loaded.riskSettings : [];
-        loaded.supportTickets = Array.isArray(loaded.supportTickets) ? loaded.supportTickets : [];
-        loaded.mt5Connections = Array.isArray(loaded.mt5Connections) ? loaded.mt5Connections : [];
-        loaded.payments = Array.isArray(loaded.payments) ? loaded.payments : [];
-
-        loadedDb = loaded;
-      }
-    } catch (err: any) {
-      console.error('[AxyFx Journal Server] Failed to load user database from Supabase for ' + normalizedEmail + ':', err);
-      loadedDb = loadDatabaseFromFile();
-    }
-  } else {
-    loadedDb = loadDatabaseFromFile();
-  }
-
-  // Set currentUser reliably
-  let currentUser = loadedDb.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
-  if (!currentUser) {
-    if (loadedDb.users && loadedDb.users.length > 0) {
-      currentUser = loadedDb.users[0];
-    } else {
-      currentUser = {
-        id: 'user_' + Date.now(),
-        email: normalizedEmail,
-        name: normalizedEmail.split('@')[0],
+  return {
+    users: [
+      {
+        id: cleanUserId,
+        email: cleanEmail,
+        name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
         experience: 'Intermediate',
         tradingStyle: 'Day Trading',
         mainMarkets: ['Forex', 'Gold'],
-        onboardingCompleted: false,
-        isPro: false
-      };
-      loadedDb.users = [currentUser];
+        onboardingCompleted: isDemo ? true : false,
+        isPro: isDemo ? true : false,
+        isEmailVerified: true
+      }
+    ],
+    accounts: isDemo ? [
+      {
+        id: 'acc_demo_1',
+        userId: cleanUserId,
+        name: 'Main Trading Account',
+        broker: 'MetaTrader 5',
+        platform: 'MT5',
+        accountType: 'Demo',
+        currency: 'USD',
+        startingBalance: 10000,
+        currentBalance: 10000,
+        equity: 10000,
+        status: 'Active'
+      }
+    ] : [],
+    trades: [],
+    riskSettings: [],
+    supportTickets: [],
+    mt5Connections: [],
+    payments: []
+  };
+}
+
+async function ensureUserDbLoaded(userId?: string, email?: string) {
+  let cleanUserId = userId?.trim() || '';
+  let cleanEmail = email?.toLowerCase().trim() || '';
+
+  if (cleanUserId.includes('@') && !cleanEmail) {
+    cleanEmail = cleanUserId.toLowerCase();
+    cleanUserId = '';
+  }
+
+  if (!cleanUserId && !cleanEmail) {
+    return createEmptyUserDb('guest_user', 'guest@example.com');
+  }
+
+  // Check in-memory cache first
+  if (cleanUserId && userDatabases.has(cleanUserId)) {
+    return userDatabases.get(cleanUserId);
+  }
+  if (cleanEmail && userDatabases.has(cleanEmail)) {
+    return userDatabases.get(cleanEmail);
+  }
+
+  let loadedDb = null;
+
+  if (useSupabase) {
+    try {
+      if (cleanUserId) {
+        const { data, error } = await supabase!
+          .from('journal_settings')
+          .select('value')
+          .eq('key', 'db_json_uid_' + cleanUserId)
+          .maybeSingle();
+
+        if (!error && data?.value) {
+          loadedDb = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        } else if (error) {
+          console.error(`[ensureUserDbLoaded] Supabase error for UID '${cleanUserId}':`, error);
+        }
+      }
+
+      if (!loadedDb && cleanEmail) {
+        const { data, error } = await supabase!
+          .from('journal_settings')
+          .select('value')
+          .eq('key', 'db_json_' + cleanEmail)
+          .maybeSingle();
+
+        if (!error && data?.value) {
+          loadedDb = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        } else if (error) {
+          console.error(`[ensureUserDbLoaded] Supabase error for Email '${cleanEmail}':`, error);
+        }
+      }
+    } catch (err) {
+      console.error('[AxyFx Journal Server] Supabase user DB query error:', err);
+    }
+  } else {
+    // Local file persistence per user
+    if (cleanUserId) {
+      const userFilePath = path.join(process.cwd(), `db_user_${cleanUserId}.json`);
+      if (fs.existsSync(userFilePath)) {
+        try {
+          const fileContent = fs.readFileSync(userFilePath, 'utf-8');
+          loadedDb = JSON.parse(fileContent);
+        } catch (e) {}
+      }
+    }
+    if (!loadedDb && cleanEmail) {
+      const safeEmail = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+      const emailFilePath = path.join(process.cwd(), `db_user_${safeEmail}.json`);
+      if (fs.existsSync(emailFilePath)) {
+        try {
+          const fileContent = fs.readFileSync(emailFilePath, 'utf-8');
+          loadedDb = JSON.parse(fileContent);
+        } catch (e) {}
+      }
     }
   }
 
-  // Ensure user has at least 1 trading account
-  if (!loadedDb.accounts || loadedDb.accounts.length === 0) {
-    const defaultAccId = 'acc_' + Date.now();
-    loadedDb.accounts = [{
-      id: defaultAccId,
-      userId: currentUser.id,
-      name: 'Main Trading Account',
-      broker: 'MetaTrader 5',
-      startingBalance: 10000,
-      currentBalance: 10000,
-      equity: 10000,
-      currency: 'USD',
-      status: 'Active',
-      createdAt: new Date().toISOString()
-    }];
-    loadedDb.riskSettings = [{
-      id: 'risk_' + Date.now(),
-      accountId: defaultAccId,
-      riskPerTradeLimit: 2,
-      dailyLossLimit: 5,
-      weeklyLossLimit: 10,
-      maxDrawdownLimit: 15,
-      disciplineEnabled: true,
-      maxTradesPerDay: 5
-    }];
-  } else {
+  if (!loadedDb) {
+    loadedDb = createEmptyUserDb(cleanUserId, cleanEmail);
+  }
+
+  // Guarantee required arrays exist
+  loadedDb.users = Array.isArray(loadedDb.users) ? loadedDb.users : [];
+  loadedDb.accounts = Array.isArray(loadedDb.accounts) ? loadedDb.accounts : [];
+  loadedDb.trades = Array.isArray(loadedDb.trades) ? loadedDb.trades : [];
+  loadedDb.riskSettings = Array.isArray(loadedDb.riskSettings) ? loadedDb.riskSettings : [];
+  loadedDb.supportTickets = Array.isArray(loadedDb.supportTickets) ? loadedDb.supportTickets : [];
+  loadedDb.mt5Connections = Array.isArray(loadedDb.mt5Connections) ? loadedDb.mt5Connections : [];
+  loadedDb.payments = Array.isArray(loadedDb.payments) ? loadedDb.payments : [];
+
+  let dbUser = loadedDb.users.find((u: any) => 
+    (cleanUserId && u.id === cleanUserId) || 
+    (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+  );
+
+  if (!dbUser) {
+    dbUser = {
+      id: cleanUserId || `user_${Date.now()}`,
+      email: cleanEmail,
+      name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
+      experience: 'Intermediate',
+      tradingStyle: 'Day Trading',
+      mainMarkets: ['Forex', 'Gold'],
+      onboardingCompleted: false,
+      isPro: false,
+      isEmailVerified: true
+    };
+    loadedDb.users.push(dbUser);
+  } else if (cleanUserId && cleanEmail && dbUser.email?.toLowerCase() === cleanEmail && dbUser.id !== cleanUserId) {
+    dbUser.id = cleanUserId;
+  }
+
+  // Set user ID on existing accounts if missing
+  if (dbUser && loadedDb.accounts) {
     loadedDb.accounts.forEach((acc: any) => {
-      acc.userId = currentUser.id;
+      if (!acc.userId) acc.userId = dbUser.id;
     });
   }
 
-  userDatabases.set(normalizedEmail, loadedDb);
+  // Cache in memory
+  if (cleanUserId) userDatabases.set(cleanUserId, loadedDb);
+  if (cleanEmail) userDatabases.set(cleanEmail, loadedDb);
+
   return loadedDb;
 }
+
 async function ensureDbLoaded() {
   if (isLoaded && db && db.users && Array.isArray(db.users)) return db;
 
@@ -648,11 +681,54 @@ async function ensureDbLoaded() {
   return db;
 }
 
-async function saveDatabase(data: any, overrideEmail?: string) {
-  const activeEmail = overrideEmail || data?.users?.[0]?.email;
-  if (activeEmail) {
-    const normalizedEmail = activeEmail.toLowerCase().trim();
-    userDatabases.set(normalizedEmail, data);
+async function saveDatabase(data: any, overrideUserId?: string, overrideEmail?: string) {
+  if (!data) return;
+
+  const usersToSync = Array.isArray(data.users) ? data.users : [];
+  
+  let cleanOverrideUid = overrideUserId?.includes('@') ? undefined : overrideUserId?.trim();
+  let cleanOverrideEmail = overrideUserId?.includes('@') ? overrideUserId.trim().toLowerCase() : overrideEmail?.trim().toLowerCase();
+
+  const keysToSync: { uid?: string; email?: string }[] = [];
+
+  for (const u of usersToSync) {
+    if (u.id || u.email) {
+      keysToSync.push({ uid: u.id, email: u.email?.toLowerCase().trim() });
+    }
+  }
+
+  if (cleanOverrideUid || cleanOverrideEmail) {
+    keysToSync.push({ uid: cleanOverrideUid, email: cleanOverrideEmail });
+  }
+
+  for (const target of keysToSync) {
+    const uid = target.uid?.trim();
+    const email = target.email?.toLowerCase().trim();
+
+    if (uid) {
+      userDatabases.set(uid, data);
+      try {
+        fs.writeFileSync(path.join(process.cwd(), `db_user_${uid}.json`), JSON.stringify(data, null, 2), 'utf-8');
+      } catch (e) {}
+      if (useSupabase) {
+        try {
+          await supabase!.from('journal_settings').upsert({ key: 'db_json_uid_' + uid, value: data }, { onConflict: 'key' });
+        } catch (err) {}
+      }
+    }
+
+    if (email) {
+      userDatabases.set(email, data);
+      const safeEmail = email.replace(/[^a-zA-Z0-9]/g, '_');
+      try {
+        fs.writeFileSync(path.join(process.cwd(), `db_user_${safeEmail}.json`), JSON.stringify(data, null, 2), 'utf-8');
+      } catch (e) {}
+      if (useSupabase) {
+        try {
+          await supabase!.from('journal_settings').upsert({ key: 'db_json_' + email, value: data }, { onConflict: 'key' });
+        } catch (err) {}
+      }
+    }
   }
 
   try {
@@ -660,28 +736,8 @@ async function saveDatabase(data: any, overrideEmail?: string) {
   } catch (err) {
     // Ignore
   }
-
-  if (useSupabase) {
-    if (activeEmail) {
-      const normalizedEmail = activeEmail.toLowerCase().trim();
-      const dbKey = 'db_json_' + normalizedEmail;
-      try {
-        const { error } = await supabase!
-          .from('journal_settings')
-          .upsert({ key: dbKey, value: data }, { onConflict: 'key' });
-        if (error) {
-          console.error('[AxyFx Journal Server] Supabase save error for ' + normalizedEmail + ':', error);
-        } else {
-          console.log('[AxyFx Journal Server] Saved user database for ' + normalizedEmail + ' (key: ' + dbKey + ', trades: ' + (data.trades?.length || 0) + ') to Supabase successfully!');
-        }
-      } catch (err) {
-        console.error('[AxyFx Journal Server] Exception saving to Supabase for ' + normalizedEmail + ':', err);
-      }
-    } else {
-      console.warn('[AxyFx Journal Server] saveDatabase called but no active user email found!');
-    }
-  }
 }
+
 const app = express();
 const PORT = 3000;
 
@@ -697,48 +753,45 @@ const PORT = 3000;
   // Middleware
   app.use(express.json({ limit: '15mb' }));
 
-  // Helper auth session simulation (simplest session cookies or custom token validation via headers)
-  // // Removed global currentUser // Removed global state
-
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
     try {
-      const authEmail = req.headers['x-auth-email'] as string | undefined;
-      const isAuthRoute = req.path.startsWith('/api/auth/register') ||
-                          req.path.startsWith('/api/auth/login') ||
-                          req.path.startsWith('/api/auth/me') ||
-                          req.path.startsWith('/api/auth/verify-otp') ||
-                          req.path.startsWith('/api/auth/resend-otp') ||
-                          req.path.startsWith('/api/auth/forgot-password') ||
-                          req.path.startsWith('/api/auth/reset-password') ||
-                          req.path.startsWith('/api/auth/onboarding');
-      
-      if (authEmail) {
-        const email = authEmail.toLowerCase().trim();
-        let db = await ensureUserDbLoaded(email);
-        
-        let dbUser = db.users.find((u: any) => u.email.toLowerCase() === email);
+      const authUserId = (req.headers['x-auth-user-id'] as string | undefined)?.trim();
+      const authEmail = (req.headers['x-auth-email'] as string | undefined)?.trim();
+
+      if (authUserId || authEmail) {
+        const email = authEmail ? authEmail.toLowerCase() : '';
+        const userId = authUserId || (email ? `user_${email}` : '');
+
+        let db = await ensureUserDbLoaded(userId, email);
+
+        let dbUser = db.users.find((u: any) => 
+          (userId && u.id === userId) || 
+          (email && u.email?.toLowerCase() === email)
+        );
+
         if (!dbUser) {
           dbUser = {
-            id: `user_${Date.now()}`,
+            id: userId || `user_${Date.now()}`,
             email: email,
-            name: email.split('@')[0],
+            name: email ? email.split('@')[0] : 'Trader',
             experience: 'Intermediate',
             tradingStyle: 'Day Trading',
             mainMarkets: ['Forex', 'Gold'],
             onboardingCompleted: false,
             isPro: false,
-            isEmailVerified: false
+            isEmailVerified: true
           };
           db.users.push(dbUser);
-          await saveDatabase(db);
+          await saveDatabase(db, userId, email);
+        } else if (userId && dbUser.id !== userId) {
+          dbUser.id = userId;
+          await saveDatabase(db, userId, email);
         }
+
         (req as any).userDb = db;
         (req as any).currentUser = dbUser;
-
-        // Removed email verification block for ease of use in local environment
       } else {
-        await ensureDbLoaded();
         (req as any).currentUser = null;
         (req as any).userDb = null;
       }
@@ -750,17 +803,29 @@ const PORT = 3000;
     }
   });
 
+  app.get('/api/auth/me', async (req, res) => {
+    let currentUser = (req as any).currentUser;
+    if (!currentUser) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    return res.json({ user: currentUser });
+  });
+
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { email, name, password, isEmailVerified } = req.body;
+      const { email, name, password, isEmailVerified, id, userId } = req.body;
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      let db = await ensureUserDbLoaded(normalizedEmail);
+      const authUserId = (req.headers['x-auth-user-id'] as string) || id || userId || '';
+      let db = await ensureUserDbLoaded(authUserId, normalizedEmail);
 
-      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+      let user = db.users.find((u: any) => 
+        (authUserId && u.id === authUserId) || 
+        u.email.toLowerCase() === normalizedEmail
+      );
       
       if (user && user.isEmailVerified && !isEmailVerified) {
         return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
@@ -771,7 +836,7 @@ const PORT = 3000;
 
       if (!user) {
         user = {
-          id: `user_${Date.now()}`,
+          id: authUserId || `user_${Date.now()}`,
           email: normalizedEmail,
           name: name || normalizedEmail.split('@')[0],
           password: password ? await bcrypt.hash(password, 10) : '',
@@ -788,6 +853,7 @@ const PORT = 3000;
         };
         db.users.push(user);
       } else {
+        if (authUserId) user.id = authUserId;
         if (name) user.name = name;
         if (password) user.password = await bcrypt.hash(password, 10);
         user.isEmailVerified = isEmailVerified === true ? true : (user.isEmailVerified || false);
@@ -797,7 +863,7 @@ const PORT = 3000;
         user.otpSentAt = new Date().toISOString();
       }
 
-      await saveDatabase(db, normalizedEmail);
+      await saveDatabase(db, user.id, normalizedEmail);
       
       if (isEmailVerified === true) {
         return res.json({
@@ -824,14 +890,18 @@ const PORT = 3000;
 
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password, id, userId } = req.body;
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      let db = await ensureUserDbLoaded(normalizedEmail);
-      let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+      const authUserId = (req.headers['x-auth-user-id'] as string) || id || userId || '';
+      let db = await ensureUserDbLoaded(authUserId, normalizedEmail);
+      let user = db.users.find((u: any) => 
+        (authUserId && u.id === authUserId) || 
+        u.email.toLowerCase() === normalizedEmail
+      );
 
       if (!user) {
         return res.status(404).json({ error: 'No account found with this email. Please register first.' });
@@ -844,42 +914,18 @@ const PORT = 3000;
         }
       } else if (password && !user.password) {
         user.password = await bcrypt.hash(password, 10);
-        await saveDatabase(db, normalizedEmail);
+        await saveDatabase(db, user.id, normalizedEmail);
       }
 
-      // Ensure user database has at least one default account
-      if (!db.accounts || db.accounts.length === 0) {
-        const defaultAcc = {
-          id: `acc_${Date.now()}`,
-          userId: user.id,
-          name: 'Primary Portfolio',
-          broker: 'Default Broker',
-          platform: 'MT5',
-          accountType: 'Live',
-          currency: 'USD',
-          startingBalance: 10000,
-          currentBalance: 10000,
-          equity: 10000,
-          status: 'Active'
-        };
-        db.accounts = [defaultAcc];
-        db.riskSettings = [{
-          id: `r_${Date.now()}`,
-          accountId: defaultAcc.id,
-          riskPerTradeLimit: 2.0,
-          dailyLossLimit: 500,
-          weeklyLossLimit: 1000,
-          maxDrawdownLimit: 10.0,
-          disciplineEnabled: true,
-          maxTradesPerDay: 5
-        }];
-        await saveDatabase(db, normalizedEmail);
+      if (authUserId && user.id !== authUserId) {
+        user.id = authUserId;
+        await saveDatabase(db, user.id, normalizedEmail);
       }
 
-      return res.json({ message: 'Login successful', user });
+      res.json({ message: 'Login successful', user });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Login endpoint error:', err);
-      return res.status(500).json({ error: `Server login error: ${err?.message || err}` });
+      res.status(500).json({ error: `Server login error: ${err?.message || err}` });
     }
   });
 
@@ -1121,7 +1167,9 @@ const PORT = 3000;
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     if (!currentUser || !db) return res.json({ accounts: [] });
-    res.json({ accounts: db.accounts || [] });
+    const userAccounts = (db.accounts || []).filter((acc: any) => acc.userId === currentUser.id);
+    console.log(`[GET /api/accounts] User: ${currentUser.id} (${currentUser.email}), total DB accounts: ${db.accounts?.length}, filtered user accounts: ${userAccounts.length}`);
+    res.json({ accounts: userAccounts });
   });
 
   app.post('/api/accounts', async (req, res) => {

@@ -172,8 +172,9 @@ export default function App() {
     (typeof window !== 'undefined' ? window.location.origin : '');
 
   const syncSupabaseUser = async (sessionUser: any) => {
+    const userId = sessionUser?.id || '';
     const email = sessionUser?.email || '';
-    if (!email) {
+    if (!userId && !email) {
       setLoading(false);
       return;
     }
@@ -181,16 +182,20 @@ export default function App() {
     const name =
       sessionUser?.user_metadata?.full_name ||
       sessionUser?.user_metadata?.name ||
-      email.split('@')[0] ||
-      '';
+      (email ? email.split('@')[0] : 'Trader');
 
-    localStorage.setItem('auth_email', email);
+    localStorage.setItem('auth_user_id', userId);
+    if (email) localStorage.setItem('auth_email', email);
 
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-email': email },
-        body: JSON.stringify({ email, name, isEmailVerified: true })
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-auth-user-id': userId,
+          'x-auth-email': email 
+        },
+        body: JSON.stringify({ id: userId, email, name, isEmailVerified: true })
       });
       if (res.ok) {
         const data = await res.json();
@@ -210,9 +215,12 @@ export default function App() {
     }
 
     setUser({
-      id: sessionUser?.id || `supabase_${email}`,
+      id: userId || `user_${Date.now()}`,
       email,
       name,
+      experience: 'Intermediate',
+      tradingStyle: 'Day Trading',
+      mainMarkets: ['Forex', 'Gold'],
       onboardingCompleted: false,
       isPro: false,
     });
@@ -281,9 +289,9 @@ export default function App() {
   // active account
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
 
-  // authFetch — wraps native fetch and injects x-auth-email header so that
-  // Vercel serverless cold starts can always identify the current user.
+  // authFetch — wraps native fetch and injects x-auth-user-id and x-auth-email headers
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
+    const storedUserId = localStorage.getItem('auth_user_id') || user?.id || '';
     const storedEmail = localStorage.getItem('auth_email') || user?.email || '';
     const method = (options.method || 'GET').toUpperCase();
     const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
@@ -291,6 +299,7 @@ export default function App() {
       ...options,
       headers: {
         ...(needsContentType ? { 'Content-Type': 'application/json' } : {}),
+        ...(storedUserId ? { 'x-auth-user-id': storedUserId } : {}),
         ...(storedEmail ? { 'x-auth-email': storedEmail } : {}),
         ...(options.headers || {}),
       },
@@ -311,12 +320,15 @@ export default function App() {
         console.error('Error loading Supabase session:', err);
       }
 
+      const storedUserId = localStorage.getItem('auth_user_id');
       const storedEmail = localStorage.getItem('auth_email');
-      if (storedEmail) {
+      if (storedUserId || storedEmail) {
         try {
-          const res = await fetch('/api/auth/me', {
-            headers: { 'x-auth-email': storedEmail }
-          });
+          const headers: Record<string, string> = {};
+          if (storedUserId) headers['x-auth-user-id'] = storedUserId;
+          if (storedEmail) headers['x-auth-email'] = storedEmail;
+
+          const res = await fetch('/api/auth/me', { headers });
           if (res.ok) {
             const data = await res.json();
             if (data.user) {
@@ -348,8 +360,8 @@ export default function App() {
         }
 
         if (event === 'SIGNED_OUT') {
-          localStorage.removeItem('auth_email');
-          localStorage.removeItem('selected_account_id');
+          sessionStorage.clear();
+          localStorage.clear();
           setUser(null);
           setAccounts([]);
           setTrades([]);
@@ -357,6 +369,8 @@ export default function App() {
           setTickets([]);
           setAnnouncements([]);
           setRiskSettings(null);
+          setEditingAccount(null);
+          setEditingTradeId(null);
           setLoading(false);
         }
       });
@@ -377,31 +391,37 @@ export default function App() {
       // Accounts
       const accsRes = await authFetch('/api/accounts');
       const accsData = await accsRes.json();
-      setAccounts(accsData.accounts);
+      const loadedAccs = Array.isArray(accsData.accounts) ? accsData.accounts : [];
+      setAccounts(loadedAccs);
 
-      if (accsData.accounts.length > 0) {
+      if (loadedAccs.length > 0) {
         // Automatically select the first active account if none is chosen
         const storedSelectedId = localStorage.getItem('selected_account_id');
         const defaultId = overrideAccountId 
           ? overrideAccountId 
-          : (storedSelectedId && accsData.accounts.some((a: any) => a.id === storedSelectedId)
+          : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
             ? storedSelectedId 
-            : accsData.accounts[0].id);
+            : loadedAccs[0].id);
         
         setSelectedAccountId(defaultId);
         localStorage.setItem('selected_account_id', defaultId);
         await fetchTradesAndParams(defaultId);
+      } else {
+        setSelectedAccountId('');
+        setTrades([]);
+        setRiskSettings(null);
+        localStorage.removeItem('selected_account_id');
       }
 
       // Support tickets
       const tickRes = await authFetch('/api/tickets');
       const tickData = await tickRes.json();
-      setTickets(tickData.tickets);
+      setTickets(Array.isArray(tickData.tickets) ? tickData.tickets : []);
 
       // Announcements
       const annRes = await authFetch('/api/announcements');
       const annData = await annRes.json();
-      setAnnouncements(annData.announcements);
+      setAnnouncements(Array.isArray(annData.announcements) ? annData.announcements : []);
 
     } catch (e) {
       console.error('Error fetching dashboard tables:', e);
@@ -458,7 +478,10 @@ export default function App() {
       localStorage.setItem('auth_email', authEmail);
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-auth-email': authEmail 
+        },
         body: JSON.stringify({ email: authEmail, password: authPassword })
       });
 
@@ -470,6 +493,8 @@ export default function App() {
 
       const data = await res.json();
       if (data.user) {
+        localStorage.setItem('auth_user_id', data.user.id);
+        localStorage.setItem('auth_email', data.user.email || authEmail);
         setUser(data.user);
         if (data.user.onboardingCompleted) {
           await fetchAccountData();
@@ -691,16 +716,34 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (isSupabaseConfigured) {
+        await supabase.auth.signOut();
+      }
     } catch (e) {
       console.error('[AxyFx] Error during Supabase signout:', e);
     }
-    localStorage.removeItem('auth_email');
-    localStorage.removeItem('selected_account_id');
+
+    // Complete session purge
+    sessionStorage.clear();
+    localStorage.clear();
+
     setUser(null);
     setAccounts([]);
     setTrades([]);
     setSelectedAccountId('');
+    setTickets([]);
+    setAnnouncements([]);
+    setRiskSettings(null);
+    setEditingAccount(null);
+    setEditingTradeId(null);
+    setActiveTab('dashboard');
+    setOnboardingStep(0);
+    setIsOtpMode(false);
+    setIsForgotPassword(false);
+    setAuthError(null);
+    setAuthEmail('');
+    setAuthPassword('');
+    setAuthName('');
   };
 
   const submitOnboarding = async () => {
