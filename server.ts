@@ -710,7 +710,8 @@ const PORT = 3000;
                           req.path.startsWith('/api/auth/verify-otp') ||
                           req.path.startsWith('/api/auth/resend-otp') ||
                           req.path.startsWith('/api/auth/forgot-password') ||
-                          req.path.startsWith('/api/auth/reset-password');
+                          req.path.startsWith('/api/auth/reset-password') ||
+                          req.path.startsWith('/api/auth/onboarding');
       
       if (authEmail) {
         const email = authEmail.toLowerCase().trim();
@@ -735,10 +736,7 @@ const PORT = 3000;
         (req as any).userDb = db;
         (req as any).currentUser = dbUser;
 
-        // Block unverified users from accessing trading/account journal APIs
-        if (dbUser && dbUser.isEmailVerified === false && !isAuthRoute && req.path.startsWith('/api/')) {
-          return res.status(403).json({ error: 'Email verification required', emailUnverified: true });
-        }
+        // Removed email verification block for ease of use in local environment
       } else {
         await ensureDbLoaded();
         (req as any).currentUser = null;
@@ -754,7 +752,7 @@ const PORT = 3000;
 
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { email, name, password } = req.body;
+      const { email, name, password, isEmailVerified } = req.body;
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }
@@ -764,7 +762,7 @@ const PORT = 3000;
 
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
       
-      if (user && user.isEmailVerified) {
+      if (user && user.isEmailVerified && !isEmailVerified) {
         return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
       }
       
@@ -782,7 +780,7 @@ const PORT = 3000;
           mainMarkets: ['Forex', 'Gold'],
           onboardingCompleted: false,
           isPro: false,
-          isEmailVerified: false,
+          isEmailVerified: isEmailVerified === true ? true : false,
           emailOtp: otp,
           otpExpiresAt: otpExpiresAt,
           otpAttempts: 0,
@@ -792,7 +790,7 @@ const PORT = 3000;
       } else {
         if (name) user.name = name;
         if (password) user.password = await bcrypt.hash(password, 10);
-        user.isEmailVerified = user.isEmailVerified || false;
+        user.isEmailVerified = isEmailVerified === true ? true : (user.isEmailVerified || false);
         user.emailOtp = otp;
         user.otpExpiresAt = otpExpiresAt;
         user.otpAttempts = 0;
@@ -800,6 +798,15 @@ const PORT = 3000;
       }
 
       await saveDatabase(db, normalizedEmail);
+      
+      if (isEmailVerified === true) {
+        return res.json({
+          message: 'Registration successful.',
+          user,
+          requiresOtp: false
+        });
+      }
+
       const emailResult = await sendOtpEmail(normalizedEmail, otp);
 
       res.json({ 

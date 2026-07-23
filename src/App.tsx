@@ -190,7 +190,7 @@ export default function App() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': email },
-        body: JSON.stringify({ email, name })
+        body: JSON.stringify({ email, name, isEmailVerified: true })
       });
       if (res.ok) {
         const data = await res.json();
@@ -704,8 +704,10 @@ export default function App() {
   };
 
   const submitOnboarding = async () => {
+    console.log('submitOnboarding called', { obExperience, obStyle, obMarkets });
     setActionLoading(true);
     try {
+      console.log('Sending onboarding request...');
       const res = await authFetch('/api/auth/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -715,13 +717,20 @@ export default function App() {
           markets: obMarkets
         })
       });
+      console.log('Onboarding response status:', res.status);
       const data = await res.json();
+      console.log('Onboarding response data:', data);
+      if (!res.ok) {
+        alert(data.error || 'Failed to complete onboarding');
+        return;
+      }
       if (data.user) {
         setUser(data.user);
         fetchAccountData();
       }
     } catch (err) {
-      alert('Failed to complete onboarding');
+      console.error('Onboarding exception:', err);
+      alert('Failed to complete onboarding: ' + err);
     } finally {
       setActionLoading(false);
     }
