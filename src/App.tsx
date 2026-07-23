@@ -817,7 +817,7 @@ export default function App() {
     if (!editingAccount || !editAccName || !editAccStartingBalance) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/accounts/${editingAccount.id}`, {
+      const res = await authFetch(`/api/accounts/${editingAccount.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -836,6 +836,39 @@ export default function App() {
       }
     } catch (err) {
       alert('Error updating account');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!editingAccount) return;
+    if (!window.confirm(`Are you sure you want to delete "${editingAccount.name}"? All associated trades and risk settings will be permanently removed.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await authFetch(`/api/accounts/${editingAccount.id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowEditAccountModal(false);
+        setEditingAccount(null);
+        const remaining = accounts.filter(a => a.id !== editingAccount.id);
+        if (selectedAccountId === editingAccount.id) {
+          const nextId = remaining.length > 0 ? remaining[0].id : '';
+          setSelectedAccountId(nextId);
+          localStorage.setItem('selected_account_id', nextId);
+          await fetchAccountData(nextId);
+        } else {
+          await fetchAccountData();
+        }
+      } else if (data.error) {
+        alert(data.error);
+      }
+    } catch (err) {
+      alert('Error deleting account');
     } finally {
       setActionLoading(false);
     }
@@ -3937,24 +3970,36 @@ export default function App() {
                 </select>
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 mt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowEditAccountModal(false);
-                    setEditingAccount(null);
-                  }}
-                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg py-2.5 px-4 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
+                  onClick={handleDeleteAccount}
                   disabled={actionLoading}
-                  className="w-1/2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  className="bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/50 dark:text-red-400 font-bold text-xs rounded-lg py-2.5 px-3 transition flex items-center gap-1.5 disabled:opacity-50 border border-red-200 dark:border-red-900/50"
+                  title="Delete Portfolio Account"
                 >
-                  {actionLoading ? 'Saving...' : 'Save Changes'}
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
                 </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditAccountModal(false);
+                      setEditingAccount(null);
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg py-2.5 px-3.5 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  >
+                    {actionLoading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
