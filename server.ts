@@ -2122,20 +2122,20 @@ RESTRICTIONS:
 - You must NOT provide financial guarantees or promise profits.
 - Base your responses heavily on the user's trading data provided in the digest whenever possible. Be specific.`;
 
-      const conversation = messages.map(msg => ({
+      const firstUserIdx = messages.findIndex((m: any) => m.role === 'user');
+      const validMessages = firstUserIdx !== -1 ? messages.slice(firstUserIdx) : messages;
+
+      const conversation = validMessages.map((msg: any) => ({
         role: msg.role === 'mentor' ? 'model' : 'user',
         parts: [{ text: msg.content }]
       }));
 
-      // Prepend system instructions to the conversation
-      conversation.unshift(
-        { role: 'user', parts: [{ text: `SYSTEM INSTRUCTIONS:\n${systemInstruction}\n\nUNDERSTAND AND ACKNOWLEDGE.` }] },
-        { role: 'model', parts: [{ text: 'Understood. I will act strictly as a trading mentor and follow all restrictions.' }] }
-      );
-
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: conversation
+        model: 'gemini-3.6-flash',
+        contents: conversation,
+        config: {
+          systemInstruction
+        }
       });
 
       const replyText = response.text || "I'm sorry, I couldn't generate a response.";
