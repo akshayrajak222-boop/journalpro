@@ -3,7 +3,7 @@ import {
   BarChart3, BookOpen, Calendar, Shield, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
-  LogOut, Star, Trash2, Check, Download, AlertTriangle,
+  LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain
 } from 'lucide-react';
@@ -32,7 +32,7 @@ import Logo from './components/Logo';
 export default function App() {
   // Auth states
   const [user, setUser] = useState<UserType | null>(null);
-  const [authEmail, setAuthEmail] = useState('akshayrajak222@gmail.com');
+  const [authEmail, setAuthEmail] = useState('');
   const [authName, setAuthName] = useState('Akshay Raj');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -43,6 +43,13 @@ export default function App() {
   // OTP states
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+
+  // Forgot/Reset password states
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetOtpMode, setIsResetOtpMode] = useState(false);
+  const [resetOtpCode, setResetOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [resetSuccess, setResetSuccess] = useState(false);
   
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -164,6 +171,66 @@ export default function App() {
     siteUrl ||
     (typeof window !== 'undefined' ? window.location.origin : '');
 
+  const syncSupabaseUser = async (sessionUser: any) => {
+    const userId = sessionUser?.id || '';
+    const email = sessionUser?.email || '';
+    if (!userId && !email) {
+      setLoading(false);
+      return;
+    }
+
+    const name =
+      sessionUser?.user_metadata?.full_name ||
+      sessionUser?.user_metadata?.name ||
+      (email ? email.split('@')[0] : 'Trader');
+
+    sessionStorage.setItem('auth_user_id', userId);
+    if (email) sessionStorage.setItem('auth_email', email);
+    localStorage.setItem('auth_user_id', userId);
+    if (email) localStorage.setItem('auth_email', email);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-auth-user-id': userId,
+          'x-auth-email': email 
+        },
+        body: JSON.stringify({ id: userId, email, name, isEmailVerified: true })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          if (data.user.onboardingCompleted) {
+            await fetchAccountData();
+          } else {
+            setOnboardingStep(1);
+          }
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Error syncing user with backend:', e);
+    }
+
+    setUser({
+      id: userId || `user_${Date.now()}`,
+      email,
+      name,
+      experience: 'Intermediate',
+      tradingStyle: 'Day Trading',
+      mainMarkets: ['Forex', 'Gold'],
+      onboardingCompleted: false,
+      isPro: false,
+    });
+
+    await fetchAccountData();
+    setLoading(false);
+  };
+
   // Notifications
   const [dailyTradingReminder, setDailyTradingReminder] = useState(true);
   const [maxDailyLossAlert, setMaxDailyLossAlert] = useState(true);
@@ -224,16 +291,17 @@ export default function App() {
   // active account
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
 
-  // authFetch — wraps native fetch and injects x-auth-email header so that
-  // Vercel serverless cold starts can always identify the current user.
+  // authFetch — wraps native fetch and injects x-auth-user-id and x-auth-email headers
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
-    const storedEmail = localStorage.getItem('auth_email') || user?.email || '';
+    const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id') || user?.id || '';
+    const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || user?.email || '';
     const method = (options.method || 'GET').toUpperCase();
     const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
     return fetch(url, {
       ...options,
       headers: {
         ...(needsContentType ? { 'Content-Type': 'application/json' } : {}),
+        ...(storedUserId ? { 'x-auth-user-id': storedUserId } : {}),
         ...(storedEmail ? { 'x-auth-email': storedEmail } : {}),
         ...(options.headers || {}),
       },
@@ -241,71 +309,81 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-
-    const syncSupabaseUser = async (sessionUser: any) => {
-      const email = sessionUser?.email || '';
-      if (!email) {
-        setLoading(false);
-        return;
-      }
-
-      const name =
-        sessionUser?.user_metadata?.full_name ||
-        sessionUser?.user_metadata?.name ||
-        email.split('@')[0] ||
-        '';
-
-      localStorage.setItem('auth_email', email);
-      setUser({
-        id: sessionUser?.id || `supabase_${email}`,
-        email,
-        name,
-        onboardingCompleted: false,
-        isPro: false,
-      });
-
-      await fetchAccountData();
-    };
-
     const bootstrapSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await syncSupabaseUser(session.user);
-          return;
+        if (isSupabaseConfigured) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await syncSupabaseUser(session.user);
+            return;
+          }
         }
       } catch (err) {
         console.error('Error loading Supabase session:', err);
       }
+
+      const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id');
+      const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email');
+      if (storedUserId || storedEmail) {
+        try {
+          const headers: Record<string, string> = {};
+          if (storedUserId) headers['x-auth-user-id'] = storedUserId;
+          if (storedEmail) headers['x-auth-email'] = storedEmail;
+
+          const res = await fetch('/api/auth/me', { headers });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.user) {
+              setUser(data.user);
+              if (data.user.onboardingCompleted) {
+                await fetchAccountData();
+              } else {
+                setOnboardingStep(1);
+              }
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error('Error loading stored session:', e);
+        }
+      }
+
       setLoading(false);
     };
 
     bootstrapSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
-        await syncSupabaseUser(session.user);
-      }
+    let subscription: any = null;
+    if (isSupabaseConfigured) {
+      const subObj = supabase.auth.onAuthStateChange(async (event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+          await syncSupabaseUser(session.user);
+        }
 
-      if (event === 'SIGNED_OUT') {
-        localStorage.removeItem('auth_email');
-        localStorage.removeItem('selected_account_id');
-        setUser(null);
-        setAccounts([]);
-        setTrades([]);
-        setSelectedAccountId('');
-        setTickets([]);
-        setAnnouncements([]);
-        setRiskSettings(null);
-        setLoading(false);
-      }
-    });
+        if (event === 'SIGNED_OUT') {
+          sessionStorage.clear();
+          localStorage.clear();
+          setUser(null);
+          setAccounts([]);
+          setTrades([]);
+          setSelectedAccountId('');
+          setTickets([]);
+          setAnnouncements([]);
+          setRiskSettings(null);
+          setEditingAccount(null);
+          setEditingTradeId(null);
+          setLoading(false);
+        }
+      });
+      subscription = subObj.data?.subscription;
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, [isSupabaseConfigured]);
 
   // Fetch all user accounts, active trades, risk params, support queues
@@ -315,31 +393,39 @@ export default function App() {
       // Accounts
       const accsRes = await authFetch('/api/accounts');
       const accsData = await accsRes.json();
-      setAccounts(accsData.accounts);
+      const loadedAccs = Array.isArray(accsData.accounts) ? accsData.accounts : [];
+      setAccounts(loadedAccs);
 
-      if (accsData.accounts.length > 0) {
+      if (loadedAccs.length > 0) {
         // Automatically select the first active account if none is chosen
-        const storedSelectedId = localStorage.getItem('selected_account_id');
+        const storedSelectedId = sessionStorage.getItem('selected_account_id') || localStorage.getItem('selected_account_id');
         const defaultId = overrideAccountId 
           ? overrideAccountId 
-          : (storedSelectedId && accsData.accounts.some((a: any) => a.id === storedSelectedId)
+          : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
             ? storedSelectedId 
-            : accsData.accounts[0].id);
+            : loadedAccs[0].id);
         
         setSelectedAccountId(defaultId);
+        sessionStorage.setItem('selected_account_id', defaultId);
         localStorage.setItem('selected_account_id', defaultId);
         await fetchTradesAndParams(defaultId);
+      } else {
+        setSelectedAccountId('');
+        setTrades([]);
+        setRiskSettings(null);
+        sessionStorage.removeItem('selected_account_id');
+        localStorage.removeItem('selected_account_id');
       }
 
       // Support tickets
       const tickRes = await authFetch('/api/tickets');
       const tickData = await tickRes.json();
-      setTickets(tickData.tickets);
+      setTickets(Array.isArray(tickData.tickets) ? tickData.tickets : []);
 
       // Announcements
       const annRes = await authFetch('/api/announcements');
       const annData = await annRes.json();
-      setAnnouncements(annData.announcements);
+      setAnnouncements(Array.isArray(annData.announcements) ? annData.announcements : []);
 
     } catch (e) {
       console.error('Error fetching dashboard tables:', e);
@@ -350,13 +436,13 @@ export default function App() {
 
   const fetchTradesAndParams = async (accId: string) => {
     try {
-      const tradesRes = await fetch(`/api/trades?accountId=${accId}`);
+      const tradesRes = await authFetch(`/api/trades?accountId=${accId}`);
       const tradesData = await tradesRes.json();
-      setTrades(tradesData.trades);
+      setTrades(tradesData.trades || []);
 
-      const riskRes = await fetch(`/api/risk-settings/${accId}`);
+      const riskRes = await authFetch(`/api/risk-settings/${accId}`);
       const riskData = await riskRes.json();
-      setRiskSettings(riskData.riskSettings);
+      setRiskSettings(riskData.riskSettings || null);
     } catch (e) {
       console.error(e);
     }
@@ -365,6 +451,7 @@ export default function App() {
   const handleAccountChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const accId = e.target.value;
     setSelectedAccountId(accId);
+    sessionStorage.setItem('selected_account_id', accId);
     localStorage.setItem('selected_account_id', accId);
     await fetchTradesAndParams(accId);
   };
@@ -376,21 +463,55 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      if (!isSupabaseConfigured) {
-        setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable sign in.');
+      if (isSupabaseConfigured) {
+        try {
+          const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+            email: authEmail,
+            password: authPassword
+          });
+
+          if (!supabaseError && supabaseData?.session?.user) {
+            await syncSupabaseUser(supabaseData.session.user);
+            return;
+          }
+        } catch (sErr) {
+          console.warn('[AxyFx] Supabase login warning, falling back to backend:', sErr);
+        }
+      }
+
+      // Login/Sync with Express backend
+      sessionStorage.setItem('auth_email', authEmail);
+      localStorage.setItem('auth_email', authEmail);
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-auth-email': authEmail 
+        },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        setAuthError(errorData.error || 'Login failed.');
         return;
       }
 
-      const { error: supabaseError } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: authPassword
-      });
-
-      if (supabaseError) {
-        setAuthError(supabaseError.message);
+      const data = await res.json();
+      if (data.user) {
+        sessionStorage.setItem('auth_user_id', data.user.id);
+        sessionStorage.setItem('auth_email', data.user.email || authEmail);
+        localStorage.setItem('auth_user_id', data.user.id);
+        localStorage.setItem('auth_email', data.user.email || authEmail);
+        setUser(data.user);
+        if (data.user.onboardingCompleted) {
+          await fetchAccountData();
+        } else {
+          setOnboardingStep(1);
+        }
       }
     } catch (err: any) {
-      console.error('[AxyFx] Login connection error:', err);
+      console.error('[AxyFx] Login error:', err);
       setAuthError(`Login connection error: ${err?.message || err || 'Network or Parsing error'}`);
     } finally {
       setActionLoading(false);
@@ -403,27 +524,50 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      if (!isSupabaseConfigured) {
-        setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable sign up.');
+      // 1. Try registering with Supabase Auth in background if configured
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.auth.signUp({
+            email: authEmail,
+            password: authPassword,
+            options: {
+              data: {
+                full_name: authName
+              }
+            }
+          });
+        } catch (sErr) {
+          console.warn('[AxyFx] Supabase register background warning:', sErr);
+        }
+      }
+
+      // 2. Register with Express Backend API (sends 6-digit OTP code via SendGrid / Resend)
+      sessionStorage.setItem('auth_email', authEmail);
+      localStorage.setItem('auth_email', authEmail);
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        setAuthError(errorData.error || 'Failed to create account.');
         return;
       }
 
-      const { error: supabaseError } = await supabase.auth.signUp({
-        email: authEmail,
-        password: authPassword,
-        options: {
-          data: {
-            full_name: authName
-          }
-        }
-      });
-
-      if (supabaseError) {
-        setAuthError(supabaseError.message);
+      const data = await res.json();
+      // Prompt user for 6-digit OTP Verification code
+      setIsOtpMode(true);
+      if (data.devOtp) {
+        setOtpCode(data.devOtp);
+      } else {
+        setOtpCode('');
       }
+      setAuthError(null);
     } catch (err: any) {
       console.error('[AxyFx] Registration connection error:', err);
-      setAuthError(`Registration connection error: ${err?.message || err || 'Network or Parsing error'}`);
+      setAuthError(`Registration error: ${err?.message || err || 'Network error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -438,15 +582,43 @@ export default function App() {
     setActionLoading(true);
     setAuthError(null);
     try {
-      const { data: supabaseData, error: supabaseError } = await supabase.auth.verifyOtp({
-        email: authEmail,
-        token: otpCode,
-        type: 'signup'
+      // 1. Verify 6-digit OTP code via backend API
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail, otp: otpCode })
       });
 
-      if (supabaseError) {
-        setAuthError(supabaseError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error || 'Invalid or expired OTP code.');
         return;
+      }
+
+      if (data.user) {
+        setUser(data.user);
+        setIsOtpMode(false);
+        setOtpCode('');
+        if (data.user.onboardingCompleted) {
+          await fetchAccountData();
+        } else {
+          setOnboardingStep(1);
+        }
+        return;
+      }
+
+      // 2. Also attempt Supabase verifyOtp in parallel if configured
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.auth.verifyOtp({
+            email: authEmail,
+            token: otpCode,
+            type: 'signup'
+          });
+        } catch (sErr) {
+          console.warn('[AxyFx] Supabase OTP verify warning:', sErr);
+        }
       }
     } catch (err: any) {
       setAuthError(`OTP Verification error: ${err?.message || err}`);
@@ -455,23 +627,139 @@ export default function App() {
     }
   };
 
+  const handleResendOtp = async () => {
+    if (!authEmail) return;
+    setActionLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch('/api/auth/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
+        body: JSON.stringify({ email: authEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Failed to resend verification code.');
+      } else {
+        if (data.devOtp) {
+          setOtpCode(data.devOtp);
+          alert(`Code generated: ${data.devOtp} (Email provider sender unverified or pending setup)`);
+        } else {
+          setOtpCode('');
+          alert(`A new 6-digit verification code has been sent to ${authEmail}`);
+        }
+      }
+    } catch (err: any) {
+      setAuthError(`Resend error: ${err?.message || err}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail) return;
+    setActionLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Request failed. Please try again.');
+        return;
+      }
+      // Move to OTP + new password step
+      setIsResetOtpMode(true);
+      if (data.devOtp) {
+        setResetOtpCode(data.devOtp);
+        alert(`Dev mode – Reset code: ${data.devOtp}`);
+      } else {
+        setResetOtpCode('');
+      }
+      setAuthError(null);
+    } catch (err: any) {
+      setAuthError(`Error: ${err?.message || err}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetOtpCode || resetOtpCode.length !== 6 || !newPassword) return;
+    setActionLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail, otp: resetOtpCode, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Failed to reset password.');
+        return;
+      }
+      // Success – show success message then go back to login
+      setResetSuccess(true);
+      setTimeout(() => {
+        setIsForgotPassword(false);
+        setIsResetOtpMode(false);
+        setResetSuccess(false);
+        setResetEmail('');
+        setResetOtpCode('');
+        setNewPassword('');
+        setAuthError(null);
+      }, 2500);
+    } catch (err: any) {
+      setAuthError(`Error: ${err?.message || err}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (isSupabaseConfigured) {
+        await supabase.auth.signOut();
+      }
     } catch (e) {
       console.error('[AxyFx] Error during Supabase signout:', e);
     }
-    localStorage.removeItem('auth_email');
-    localStorage.removeItem('selected_account_id');
+
+    // Complete session purge
+    sessionStorage.clear();
+    localStorage.clear();
+
     setUser(null);
     setAccounts([]);
     setTrades([]);
     setSelectedAccountId('');
+    setTickets([]);
+    setAnnouncements([]);
+    setRiskSettings(null);
+    setEditingAccount(null);
+    setEditingTradeId(null);
+    setActiveTab('dashboard');
+    setOnboardingStep(0);
+    setIsOtpMode(false);
+    setIsForgotPassword(false);
+    setAuthError(null);
+    setAuthEmail('');
+    setAuthPassword('');
+    setAuthName('');
   };
 
   const submitOnboarding = async () => {
+    console.log('submitOnboarding called', { obExperience, obStyle, obMarkets });
     setActionLoading(true);
     try {
+      console.log('Sending onboarding request...');
       const res = await authFetch('/api/auth/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -481,13 +769,20 @@ export default function App() {
           markets: obMarkets
         })
       });
+      console.log('Onboarding response status:', res.status);
       const data = await res.json();
+      console.log('Onboarding response data:', data);
+      if (!res.ok) {
+        alert(data.error || 'Failed to complete onboarding');
+        return;
+      }
       if (data.user) {
         setUser(data.user);
         fetchAccountData();
       }
     } catch (err) {
-      alert('Failed to complete onboarding');
+      console.error('Onboarding exception:', err);
+      alert('Failed to complete onboarding: ' + err);
     } finally {
       setActionLoading(false);
     }
@@ -552,7 +847,14 @@ export default function App() {
         setShowAccountModal(false);
         setNewAccName('');
         setNewAccBroker('');
-        fetchAccountData();
+        if (data.account?.id) {
+          setSelectedAccountId(data.account.id);
+          sessionStorage.setItem('selected_account_id', data.account.id);
+          localStorage.setItem('selected_account_id', data.account.id);
+          await fetchAccountData(data.account.id);
+        } else {
+          await fetchAccountData();
+        }
       } else if (data.error) {
         alert(data.error);
       }
@@ -568,7 +870,7 @@ export default function App() {
     if (!editingAccount || !editAccName || !editAccStartingBalance) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/accounts/${editingAccount.id}`, {
+      const res = await authFetch(`/api/accounts/${editingAccount.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -587,6 +889,40 @@ export default function App() {
       }
     } catch (err) {
       alert('Error updating account');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!editingAccount) return;
+    if (!window.confirm(`Are you sure you want to delete "${editingAccount.name}"? All associated trades and risk settings will be permanently removed.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await authFetch(`/api/accounts/${editingAccount.id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowEditAccountModal(false);
+        setEditingAccount(null);
+        const remaining = accounts.filter(a => a.id !== editingAccount.id);
+        if (selectedAccountId === editingAccount.id) {
+          const nextId = remaining.length > 0 ? remaining[0].id : '';
+          setSelectedAccountId(nextId);
+          sessionStorage.setItem('selected_account_id', nextId);
+          localStorage.setItem('selected_account_id', nextId);
+          await fetchAccountData(nextId);
+        } else {
+          await fetchAccountData();
+        }
+      } else if (data.error) {
+        alert(data.error);
+      }
+    } catch (err) {
+      alert('Error deleting account');
     } finally {
       setActionLoading(false);
     }
@@ -676,7 +1012,7 @@ export default function App() {
     try {
       let res;
       if (editingTradeId) {
-        res = await fetch(`/api/trades/${editingTradeId}`, {
+        res = await authFetch(`/api/trades/${editingTradeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tradeData)
@@ -691,14 +1027,19 @@ export default function App() {
 
       if (res.ok) {
         setShowTradeModal(false);
-        fetchTradesAndParams(selectedAccountId);
+        setEditingTradeId(null);
+        await fetchTradesAndParams(selectedAccountId);
         // Refresh accounts to get new balance/equity calculations
         const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
+        setAccounts(accsData.accounts || []);
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || 'Error saving trade record');
       }
-    } catch (err) {
-      alert('Error saving trade record');
+    } catch (err: any) {
+      console.error('Error saving trade:', err);
+      alert('Error saving trade record: ' + (err?.message || err));
     } finally {
       setActionLoading(false);
     }
@@ -707,16 +1048,19 @@ export default function App() {
   const handleDeleteTrade = async (tradeId: string) => {
     if (!confirm('Are you sure you want to delete this trade? This will reverse its financial impact from your account balance.')) return;
     try {
-      const res = await fetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
       if (res.ok) {
-        fetchTradesAndParams(selectedAccountId);
+        await fetchTradesAndParams(selectedAccountId);
         // Refresh accounts
         const accsRes = await authFetch('/api/accounts');
         const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
+        setAccounts(accsData.accounts || []);
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || 'Error deleting trade');
       }
-    } catch (e) {
-      alert('Error deleting trade');
+    } catch (e: any) {
+      alert('Error deleting trade: ' + (e?.message || e));
     }
   };
 
@@ -1187,131 +1531,204 @@ export default function App() {
   // Auth Layout (if no user)
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans antialiased text-slate-800">
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-xl w-full max-w-md p-8 space-y-6 relative overflow-hidden">
-          {/* Subtle branding accent */}
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-600"></div>
-
-          <div className="text-center space-y-3">
-            <Logo size={48} className="mx-auto" />
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display flex items-center justify-center gap-1.5">
-              FX Journal Pro
-            </h1>
-            <p className="text-xs text-slate-500">
-              {isRegistering 
-                ? 'Create your institutional trading journal account' 
-                : isForgotPassword 
-                ? 'Reset your secure login password' 
-                : 'Sign in to access your trading analytics dashboard'
-              }
-            </p>
-          </div>
-
-          {/* Alert announcement bar */}
-          <div className="bg-blue-50/70 border border-blue-100 rounded-lg p-3 text-center">
-            <span className="text-[10px] font-bold text-blue-700 block uppercase tracking-wider">Instant Sandbox Trial</span>
-            <p className="text-[11px] text-blue-600 mt-0.5">Simply enter any email to immediately log in and explore!</p>
-          </div>
-
-          {isForgotPassword ? (
-            <form onSubmit={(e) => { e.preventDefault(); alert('Reset link triggered!'); setIsForgotPassword(false); }} className="space-y-4">
+      <div className="min-h-screen bg-[#05070d] relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-100">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-500/15 blur-3xl"></div>
+          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl"></div>
+        </div>
+        <div className="relative w-full max-w-[560px]">
+          <div className="relative bg-[#090d16] backdrop-blur border border-white/10 rounded-[2.3rem] shadow-[0_28px_80px_-32px_rgba(0,0,0,0.75)] p-8 md:p-10 space-y-6 overflow-hidden">
+            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2.3rem] bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500"></div>
+            <div className="absolute inset-y-8 left-6 w-px bg-white/5"></div>
+            <div className="absolute inset-y-8 right-6 w-px bg-white/5"></div>
+            <div className="text-center space-y-3">
+              <Logo size={46} className="mx-auto" />
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Registration Email</label>
-                <input 
-                  type="email" 
-                  required 
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="name@email.com"
-                />
+                <h1 className="text-2xl font-bold tracking-tight text-white font-display">FX Journal Pro</h1>
+                <p className="mt-2 text-sm text-slate-400">
+                  {isRegistering
+                    ? 'Create your account'
+                    : isForgotPassword
+                    ? 'Reset your password'
+                    : 'Sign in to continue'}
+                </p>
               </div>
-              <button 
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition"
-              >
-                Send Password Reset Instructions
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setIsForgotPassword(false)}
-                className="w-full text-slate-500 hover:text-slate-800 text-xs font-medium block text-center"
-              >
-                Back to Sign In
-              </button>
-            </form>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-300">Professional trading journal</span>
+              <p className="mt-2 text-[11px] leading-5 text-slate-400">
+                Simple login, clean layout, and quick access to your dashboard.
+              </p>
+            </div>
+
+            {isForgotPassword ? (
+              resetSuccess ? (
+                <div className="space-y-4 text-center">
+                  <div className="bg-green-500/10 text-green-300 text-sm rounded-xl p-4 border border-green-500/20">
+                    ✅ Password updated successfully! Redirecting to login...
+                  </div>
+                </div>
+              ) : isResetOtpMode ? (
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center mb-2 text-xs text-slate-300">
+                    A 6-digit password reset code has been sent to <br/><strong className="font-bold">{resetEmail}</strong>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">Enter Reset Code</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      value={resetOtpCode}
+                      onChange={(e) => setResetOtpCode(e.target.value.replace(/\D/g, ''))}
+                      className="bg-[#0f1420] border border-white/10 text-lg text-center tracking-[0.5em] rounded-xl p-3 w-full font-mono text-slate-100 focus:ring-cyan-500 focus:border-cyan-500"
+                      placeholder="------"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">New Password</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
+                      placeholder="Minimum 6 characters"
+                    />
+                  </div>
+                  {authError && (
+                    <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20">{authError}</div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={actionLoading || resetOtpCode.length !== 6 || !newPassword}
+                    className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition shadow-sm disabled:opacity-50"
+                  >
+                    {actionLoading ? 'Resetting...' : 'Reset Password'}
+                  </button>
+                  <button type="button" onClick={() => { setIsResetOtpMode(false); setAuthError(null); }} className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center">
+                    ← Back
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <p className="text-xs text-slate-400 text-center">Enter your registered email and we'll send you a password reset code.</p>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
+                      placeholder="name@email.com"
+                    />
+                  </div>
+                  {authError && (
+                    <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20">{authError}</div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition shadow-sm disabled:opacity-50"
+                  >
+                    {actionLoading ? 'Sending...' : 'Send Reset Code'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsForgotPassword(false); setAuthError(null); }}
+                    className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center"
+                  >
+                    Back to Sign In
+                  </button>
+                </form>
+              )
           ) : isOtpMode ? (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-center mb-4 text-xs text-blue-800">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center mb-4 text-xs text-slate-300">
                 A 6-digit confirmation code has been sent to <br/><strong className="font-bold">{authEmail}</strong>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Enter 6-Digit Code</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Enter 6-Digit Code</label>
                 <input 
                   type="text" 
                   required 
                   maxLength={6}
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  className="bg-slate-50 border border-slate-200 text-lg text-center tracking-[0.5em] rounded-lg p-3 w-full font-mono focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-lg text-center tracking-[0.5em] rounded-xl p-3 w-full font-mono text-slate-100 focus:ring-cyan-500 focus:border-cyan-500"
                   placeholder="------"
                 />
               </div>
               <button 
                 type="submit" 
                 disabled={actionLoading || otpCode.length !== 6}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Verifying...' : 'Verify Code & Login'}
                 <CheckCircle2 className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
               )}
 
-              <button 
-                type="button" 
-                onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
-                className="w-full text-slate-500 hover:text-slate-800 text-xs font-medium block text-center mt-2"
-              >
-                Change Email
-              </button>
+              <div className="flex items-center justify-between text-xs pt-2">
+                <button 
+                  type="button" 
+                  onClick={handleResendOtp}
+                  disabled={actionLoading}
+                  className="text-cyan-400 hover:text-cyan-300 font-medium"
+                >
+                  Resend 6-Digit Code
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
+                  className="text-slate-400 hover:text-slate-200 font-medium"
+                >
+                  Change Email
+                </button>
+              </div>
             </form>
           ) : isRegistering ? (
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Full Name</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Full Name</label>
                 <input 
                   type="text" 
                   required 
                   value={authName}
                   onChange={(e) => setAuthName(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="Your Name"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Email</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Email</label>
                 <input 
                   type="email" 
                   required 
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="name@email.com"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Password</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Password</label>
                 <div className="relative">
                   <input 
                     type={showPassword ? "text" : "password"} 
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-white border border-slate-300 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 pr-10 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                     placeholder="Enter password"
                   />
                   <button
@@ -1327,14 +1744,14 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Creating Workspace...' : 'Register Secure Account'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
@@ -1342,26 +1759,26 @@ export default function App() {
 
               <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
                 <span>Already have an account?</span>
-                <button type="button" onClick={() => { setIsRegistering(false); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Sign In</button>
+                <button type="button" onClick={() => { setIsRegistering(false); setAuthError(null); }} className="text-cyan-300 hover:underline font-semibold">Sign In</button>
               </div>
             </form>
           ) : (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Secure Email Address</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Email Address</label>
                 <input 
                   type="email" 
                   required 
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-3 w-full focus:ring-blue-500 focus:border-blue-500"
+                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                   placeholder="name@email.com"
                 />
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-600">Password</label>
-                  <button type="button" onClick={() => setIsForgotPassword(true)} className="text-blue-600 hover:underline text-[11px] font-medium">Forgot Password?</button>
+                  <label className="text-xs font-semibold text-slate-300">Password</label>
+                  <button type="button" onClick={() => setIsForgotPassword(true)} className="text-cyan-300 hover:underline text-[11px] font-medium">Forgot Password?</button>
                 </div>
                 <div className="relative">
                   <input 
@@ -1369,7 +1786,7 @@ export default function App() {
                     required
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-white border border-slate-300 text-xs text-slate-800 rounded-lg p-3 pr-10 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 pr-10 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
                     placeholder="Enter password"
                   />
                   <button
@@ -1386,36 +1803,32 @@ export default function App() {
               <button 
                 type="submit" 
                 disabled={actionLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
               >
                 {actionLoading ? 'Verifying Authorization...' : 'Authenticate & Sign In'}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
 
               {authError && (
-                <div className="bg-red-50 text-red-600 text-xs rounded-lg p-3 border border-red-100 flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
               )}
 
               {/* Google Sign In */}
-              <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
+              <div className="border-t border-white/10 pt-4 flex flex-col gap-2">
                 <button
                   type="button"
                   disabled={actionLoading}
                   onClick={async () => {
-                    if (!isSupabaseConfigured) {
-                      setAuthError('Configure VITE_SUPABASE_URL and VITE_SUPABASE_KEY to enable Google sign-in.');
-                      return;
-                    }
                     setActionLoading(true);
                     setAuthError(null);
                     try {
                       const { error } = await supabase.auth.signInWithOAuth({
                         provider: 'google',
                         options: {
-                          redirectTo: authRedirectUrl,
+                          redirectTo: window.location.origin,
                         },
                       });
                       if (error) {
@@ -1428,17 +1841,10 @@ export default function App() {
                       setActionLoading(false);
                     }
                   }}
-                  className="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg p-2.5 text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                  className="w-full border border-white/10 bg-[#0f1420] hover:bg-[#111827] text-slate-100 rounded-xl p-3 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50"
                 >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fill="#EA4335"
-                      d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z"
-                    />
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z" />
                     <path fill="#34A853" d="M3.67 7.72 6.76 10a6.1 6.1 0 0 1 5.24-3.04c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 8.1 2 4.72 4.21 3.67 7.72z" opacity="0.15" />
                     <path fill="#FBBC05" d="M12 22c2.68 0 4.94-.88 6.59-2.39l-3.05-2.5c-.84.57-1.94.97-3.54.97-4.09 0-5.24-2.43-5.5-3.72H3.45C4.24 19.12 7.65 22 12 22z" opacity="0.15" />
                     <path fill="#4285F4" d="M21.55 12.29c0-.65-.07-1.15-.16-1.65H12v3.9h5.5c-.26 1.37-1.1 2.58-2.41 3.46l3.05 2.5C19.96 18.86 21.55 15.92 21.55 12.29z" opacity="0.15" />
@@ -1447,12 +1853,13 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
+              <div className="flex justify-between items-center text-[11px] text-slate-400 mt-2">
                 <span>New to FX Journal Pro?</span>
-                <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-blue-600 hover:underline font-semibold">Create free account</button>
+                <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-cyan-300 hover:underline font-semibold">Create free account</button>
               </div>
             </form>
           )}
+          </div>
         </div>
       </div>
     );
@@ -2365,6 +2772,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setSelectedAccountId(acc.id);
+                            sessionStorage.setItem('selected_account_id', acc.id);
                             localStorage.setItem('selected_account_id', acc.id);
                             fetchTradesAndParams(acc.id);
                           }}
@@ -3617,24 +4025,36 @@ export default function App() {
                 </select>
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 mt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowEditAccountModal(false);
-                    setEditingAccount(null);
-                  }}
-                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg py-2.5 px-4 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
+                  onClick={handleDeleteAccount}
                   disabled={actionLoading}
-                  className="w-1/2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  className="bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/50 dark:text-red-400 font-bold text-xs rounded-lg py-2.5 px-3 transition flex items-center gap-1.5 disabled:opacity-50 border border-red-200 dark:border-red-900/50"
+                  title="Delete Portfolio Account"
                 >
-                  {actionLoading ? 'Saving...' : 'Save Changes'}
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
                 </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditAccountModal(false);
+                      setEditingAccount(null);
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg py-2.5 px-3.5 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                  >
+                    {actionLoading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

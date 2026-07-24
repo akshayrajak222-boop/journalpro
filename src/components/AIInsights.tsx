@@ -43,9 +43,15 @@ export default function AIInsights({ user, account, onUpgradeToPro }: AIInsights
     setLoading(true);
 
     try {
+      const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id') || user?.id || '';
+      const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || user?.email || '';
       const response = await fetch('/api/ai/mentor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(storedUserId ? { 'x-auth-user-id': storedUserId } : {}),
+          ...(storedEmail ? { 'x-auth-email': storedEmail } : {})
+        },
         body: JSON.stringify({ 
           accountId: account.id,
           messages: newMessages.slice(-10) // Send the last 10 messages for context
