@@ -689,10 +689,6 @@ async function saveDatabase(
 ) {
   if (!data) return;
 
-  if (previousAliases?.userId || previousAliases?.email) {
-    await removeUserDatabaseAliases(previousAliases.userId, previousAliases.email);
-  }
-
   const usersToSync = Array.isArray(data.users) ? data.users : [];
   
   let cleanOverrideUid = overrideUserId?.includes('@') ? undefined : overrideUserId?.trim();
@@ -745,42 +741,17 @@ async function saveDatabase(
   } catch (err) {
     // Ignore
   }
+
+  if (useSupabase) {
+    try {
+      await supabase!.from('journal_settings').upsert({ key: 'db_json', value: data }, { onConflict: 'key' });
+    } catch (err) {}
+  }
 }
 
 async function removeUserDatabaseAliases(userId?: string, email?: string) {
-  const cleanUserId = userId?.trim();
-  const cleanEmail = email?.toLowerCase().trim();
-
-  if (cleanUserId) {
-    userDatabases.delete(cleanUserId);
-    try {
-      fs.unlinkSync(path.join(process.cwd(), `db_user_${cleanUserId}.json`));
-    } catch (err) {}
-    if (useSupabase) {
-      try {
-        await supabase!
-          .from('journal_settings')
-          .delete()
-          .eq('key', 'db_json_uid_' + cleanUserId);
-      } catch (err) {}
-    }
-  }
-
-  if (cleanEmail) {
-    userDatabases.delete(cleanEmail);
-    const safeEmail = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
-    try {
-      fs.unlinkSync(path.join(process.cwd(), `db_user_${safeEmail}.json`));
-    } catch (err) {}
-    if (useSupabase) {
-      try {
-        await supabase!
-          .from('journal_settings')
-          .delete()
-          .eq('key', 'db_json_' + cleanEmail);
-      } catch (err) {}
-    }
-  }
+  void userId;
+  void email;
 }
 
 const app = express();
@@ -1284,7 +1255,7 @@ const PORT = 3000;
     const { name, broker, status, currentBalance, equity, currency, startingBalance } = req.body;
 
     const accIdx = db.accounts.findIndex((acc: any) => acc.id === id);
-    if (accIdx !== -1) {
+    if (accIdx !== -1 && db.accounts[accIdx].userId === currentUser.id) {
       if (name) db.accounts[accIdx].name = name;
       if (broker) db.accounts[accIdx].broker = broker;
       if (status) db.accounts[accIdx].status = status;
@@ -1295,6 +1266,8 @@ const PORT = 3000;
 
       await saveDatabase(db, authEmail);
       res.json({ message: 'Account updated successfully', account: db.accounts[accIdx] });
+    } else if (accIdx !== -1) {
+      res.status(403).json({ error: 'You can only edit your own trading accounts.' });
     } else {
       res.status(404).json({ error: 'Account not found' });
     }
@@ -1307,6 +1280,14 @@ const PORT = 3000;
     const authEmail = currentUser?.email;
     if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
+
+    const targetAccount = db.accounts.find((acc: any) => acc.id === id);
+    if (!targetAccount) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    if (targetAccount.userId !== currentUser.id) {
+      return res.status(403).json({ error: 'You can only delete your own trading accounts.' });
+    }
 
     const initialLength = db.accounts.length;
     db.accounts = db.accounts.filter((acc: any) => acc.id !== id);
@@ -1334,6 +1315,10 @@ const PORT = 3000;
     const { accountId } = req.query;
     let accountTrades = [];
     if (accountId) {
+      const targetAccount = db.accounts.find((acc: any) => acc.id === accountId);
+      if (targetAccount && targetAccount.userId !== currentUser.id) {
+        return res.status(403).json({ error: 'You can only view trades for your own accounts.' });
+      }
       accountTrades = (db.trades || []).filter((t: any) => t.accountId === accountId);
     } else {
       accountTrades = db.trades || [];
@@ -1377,11 +1362,22 @@ const PORT = 3000;
       return res.status(400).json({ error: 'Missing required trade parameters' });
     }
 
+    const ownAccounts = (db.accounts || []).filter((acc: any) => acc.userId === currentUser.id);
+    if (accountId) {
+      const requestedAccount = db.accounts.find((acc: any) => acc.id === accountId);
+      if (!requestedAccount) {
+        return res.status(404).json({ error: 'Account not found' });
+      }
+      if (requestedAccount.userId !== currentUser.id) {
+        return res.status(403).json({ error: 'You can only add trades to your own accounts.' });
+      }
+    }
+
     // Verify account existence in user's scoped database
-    let accountIdx = db.accounts.findIndex((acc: any) => acc.id === accountId);
+    let accountIdx = ownAccounts.findIndex((acc: any) => acc.id === accountId);
     if (accountIdx === -1) {
-      if (db.accounts.length > 0) {
-        accountIdx = 0; // Fallback to primary account
+      if (ownAccounts.length > 0) {
+        accountIdx = 0; // Fallback to primary own account only
       } else {
         const defaultAccId = `acc_${Date.now()}`;
         db.accounts.push({
@@ -1396,8 +1392,10 @@ const PORT = 3000;
           status: 'Active',
           createdAt: new Date().toISOString()
         });
-        accountIdx = 0;
+        accountIdx = db.accounts.length - 1;
       }
+    } else {
+      accountIdx = db.accounts.findIndex((acc: any) => acc.id === ownAccounts[accountIdx].id);
     }
 
     const targetAccountId = db.accounts[accountIdx].id;
@@ -1465,8 +1463,9 @@ const PORT = 3000;
 
     const trade = db.trades[tradeIdx];
     // Verify account exists
-    const account = db.accounts.find((acc: any) => acc.id === trade.accountId) || db.accounts[0];
-    if (!account) return res.status(403).json({ error: 'Access denied' });
+    const account = db.accounts.find((acc: any) => acc.id === trade.accountId);
+    if (!account) return res.status(404).json({ error: 'Associated account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'You can only edit your own trades.' });
 
     // If profit updated, adjust account balance
     const oldNet = trade.profit + (trade.commission || 0) + (trade.swap || 0);
@@ -1517,8 +1516,8 @@ const PORT = 3000;
 
     const trade = db.trades[tradeIdx];
     let accIdx = db.accounts.findIndex((acc: any) => acc.id === trade.accountId);
-    if (accIdx === -1 && db.accounts.length > 0) accIdx = 0;
-    if (accIdx === -1) return res.status(403).json({ error: 'Access denied' });
+    if (accIdx === -1) return res.status(404).json({ error: 'Associated account not found' });
+    if (db.accounts[accIdx].userId !== currentUser.id) return res.status(403).json({ error: 'You can only delete your own trades.' });
 
     // Reverse trade impact from balance
     const netProfit = trade.profit + (trade.commission || 0) + (trade.swap || 0);
@@ -1541,6 +1540,10 @@ const PORT = 3000;
     if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
 
     const { accountId } = req.params;
+    const account = db.accounts.find((acc: any) => acc.id === accountId);
+    if (account && account.userId !== currentUser.id) {
+      return res.status(403).json({ error: 'You can only view risk settings for your own accounts.' });
+    }
     const settings = (db.riskSettings || []).find((r: any) => r.accountId === accountId);
     if (!settings) {
       // Return default
@@ -1571,6 +1574,10 @@ const PORT = 3000;
     if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { accountId } = req.params;
     const { riskPerTradeLimit, dailyLossLimit, weeklyLossLimit, maxDrawdownLimit, disciplineEnabled, maxTradesPerDay } = req.body;
+    const account = db.accounts.find((acc: any) => acc.id === accountId);
+    if (account && account.userId !== currentUser.id) {
+      return res.status(403).json({ error: 'You can only update risk settings for your own accounts.' });
+    }
 
     const idx = db.riskSettings.findIndex((r: any) => r.accountId === accountId);
     if (idx !== -1) {
