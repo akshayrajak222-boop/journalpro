@@ -203,6 +203,13 @@ export default function App() {
     siteUrl ||
     (typeof window !== 'undefined' ? window.location.origin : '');
 
+  const needsOnboarding = (candidateUser: any) => {
+    if (!candidateUser) return false;
+    const markets = Array.isArray(candidateUser.mainMarkets) ? candidateUser.mainMarkets.filter(Boolean) : [];
+    const hasProfileBasics = Boolean(candidateUser.experience && candidateUser.tradingStyle && markets.length > 0);
+    return !candidateUser.onboardingCompleted || !hasProfileBasics;
+  };
+
   const syncSupabaseUser = async (sessionUser: any) => {
     const userId = sessionUser?.id || '';
     const email = sessionUser?.email || '';
@@ -232,7 +239,7 @@ export default function App() {
         const data = await res.json();
         if (data.user) {
           setUser(data.user);
-          if (data.user.onboardingCompleted) {
+          if (!needsOnboarding(data.user)) {
             await fetchAccountData();
           } else {
             setOnboardingStep(1);
@@ -364,7 +371,7 @@ export default function App() {
             const data = await res.json();
             if (data.user) {
               setUser(data.user);
-              if (data.user.onboardingCompleted) {
+              if (!needsOnboarding(data.user)) {
                 await fetchAccountData();
               } else {
                 setOnboardingStep(1);
@@ -526,7 +533,7 @@ export default function App() {
       if (data.user) {
         persistAuthSession(data.user.id, data.user.email || authEmail);
         setUser(data.user);
-        if (data.user.onboardingCompleted) {
+        if (!needsOnboarding(data.user)) {
           await fetchAccountData();
         } else {
           setOnboardingStep(1);
@@ -622,7 +629,7 @@ export default function App() {
         setUser(data.user);
         setIsOtpMode(false);
         setOtpCode('');
-        if (data.user.onboardingCompleted) {
+        if (!needsOnboarding(data.user)) {
           await fetchAccountData();
         } else {
           setOnboardingStep(1);
@@ -1888,7 +1895,7 @@ export default function App() {
   }
 
   // Onboarding Wizard (if registration completes but not onboarding completed)
-  if (!user.onboardingCompleted) {
+  if (needsOnboarding(user)) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans antialiased text-slate-800">
         <div className="bg-white border border-slate-100 rounded-2xl shadow-xl w-full max-w-lg p-8 space-y-6 relative overflow-hidden">
