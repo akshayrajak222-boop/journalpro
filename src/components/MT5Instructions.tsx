@@ -376,6 +376,10 @@ input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
 int OnInit() {
+   if(MQLInfoInteger(MQL_TESTER) || MQLInfoInteger(MQL_OPTIMIZATION)) {
+      Print("[FX Journal Pro] WebRequest is disabled in Strategy Tester / Optimization. Run this EA on a live chart.");
+      return(INIT_FAILED);
+   }
    Print("[FX Journal Pro] Initializing Sync EA (${historyMonthsVal} Months History)...");
    EventSetTimer(InpInterval);
    return(INIT_SUCCEEDED);
@@ -454,6 +458,7 @@ void SendTradesToFXJournalPro() {
    int timeout = 5000;
    
    string outHeaders;
+   ResetLastError();
    int res = WebRequest("POST", InpWebRequestUrl, headers, timeout, postData, resultData, outHeaders);
    
    if(res == 200) {
@@ -461,6 +466,9 @@ void SendTradesToFXJournalPro() {
    } else {
       int lastError = GetLastError();
       Print("[FX Journal Pro] Sync failed. Result Code: ", res, " | LastError: ", lastError);
+      if(lastError == 4014) {
+         Print("[FX Journal Pro] WebRequest is blocked in this execution mode. Use a live chart and keep the URL whitelisted in MT5 Options.");
+      }
    }
 }`;
 
