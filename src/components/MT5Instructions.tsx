@@ -71,17 +71,8 @@ export default function MT5Instructions({
   const [customMonths, setCustomMonths] = useState('5');
   const [savingHistory, setSavingHistory] = useState(false);
 
-  // API Origin / Host overrides for WebRequest / Vercel
-  const [apiOrigin, setApiOrigin] = useState(() => {
-    if (typeof window !== 'undefined') {
-      // Pre-select Vercel if we detect it or have it, otherwise use current window
-      if (window.location.hostname.includes('vercel.app')) {
-        return window.location.origin;
-      }
-    }
-    return 'https://journalpro-iota.vercel.app'; // Default to their production Vercel url
-  });
-  const [customOriginInput, setCustomOriginInput] = useState('');
+  // Fixed WebRequest URL for MT5 automation
+  const webRequestUrl = 'https://www.fxjournalpro.com';
 
   // authFetch — injects x-auth-user-id and x-auth-email so serverless cold starts can identify the user
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -380,7 +371,7 @@ export default function MT5Instructions({
 #property description "Synchronizes ${historyDaysVal}-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
-input string   InpApiUrl    = "${apiOrigin}/api/mt5/sync?email=${typeof window !== 'undefined' ? encodeURIComponent(sessionStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro API endpoint
+input string   InpWebRequestUrl = "${webRequestUrl}/api/mt5/sync?email=${typeof window !== 'undefined' ? encodeURIComponent(sessionStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro WebRequest URL
 input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
@@ -463,7 +454,7 @@ void SendTradesToFXJournalPro() {
    int timeout = 5000;
    
    string outHeaders;
-   int res = WebRequest("POST", InpApiUrl, headers, timeout, postData, resultData, outHeaders);
+   int res = WebRequest("POST", InpWebRequestUrl, headers, timeout, postData, resultData, outHeaders);
    
    if(res == 200) {
       Print("[FX Journal Pro] Sync completed successfully. Balance: ", DoubleToString(balance, 2));
@@ -634,57 +625,19 @@ void SendTradesToFXJournalPro() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
           {/* Step-by-Step Instructions */}
           <div className="lg:col-span-1 space-y-6">
-            {/* API Destination Selection Widget */}
+            {/* WebRequest URL */}
             <div className="bg-indigo-950/20 rounded-xl p-5 border border-indigo-900/40 space-y-3">
               <h3 className="font-semibold text-indigo-300 flex items-center gap-2 text-xs uppercase tracking-wider">
                 <Globe className="h-4 w-4 text-indigo-400 animate-pulse" />
-                API Endpoint URL
+                WebRequest URL
               </h3>
               <p className="text-[11px] text-indigo-300/80 leading-relaxed font-medium">
-                Select the domain where your MT5 terminal will post sync transactions. Highly recommended to use your production Vercel link!
+                Add this URL to MT5 so the terminal can post sync transactions securely.
               </p>
-              <div className="flex flex-col gap-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setApiOrigin(typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')}
-                  className={`text-left text-xs p-2 rounded-lg border transition flex flex-col ${
-                    apiOrigin === (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
-                      ? 'bg-[#1e1b4b] border-indigo-500 text-white font-bold shadow-sm'
-                      : 'bg-slate-900/50 border-indigo-950 text-indigo-400/80 hover:bg-[#131b2e] hover:text-indigo-300'
-                  }`}
-                >
-                  <span className="text-[9px] uppercase text-indigo-400 font-extrabold tracking-wider">Local/Current origin</span>
-                  <span className="font-mono text-[10px] mt-0.5 truncate w-full">{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setApiOrigin('https://journalpro-iota.vercel.app')}
-                  className={`text-left text-xs p-2 rounded-lg border transition flex flex-col ${
-                    apiOrigin === 'https://journalpro-iota.vercel.app'
-                      ? 'bg-[#1e1b4b] border-indigo-500 text-white font-bold shadow-sm'
-                      : 'bg-slate-900/50 border-indigo-950 text-indigo-400/80 hover:bg-[#131b2e] hover:text-indigo-300'
-                  }`}
-                >
-                  <span className="text-[9px] uppercase text-emerald-400 font-extrabold tracking-wider flex items-center gap-1">
-                    Production Vercel Domain
-                    <span className="bg-emerald-950 text-emerald-400 text-[8px] font-bold px-1 rounded border border-emerald-900/30">STABLE</span>
-                  </span>
-                  <span className="font-mono text-[10px] mt-0.5">https://journalpro-iota.vercel.app</span>
-                </button>
-
-                <div className="border-t border-indigo-950 pt-2 mt-1">
-                  <span className="text-[9px] font-bold text-indigo-400/80 uppercase tracking-wider block mb-1">Custom Host URL Override</span>
-                  <input
-                    type="text"
-                    placeholder="https://journalpro-iota.vercel.app"
-                    value={customOriginInput}
-                    onChange={(e) => {
-                      setCustomOriginInput(e.target.value);
-                      setApiOrigin(e.target.value || 'https://journalpro-iota.vercel.app');
-                    }}
-                    className="bg-slate-950 border border-indigo-900/50 text-xs font-mono text-indigo-200 rounded-lg p-2 w-full focus:ring-indigo-500 focus:border-indigo-500 font-semibold"
-                  />
+              <div className="flex flex-col gap-2 pt-1">
+                <div className="bg-slate-900/50 border border-indigo-950 rounded-lg p-3">
+                  <span className="text-[9px] uppercase text-emerald-400 font-extrabold tracking-wider block">WebRequest URL</span>
+                  <span className="font-mono text-[10px] mt-1 text-indigo-200 block break-all">{webRequestUrl}</span>
                 </div>
               </div>
             </div>
@@ -719,8 +672,10 @@ void SendTradesToFXJournalPro() {
                 <li className="flex gap-2">
                   <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-blue-950 text-blue-400 border border-blue-900/30 font-bold">4</span>
                   <div>
-                    <strong className="text-slate-200 block">Enable WebRequests</strong>
-                    In MT5 settings, check <code className="text-slate-200 font-semibold">Allow WebRequest</code> and add: <code className="bg-blue-950/40 border border-blue-900/20 px-1 text-blue-300 font-mono rounded">{apiOrigin}</code>. Drag the EA onto any active chart!
+                    <strong className="text-slate-200 block">Enable WebRequest</strong>
+                    Open <code className="text-slate-200 font-semibold">MT5</code> and go to <code className="bg-slate-900 px-1 py-0.5 rounded text-slate-300">Tools -&gt; Options -&gt; Expert Advisors</code>.
+                    Enable <code className="text-slate-200 font-semibold">Allow WebRequest for listed URL</code> and add:
+                    <code className="bg-blue-950/40 border border-blue-900/20 px-1 text-blue-300 font-mono rounded block mt-1">{webRequestUrl}</code>
                   </div>
                 </li>
               </ol>
