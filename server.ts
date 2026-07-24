@@ -502,6 +502,34 @@ function createEmptyUserDb(userId?: string, email?: string) {
   };
 }
 
+// Helper to convert snake_case object to camelCase
+function toCamel(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(toCamel);
+  if (obj !== null && typeof obj === 'object') {
+    const n: any = {};
+    Object.keys(obj).forEach(k => {
+      const camelKey = k.replace(/_([a-z])/g, g => g[1].toUpperCase());
+      n[camelKey] = toCamel(obj[k]);
+    });
+    return n;
+  }
+  return obj;
+}
+
+// Helper to convert camelCase object to snake_case
+function toSnake(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(toSnake);
+  if (obj !== null && typeof obj === 'object') {
+    const n: any = {};
+    Object.keys(obj).forEach(k => {
+      const snakeKey = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      n[snakeKey] = toSnake(obj[k]);
+    });
+    return n;
+  }
+  return obj;
+}
+
 async function ensureUserDbLoaded(userId?: string, email?: string) {
   let cleanUserId = userId?.trim() || '';
   let cleanEmail = email?.toLowerCase().trim() || '';
@@ -510,128 +538,58 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
     cleanEmail = cleanUserId.toLowerCase();
     cleanUserId = '';
   }
-
   if (!cleanUserId && !cleanEmail) {
     return createEmptyUserDb('guest_user', 'guest@example.com');
   }
 
-  // Check in-memory cache first
-  if (cleanUserId && userDatabases.has(cleanUserId)) {
-    return userDatabases.get(cleanUserId);
-  }
-  if (cleanEmail && userDatabases.has(cleanEmail)) {
-    return userDatabases.get(cleanEmail);
-  }
-
-  let loadedDb = null;
-
-  if (useSupabase) {
+  // Load from SQL tables if Supabase is enabled
+  if (useSupabase && cleanUserId) {
     try {
-      if (cleanUserId) {
-        const { data, error } = await supabase!
-          .from('journal_settings')
-          .select('value')
-          .eq('key', 'db_json_uid_' + cleanUserId)
-          .maybeSingle();
+      const [
+        { data: users },
+        { data: accounts },
+        { data: trades },
+        { data: riskSettings },
+        { data: supportTickets },
+        { data: mt5Connections }
+      ] = await Promise.all([
+        supabase.from('users').select('*').eq('id', cleanUserId),
+        supabase.from('trading_accounts').select('*').eq('user_id', cleanUserId),
+        supabase.from('trades').select('*').eq('user_id', cleanUserId),
+        supabase.from('risk_settings').select('*').eq('user_id', cleanUserId),
+        supabase.from('support_tickets').select('*').eq('user_id', cleanUserId),
+        supabase.from('mt5_connections').select('*').eq('user_id', cleanUserId)
+      ]);
 
-        if (!error && data?.value) {
-          loadedDb = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-        } else if (error) {
-          console.error(`[ensureUserDbLoaded] Supabase error for UID '${cleanUserId}':`, error);
-        }
+      const loadedDb = {
+        users: toCamel(users || []),
+        accounts: toCamel(accounts || []),
+        trades: toCamel(trades || []),
+        riskSettings: toCamel(riskSettings || []),
+        supportTickets: toCamel(supportTickets || []),
+        mt5Connections: toCamel(mt5Connections || []),
+        payments: []
+      };
+
+      if (loadedDb.users.length === 0) {
+        loadedDb.users.push({
+          id: cleanUserId,
+          email: cleanEmail,
+          name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
+          experience: 'Intermediate',
+          tradingStyle: 'Day Trading',
+          mainMarkets: ['Forex', 'Gold'],
+          onboardingCompleted: false,
+          isPro: false,
+          isEmailVerified: true
+        });
       }
-
-      if (!loadedDb && cleanEmail) {
-        const { data, error } = await supabase!
-          .from('journal_settings')
-          .select('value')
-          .eq('key', 'db_json_' + cleanEmail)
-          .maybeSingle();
-
-        if (!error && data?.value) {
-          loadedDb = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-        } else if (error) {
-          console.error(`[ensureUserDbLoaded] Supabase error for Email '${cleanEmail}':`, error);
-        }
-      }
+      return loadedDb;
     } catch (err) {
-      console.error('[AxyFx Journal Server] Supabase user DB query error:', err);
-    }
-  } else {
-    // Local file persistence per user
-    if (cleanUserId) {
-      const userFilePath = path.join(process.cwd(), `db_user_${cleanUserId}.json`);
-      if (fs.existsSync(userFilePath)) {
-        try {
-          const fileContent = fs.readFileSync(userFilePath, 'utf-8');
-          loadedDb = JSON.parse(fileContent);
-        } catch (e) {}
-      }
-    }
-    if (!loadedDb && cleanEmail) {
-      const safeEmail = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
-      const emailFilePath = path.join(process.cwd(), `db_user_${safeEmail}.json`);
-      if (fs.existsSync(emailFilePath)) {
-        try {
-          const fileContent = fs.readFileSync(emailFilePath, 'utf-8');
-          loadedDb = JSON.parse(fileContent);
-        } catch (e) {}
-      }
+      console.error('[AxyFx SQL Query Error]', err);
     }
   }
-
-  if (!loadedDb) {
-    const fallbackDb = useSupabase ? await ensureDbLoaded() : loadDatabaseFromFile();
-    if (fallbackDb && typeof fallbackDb === 'object' && Array.isArray(fallbackDb.users)) {
-      loadedDb = JSON.parse(JSON.stringify(fallbackDb));
-    } else {
-      loadedDb = createEmptyUserDb(cleanUserId, cleanEmail);
-    }
-  }
-
-  // Guarantee required arrays exist
-  loadedDb.users = Array.isArray(loadedDb.users) ? loadedDb.users : [];
-  loadedDb.accounts = Array.isArray(loadedDb.accounts) ? loadedDb.accounts : [];
-  loadedDb.trades = Array.isArray(loadedDb.trades) ? loadedDb.trades : [];
-  loadedDb.riskSettings = Array.isArray(loadedDb.riskSettings) ? loadedDb.riskSettings : [];
-  loadedDb.supportTickets = Array.isArray(loadedDb.supportTickets) ? loadedDb.supportTickets : [];
-  loadedDb.mt5Connections = Array.isArray(loadedDb.mt5Connections) ? loadedDb.mt5Connections : [];
-  loadedDb.payments = Array.isArray(loadedDb.payments) ? loadedDb.payments : [];
-
-  let dbUser = loadedDb.users.find((u: any) => 
-    (cleanUserId && u.id === cleanUserId) || 
-    (cleanEmail && u.email?.toLowerCase() === cleanEmail)
-  );
-
-  if (!dbUser) {
-    dbUser = {
-      id: cleanUserId || `user_${Date.now()}`,
-      email: cleanEmail,
-      name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
-      experience: 'Intermediate',
-      tradingStyle: 'Day Trading',
-      mainMarkets: ['Forex', 'Gold'],
-      onboardingCompleted: false,
-      isPro: false,
-      isEmailVerified: true
-    };
-    loadedDb.users.push(dbUser);
-  } else if (cleanUserId && cleanEmail && dbUser.email?.toLowerCase() === cleanEmail && dbUser.id !== cleanUserId) {
-    dbUser.id = cleanUserId;
-  }
-
-  // Set user ID on existing accounts if missing
-  if (dbUser && loadedDb.accounts) {
-    loadedDb.accounts.forEach((acc: any) => {
-      if (!acc.userId) acc.userId = dbUser.id;
-    });
-  }
-
-  // Cache in memory
-  if (cleanUserId) userDatabases.set(cleanUserId, loadedDb);
-  if (cleanEmail) userDatabases.set(cleanEmail, loadedDb);
-
-  return loadedDb;
+  return createEmptyUserDb(cleanUserId, cleanEmail);
 }
 
 async function ensureDbLoaded() {
@@ -692,65 +650,46 @@ async function saveDatabase(
   overrideEmail?: string,
   previousAliases?: { userId?: string; email?: string }
 ) {
-  if (!data) return;
-
+  if (!data || !useSupabase) return;
   const usersToSync = Array.isArray(data.users) ? data.users : [];
-  
-  let cleanOverrideUid = overrideUserId?.includes('@') ? undefined : overrideUserId?.trim();
-  let cleanOverrideEmail = overrideUserId?.includes('@') ? overrideUserId.trim().toLowerCase() : overrideEmail?.trim().toLowerCase();
+  if(usersToSync.length === 0) return;
 
-  const keysToSync: { uid?: string; email?: string }[] = [];
-
-  for (const u of usersToSync) {
-    if (u.id || u.email) {
-      keysToSync.push({ uid: u.id, email: u.email?.toLowerCase().trim() });
-    }
-  }
-
-  if (cleanOverrideUid || cleanOverrideEmail) {
-    keysToSync.push({ uid: cleanOverrideUid, email: cleanOverrideEmail });
-  }
-
-  for (const target of keysToSync) {
-    const uid = target.uid?.trim();
-    const email = target.email?.toLowerCase().trim();
-
-    if (uid) {
-      userDatabases.set(uid, data);
-      try {
-        fs.writeFileSync(path.join(process.cwd(), `db_user_${uid}.json`), JSON.stringify(data, null, 2), 'utf-8');
-      } catch (e) {}
-      if (useSupabase) {
-        try {
-          await supabase!.from('journal_settings').upsert({ key: 'db_json_uid_' + uid, value: data }, { onConflict: 'key' });
-        } catch (err) {}
-      }
-    }
-
-    if (email) {
-      userDatabases.set(email, data);
-      const safeEmail = email.replace(/[^a-zA-Z0-9]/g, '_');
-      try {
-        fs.writeFileSync(path.join(process.cwd(), `db_user_${safeEmail}.json`), JSON.stringify(data, null, 2), 'utf-8');
-      } catch (e) {}
-      if (useSupabase) {
-        try {
-          await supabase!.from('journal_settings').upsert({ key: 'db_json_' + email, value: data }, { onConflict: 'key' });
-        } catch (err) {}
-      }
-    }
-  }
+  const targetUser = usersToSync[0];
+  const uid = targetUser.id;
+  if(!uid) return;
 
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    // Ignore
-  }
-
-  if (useSupabase) {
-    try {
-      await supabase!.from('journal_settings').upsert({ key: 'db_json', value: data }, { onConflict: 'key' });
-    } catch (err) {}
+    // Upsert users
+    if (data.users && data.users.length > 0) {
+      await supabase.from('users').upsert(toSnake(data.users), { onConflict: 'id' });
+    }
+    // Upsert accounts
+    if (data.accounts && data.accounts.length > 0) {
+      const accs = toSnake(data.accounts).map((a: any) => ({ ...a, user_id: uid }));
+      await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
+    }
+    // Upsert trades
+    if (data.trades && data.trades.length > 0) {
+      const trds = toSnake(data.trades).map((t: any) => ({ ...t, user_id: uid }));
+      await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+    }
+    // Upsert risk settings
+    if (data.riskSettings && data.riskSettings.length > 0) {
+      const rs = toSnake(data.riskSettings).map((r: any) => ({ ...r, user_id: uid }));
+      await supabase.from('risk_settings').upsert(rs, { onConflict: 'id' });
+    }
+    // Upsert support tickets
+    if (data.supportTickets && data.supportTickets.length > 0) {
+      const tix = toSnake(data.supportTickets).map((t: any) => ({ ...t, user_id: uid }));
+      await supabase.from('support_tickets').upsert(tix, { onConflict: 'id' });
+    }
+    // Upsert mt5 connections
+    if (data.mt5Connections && data.mt5Connections.length > 0) {
+      const mt5 = toSnake(data.mt5Connections).map((m: any) => ({ ...m, user_id: uid }));
+      await supabase.from('mt5_connections').upsert(mt5, { onConflict: 'id' });
+    }
+  } catch(err) {
+    console.error('[AxyFx SQL Save Error]', err);
   }
 }
 
