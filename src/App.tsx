@@ -234,9 +234,7 @@ export default function App() {
         if (data.user) {
           setUser(data.user);
           setShowOnboardingWizard(false);
-          if (data.user.onboardingCompleted) {
-            await fetchAccountData();
-          }
+          await fetchAccountData();
           setLoading(false);
           return;
         }
@@ -256,6 +254,7 @@ export default function App() {
       isPro: false,
     });
 
+    setShowOnboardingWizard(false);
     await fetchAccountData();
     setLoading(false);
   };
@@ -365,9 +364,7 @@ export default function App() {
             if (data.user) {
               setUser(data.user);
               setShowOnboardingWizard(false);
-              if (data.user.onboardingCompleted) {
-                await fetchAccountData();
-              }
+              await fetchAccountData();
               setLoading(false);
               return;
             }
@@ -526,9 +523,7 @@ export default function App() {
         persistAuthSession(data.user.id, data.user.email || authEmail);
         setUser(data.user);
         setShowOnboardingWizard(false);
-        if (data.user.onboardingCompleted) {
-          await fetchAccountData();
-        }
+        await fetchAccountData();
       }
     } catch (err: any) {
       console.error('[AxyFx] Login error:', err);
@@ -620,10 +615,8 @@ export default function App() {
         setUser(data.user);
         setIsOtpMode(false);
         setOtpCode('');
-        setShowOnboardingWizard(!data.user.onboardingCompleted);
-        if (data.user.onboardingCompleted) {
-          await fetchAccountData();
-        }
+        setShowOnboardingWizard(true);
+        await fetchAccountData();
         return;
       }
 
@@ -797,8 +790,8 @@ export default function App() {
       }
       if (data.user) {
         setUser(data.user);
-        fetchAccountData();
         setShowOnboardingWizard(false);
+        fetchAccountData();
       }
     } catch (err) {
       console.error('Onboarding exception:', err);
