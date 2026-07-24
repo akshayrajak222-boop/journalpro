@@ -581,7 +581,12 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
   }
 
   if (!loadedDb) {
-    loadedDb = createEmptyUserDb(cleanUserId, cleanEmail);
+    const fallbackDb = useSupabase ? await ensureDbLoaded() : loadDatabaseFromFile();
+    if (fallbackDb && typeof fallbackDb === 'object' && Array.isArray(fallbackDb.users)) {
+      loadedDb = JSON.parse(JSON.stringify(fallbackDb));
+    } else {
+      loadedDb = createEmptyUserDb(cleanUserId, cleanEmail);
+    }
   }
 
   // Guarantee required arrays exist
