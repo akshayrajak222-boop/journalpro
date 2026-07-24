@@ -459,7 +459,8 @@ void SendTradesToFXJournalPro() {
    if(res == 200) {
       Print("[FX Journal Pro] Sync completed successfully. Balance: ", DoubleToString(balance, 2));
    } else {
-      Print("[FX Journal Pro] Sync failed. Error Code: ", res);
+      int lastError = GetLastError();
+      Print("[FX Journal Pro] Sync failed. Result Code: ", res, " | LastError: ", lastError);
    }
 }`;
 
