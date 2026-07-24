@@ -102,6 +102,7 @@ export default function App() {
 
   // Onboarding Wizard states
   const [onboardingStep, setOnboardingStep] = useState(1);
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [obExperience, setObExperience] = useState<'Beginner' | 'Intermediate' | 'Professional'>('Intermediate');
   const [obStyle, setObStyle] = useState<'Scalping' | 'Day Trading' | 'Swing Trading'>('Day Trading');
   const [obMarkets, setObMarkets] = useState<string[]>(['Forex', 'Gold']);
@@ -203,13 +204,6 @@ export default function App() {
     siteUrl ||
     (typeof window !== 'undefined' ? window.location.origin : '');
 
-  const needsOnboarding = (candidateUser: any) => {
-    if (!candidateUser) return false;
-    const markets = Array.isArray(candidateUser.mainMarkets) ? candidateUser.mainMarkets.filter(Boolean) : [];
-    const hasProfileBasics = Boolean(candidateUser.experience && candidateUser.tradingStyle && markets.length > 0);
-    return !candidateUser.onboardingCompleted || !hasProfileBasics;
-  };
-
   const syncSupabaseUser = async (sessionUser: any) => {
     const userId = sessionUser?.id || '';
     const email = sessionUser?.email || '';
@@ -239,10 +233,9 @@ export default function App() {
         const data = await res.json();
         if (data.user) {
           setUser(data.user);
-          if (!needsOnboarding(data.user)) {
+          setShowOnboardingWizard(false);
+          if (data.user.onboardingCompleted) {
             await fetchAccountData();
-          } else {
-            setOnboardingStep(1);
           }
           setLoading(false);
           return;
@@ -371,10 +364,9 @@ export default function App() {
             const data = await res.json();
             if (data.user) {
               setUser(data.user);
-              if (!needsOnboarding(data.user)) {
+              setShowOnboardingWizard(false);
+              if (data.user.onboardingCompleted) {
                 await fetchAccountData();
-              } else {
-                setOnboardingStep(1);
               }
               setLoading(false);
               return;
@@ -533,10 +525,9 @@ export default function App() {
       if (data.user) {
         persistAuthSession(data.user.id, data.user.email || authEmail);
         setUser(data.user);
-        if (!needsOnboarding(data.user)) {
+        setShowOnboardingWizard(false);
+        if (data.user.onboardingCompleted) {
           await fetchAccountData();
-        } else {
-          setOnboardingStep(1);
         }
       }
     } catch (err: any) {
@@ -629,10 +620,9 @@ export default function App() {
         setUser(data.user);
         setIsOtpMode(false);
         setOtpCode('');
-        if (!needsOnboarding(data.user)) {
+        setShowOnboardingWizard(!data.user.onboardingCompleted);
+        if (data.user.onboardingCompleted) {
           await fetchAccountData();
-        } else {
-          setOnboardingStep(1);
         }
         return;
       }
@@ -775,6 +765,7 @@ export default function App() {
     setEditingTradeId(null);
     setActiveTab('dashboard');
     setOnboardingStep(0);
+    setShowOnboardingWizard(false);
     setIsOtpMode(false);
     setIsForgotPassword(false);
     setAuthError(null);
@@ -807,6 +798,7 @@ export default function App() {
       if (data.user) {
         setUser(data.user);
         fetchAccountData();
+        setShowOnboardingWizard(false);
       }
     } catch (err) {
       console.error('Onboarding exception:', err);
@@ -1895,7 +1887,7 @@ export default function App() {
   }
 
   // Onboarding Wizard (if registration completes but not onboarding completed)
-  if (needsOnboarding(user)) {
+  if (showOnboardingWizard && !user.onboardingCompleted) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans antialiased text-slate-800">
         <div className="bg-white border border-slate-100 rounded-2xl shadow-xl w-full max-w-lg p-8 space-y-6 relative overflow-hidden">
