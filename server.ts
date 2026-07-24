@@ -2039,7 +2039,7 @@ const PORT = 3000;
     const { syncToken, trades, balance } = req.body;
     if (!syncToken) return res.status(401).json({ error: 'Invalid or missing authorization token' });
 
-    const email = ((req.query.email as string) || (req.headers['x-auth-email'] as string | undefined) || '').trim().toLowerCase();
+    const email = ((req.body?.email as string) || (req.query.email as string) || (req.headers['x-auth-email'] as string | undefined) || '').trim().toLowerCase();
     let db = (req as any).userDb;
     if (email) {
       db = await ensureUserDbLoaded(email);

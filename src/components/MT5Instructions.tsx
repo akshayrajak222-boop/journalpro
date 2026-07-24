@@ -371,7 +371,9 @@ export default function MT5Instructions({
 #property description "Synchronizes ${historyDaysVal}-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
-input string   InpWebRequestUrl = "${webRequestUrl}/api/mt5/sync?email=${typeof window !== 'undefined' ? encodeURIComponent(sessionStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro WebRequest URL
+input string   InpAuthEmail = "${typeof window !== 'undefined' ? (sessionStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro account email
+input string   InpWebRequestUrl = "${webRequestUrl}/api/mt5/sync"; // FX Journal Pro WebRequest URL
+input string   InpWebRequestUrlFallback = "https://www.fxjournalpro.com/api/mt5/sync"; // FX Journal Pro fallback WebRequest URL
 input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
@@ -402,7 +404,7 @@ void SendTradesToFXJournalPro() {
    
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    
-   string payload = "{\\"syncToken\\":\\"" + InpSyncToken + "\\",\\"balance\\":" + DoubleToString(balance, 2) + ",\\"trades\\":[";
+   string payload = "{\\"syncToken\\":\\"" + InpSyncToken + "\\",\\"email\\":\\"" + InpAuthEmail + "\\",\\"balance\\":" + DoubleToString(balance, 2) + ",\\"trades\\":[";
    
    int total = HistoryDealsTotal();
    bool first = true;
@@ -460,14 +462,21 @@ void SendTradesToFXJournalPro() {
    string outHeaders;
    ResetLastError();
    int res = WebRequest("POST", InpWebRequestUrl, headers, timeout, postData, resultData, outHeaders);
+   int lastError = GetLastError();
+   if(res != 200 && (res == -1 || lastError == 4014 || lastError == 5200)) {
+      ResetLastError();
+      res = WebRequest("POST", InpWebRequestUrlFallback, headers, timeout, postData, resultData, outHeaders);
+      lastError = GetLastError();
+   }
    
    if(res == 200) {
       Print("[FX Journal Pro] Sync completed successfully. Balance: ", DoubleToString(balance, 2));
    } else {
-      int lastError = GetLastError();
       Print("[FX Journal Pro] Sync failed. Result Code: ", res, " | LastError: ", lastError);
       if(lastError == 4014) {
          Print("[FX Journal Pro] WebRequest is blocked in this execution mode. Use a live chart and keep the URL whitelisted in MT5 Options.");
+      } else if(lastError == 5200) {
+         Print("[FX Journal Pro] Check the MT5 Allow WebRequest list. Add both https://fxjournalpro.com and https://www.fxjournalpro.com.");
       }
    }
 }`;
