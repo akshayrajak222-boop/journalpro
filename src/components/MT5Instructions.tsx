@@ -378,6 +378,14 @@ input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization
 int OnInit() {
+   ENUM_PROGRAM_TYPE programType = (ENUM_PROGRAM_TYPE)MQLInfoInteger(MQL_PROGRAM_TYPE);
+   Print("[FX Journal Pro] Program type: ", EnumToString(programType), " | Tester: ", (int)MQLInfoInteger(MQL_TESTER), " | Optimization: ", (int)MQLInfoInteger(MQL_OPTIMIZATION));
+
+   if(programType != PROGRAM_EXPERT) {
+      Print("[FX Journal Pro] This file must run as an Expert Advisor on a chart, not as an indicator or script.");
+      return(INIT_FAILED);
+   }
+
    if(MQLInfoInteger(MQL_TESTER) || MQLInfoInteger(MQL_OPTIMIZATION)) {
       Print("[FX Journal Pro] WebRequest is disabled in Strategy Tester / Optimization. Run this EA on a live chart.");
       return(INIT_FAILED);
