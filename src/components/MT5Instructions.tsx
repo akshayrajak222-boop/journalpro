@@ -72,7 +72,7 @@ export default function MT5Instructions({
   const [savingHistory, setSavingHistory] = useState(false);
 
   // Fixed WebRequest URL for MT5 automation
-  const webRequestUrl = 'https://www.fxjournalpro.com';
+  const webRequestUrl = 'https://fxjournalpro.com';
 
   // authFetch — injects x-auth-user-id and x-auth-email so serverless cold starts can identify the user
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
