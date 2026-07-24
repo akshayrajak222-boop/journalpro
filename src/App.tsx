@@ -30,6 +30,38 @@ import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
 
 export default function App() {
+  const persistAuthSession = (userId: string, email?: string) => {
+    if (typeof window === 'undefined') return;
+    if (userId) {
+      window.sessionStorage.setItem('auth_user_id', userId);
+    } else {
+      window.sessionStorage.removeItem('auth_user_id');
+    }
+    if (email) {
+      window.sessionStorage.setItem('auth_email', email);
+    } else {
+      window.sessionStorage.removeItem('auth_email');
+    }
+    window.localStorage.removeItem('auth_user_id');
+    window.localStorage.removeItem('auth_email');
+  };
+
+  const persistSelectedAccount = (accountId: string) => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.setItem('selected_account_id', accountId);
+    window.localStorage.removeItem('selected_account_id');
+  };
+
+  const clearAuthSession = () => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.removeItem('auth_user_id');
+    window.sessionStorage.removeItem('auth_email');
+    window.sessionStorage.removeItem('selected_account_id');
+    window.localStorage.removeItem('auth_user_id');
+    window.localStorage.removeItem('auth_email');
+    window.localStorage.removeItem('selected_account_id');
+  };
+
   // Auth states
   const [user, setUser] = useState<UserType | null>(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -184,10 +216,7 @@ export default function App() {
       sessionUser?.user_metadata?.name ||
       (email ? email.split('@')[0] : 'Trader');
 
-    sessionStorage.setItem('auth_user_id', userId);
-    if (email) sessionStorage.setItem('auth_email', email);
-    localStorage.setItem('auth_user_id', userId);
-    if (email) localStorage.setItem('auth_email', email);
+    persistAuthSession(userId, email);
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -293,8 +322,8 @@ export default function App() {
 
   // authFetch — wraps native fetch and injects x-auth-user-id and x-auth-email headers
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
-    const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id') || user?.id || '';
-    const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || user?.email || '';
+    const storedUserId = sessionStorage.getItem('auth_user_id') || user?.id || '';
+    const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
     const method = (options.method || 'GET').toUpperCase();
     const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
     return fetch(url, {
@@ -322,8 +351,8 @@ export default function App() {
         console.error('Error loading Supabase session:', err);
       }
 
-      const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id');
-      const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email');
+      const storedUserId = sessionStorage.getItem('auth_user_id');
+      const storedEmail = sessionStorage.getItem('auth_email');
       if (storedUserId || storedEmail) {
         try {
           const headers: Record<string, string> = {};
@@ -362,8 +391,7 @@ export default function App() {
         }
 
         if (event === 'SIGNED_OUT') {
-          sessionStorage.clear();
-          localStorage.clear();
+          clearAuthSession();
           setUser(null);
           setAccounts([]);
           setTrades([]);
@@ -398,7 +426,7 @@ export default function App() {
 
       if (loadedAccs.length > 0) {
         // Automatically select the first active account if none is chosen
-        const storedSelectedId = sessionStorage.getItem('selected_account_id') || localStorage.getItem('selected_account_id');
+        const storedSelectedId = sessionStorage.getItem('selected_account_id');
         const defaultId = overrideAccountId 
           ? overrideAccountId 
           : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
@@ -406,8 +434,7 @@ export default function App() {
             : loadedAccs[0].id);
         
         setSelectedAccountId(defaultId);
-        sessionStorage.setItem('selected_account_id', defaultId);
-        localStorage.setItem('selected_account_id', defaultId);
+        persistSelectedAccount(defaultId);
         await fetchTradesAndParams(defaultId);
       } else {
         setSelectedAccountId('');
@@ -451,8 +478,7 @@ export default function App() {
   const handleAccountChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const accId = e.target.value;
     setSelectedAccountId(accId);
-    sessionStorage.setItem('selected_account_id', accId);
-    localStorage.setItem('selected_account_id', accId);
+    persistSelectedAccount(accId);
     await fetchTradesAndParams(accId);
   };
 
@@ -480,8 +506,7 @@ export default function App() {
       }
 
       // Login/Sync with Express backend
-      sessionStorage.setItem('auth_email', authEmail);
-      localStorage.setItem('auth_email', authEmail);
+      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '', authEmail);
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 
@@ -499,10 +524,7 @@ export default function App() {
 
       const data = await res.json();
       if (data.user) {
-        sessionStorage.setItem('auth_user_id', data.user.id);
-        sessionStorage.setItem('auth_email', data.user.email || authEmail);
-        localStorage.setItem('auth_user_id', data.user.id);
-        localStorage.setItem('auth_email', data.user.email || authEmail);
+        persistAuthSession(data.user.id, data.user.email || authEmail);
         setUser(data.user);
         if (data.user.onboardingCompleted) {
           await fetchAccountData();
@@ -542,8 +564,7 @@ export default function App() {
       }
 
       // 2. Register with Express Backend API (sends 6-digit OTP code via SendGrid / Resend)
-      sessionStorage.setItem('auth_email', authEmail);
-      localStorage.setItem('auth_email', authEmail);
+      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '', authEmail);
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
@@ -597,6 +618,7 @@ export default function App() {
       }
 
       if (data.user) {
+        persistAuthSession(data.user.id, data.user.email || authEmail);
         setUser(data.user);
         setIsOtpMode(false);
         setOtpCode('');
@@ -733,8 +755,7 @@ export default function App() {
     }
 
     // Complete session purge
-    sessionStorage.clear();
-    localStorage.clear();
+    clearAuthSession();
 
     setUser(null);
     setAccounts([]);
@@ -849,8 +870,7 @@ export default function App() {
         setNewAccBroker('');
         if (data.account?.id) {
           setSelectedAccountId(data.account.id);
-          sessionStorage.setItem('selected_account_id', data.account.id);
-          localStorage.setItem('selected_account_id', data.account.id);
+          persistSelectedAccount(data.account.id);
           await fetchAccountData(data.account.id);
         } else {
           await fetchAccountData();
@@ -912,8 +932,7 @@ export default function App() {
         if (selectedAccountId === editingAccount.id) {
           const nextId = remaining.length > 0 ? remaining[0].id : '';
           setSelectedAccountId(nextId);
-          sessionStorage.setItem('selected_account_id', nextId);
-          localStorage.setItem('selected_account_id', nextId);
+          persistSelectedAccount(nextId);
           await fetchAccountData(nextId);
         } else {
           await fetchAccountData();
@@ -1130,6 +1149,9 @@ export default function App() {
       const data = await res.json();
       if (res.ok) {
         setUser(data.user);
+        if (data.user?.id) {
+          persistAuthSession(data.user.id, data.user.email || settingsEmail);
+        }
         alert('General profile settings updated successfully.');
       } else {
         alert(data.error || 'Failed to update settings.');
@@ -2772,8 +2794,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setSelectedAccountId(acc.id);
-                            sessionStorage.setItem('selected_account_id', acc.id);
-                            localStorage.setItem('selected_account_id', acc.id);
+                            persistSelectedAccount(acc.id);
                             fetchTradesAndParams(acc.id);
                           }}
                           className="flex-grow text-center py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition"

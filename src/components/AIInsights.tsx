@@ -43,8 +43,8 @@ export default function AIInsights({ user, account, onUpgradeToPro }: AIInsights
     setLoading(true);
 
     try {
-      const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id') || user?.id || '';
-      const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || user?.email || '';
+      const storedUserId = sessionStorage.getItem('auth_user_id') || user?.id || '';
+      const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
       const response = await fetch('/api/ai/mentor', {
         method: 'POST',
         headers: { 

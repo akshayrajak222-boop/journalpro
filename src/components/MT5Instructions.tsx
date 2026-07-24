@@ -85,8 +85,8 @@ export default function MT5Instructions({
 
   // authFetch — injects x-auth-user-id and x-auth-email so serverless cold starts can identify the user
   const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
-    const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id') || '';
-    const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || '';
+    const storedUserId = sessionStorage.getItem('auth_user_id') || '';
+    const storedEmail = sessionStorage.getItem('auth_email') || '';
     const method = (options.method || 'GET').toUpperCase();
     const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
     return fetch(url, {
@@ -380,7 +380,7 @@ export default function MT5Instructions({
 #property description "Synchronizes ${historyDaysVal}-day MT5 history and balance to FX Journal Pro"
 
 input string   InpSyncToken = "${syncToken}"; // FX Journal Pro Sync Token
-input string   InpApiUrl    = "${apiOrigin}/api/mt5/sync?email=${typeof window !== 'undefined' ? encodeURIComponent(sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro API endpoint
+input string   InpApiUrl    = "${apiOrigin}/api/mt5/sync?email=${typeof window !== 'undefined' ? encodeURIComponent(sessionStorage.getItem('auth_email') || '') : ''}"; // FX Journal Pro API endpoint
 input int      InpInterval  = 30; // Sync interval in seconds
 
 // Timer initialization

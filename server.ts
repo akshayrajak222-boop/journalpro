@@ -681,8 +681,17 @@ async function ensureDbLoaded() {
   return db;
 }
 
-async function saveDatabase(data: any, overrideUserId?: string, overrideEmail?: string) {
+async function saveDatabase(
+  data: any,
+  overrideUserId?: string,
+  overrideEmail?: string,
+  previousAliases?: { userId?: string; email?: string }
+) {
   if (!data) return;
+
+  if (previousAliases?.userId || previousAliases?.email) {
+    await removeUserDatabaseAliases(previousAliases.userId, previousAliases.email);
+  }
 
   const usersToSync = Array.isArray(data.users) ? data.users : [];
   
@@ -738,6 +747,42 @@ async function saveDatabase(data: any, overrideUserId?: string, overrideEmail?: 
   }
 }
 
+async function removeUserDatabaseAliases(userId?: string, email?: string) {
+  const cleanUserId = userId?.trim();
+  const cleanEmail = email?.toLowerCase().trim();
+
+  if (cleanUserId) {
+    userDatabases.delete(cleanUserId);
+    try {
+      fs.unlinkSync(path.join(process.cwd(), `db_user_${cleanUserId}.json`));
+    } catch (err) {}
+    if (useSupabase) {
+      try {
+        await supabase!
+          .from('journal_settings')
+          .delete()
+          .eq('key', 'db_json_uid_' + cleanUserId);
+      } catch (err) {}
+    }
+  }
+
+  if (cleanEmail) {
+    userDatabases.delete(cleanEmail);
+    const safeEmail = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+    try {
+      fs.unlinkSync(path.join(process.cwd(), `db_user_${safeEmail}.json`));
+    } catch (err) {}
+    if (useSupabase) {
+      try {
+        await supabase!
+          .from('journal_settings')
+          .delete()
+          .eq('key', 'db_json_' + cleanEmail);
+      } catch (err) {}
+    }
+  }
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -785,8 +830,10 @@ const PORT = 3000;
           db.users.push(dbUser);
           await saveDatabase(db, userId, email);
         } else if (userId && dbUser.id !== userId) {
+          const previousUserId = dbUser.id;
+          const previousEmail = dbUser.email;
           dbUser.id = userId;
-          await saveDatabase(db, userId, email);
+          await saveDatabase(db, userId, email, { userId: previousUserId, email: previousEmail });
         }
 
         (req as any).userDb = db;
@@ -826,6 +873,8 @@ const PORT = 3000;
         (authUserId && u.id === authUserId) || 
         u.email.toLowerCase() === normalizedEmail
       );
+      const previousUserId = user?.id;
+      const previousEmail = user?.email;
       
       if (user && user.isEmailVerified && !isEmailVerified) {
         return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
@@ -863,7 +912,7 @@ const PORT = 3000;
         user.otpSentAt = new Date().toISOString();
       }
 
-      await saveDatabase(db, user.id, normalizedEmail);
+      await saveDatabase(db, user.id, normalizedEmail, { userId: previousUserId, email: previousEmail });
       
       if (isEmailVerified === true) {
         return res.json({
@@ -902,6 +951,8 @@ const PORT = 3000;
         (authUserId && u.id === authUserId) || 
         u.email.toLowerCase() === normalizedEmail
       );
+      const previousUserId = user?.id;
+      const previousEmail = user?.email;
 
       if (!user) {
         return res.status(404).json({ error: 'No account found with this email. Please register first.' });
@@ -919,7 +970,7 @@ const PORT = 3000;
 
       if (authUserId && user.id !== authUserId) {
         user.id = authUserId;
-        await saveDatabase(db, user.id, normalizedEmail);
+        await saveDatabase(db, user.id, normalizedEmail, { userId: previousUserId, email: previousEmail });
       }
 
       res.json({ message: 'Login successful', user });
@@ -1147,11 +1198,13 @@ const PORT = 3000;
 
     const userIdx = db.users.findIndex((u: any) => u.id === currentUser?.id);
     if (userIdx !== -1) {
+      const previousUserId = db.users[userIdx].id;
+      const previousEmail = db.users[userIdx].email;
       if (name) db.users[userIdx].name = name;
       if (email) db.users[userIdx].email = email;
       if (typeof isPro === 'boolean') db.users[userIdx].isPro = isPro;
       
-      await saveDatabase(db, authEmail);
+      await saveDatabase(db, db.users[userIdx].id, db.users[userIdx].email, { userId: previousUserId, email: previousEmail });
       currentUser = db.users[userIdx];
       res.json({ message: 'Profile updated successfully', user: currentUser });
     } else {
