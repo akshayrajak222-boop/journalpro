@@ -2079,7 +2079,8 @@ const PORT = 3000;
 
   // Secure EA synchronization API hit by MT5 Experts Terminal
   app.post('/api/mt5/sync', async (req, res) => {
-    const { syncToken, trades, balance } = req.body;
+    let { syncToken, trades, balance } = req.body;
+    syncToken = (syncToken || '').trim();
     if (!syncToken) return res.status(401).json({ error: 'Invalid or missing authorization token' });
 
     const email = ((req.body?.email as string) || (req.query.email as string) || (req.headers['x-auth-email'] as string | undefined) || '').trim().toLowerCase();
