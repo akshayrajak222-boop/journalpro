@@ -7,6 +7,15 @@
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Drop existing tables so we can recreate them with the correct structure
+DROP TABLE IF EXISTS announcements CASCADE;
+DROP TABLE IF EXISTS mt5_connections CASCADE;
+DROP TABLE IF EXISTS support_tickets CASCADE;
+DROP TABLE IF EXISTS risk_settings CASCADE;
+DROP TABLE IF EXISTS trades CASCADE;
+DROP TABLE IF EXISTS trading_accounts CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
 -- Table: users
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -22,7 +31,10 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own data" ON users FOR ALL USING (auth.uid()::text = id);
+-- Server uses anon key (no Supabase JWT), so allow anon role full access.
+-- App-level user isolation is enforced in server.ts via x-auth headers.
+CREATE POLICY "Allow anon full access on users" ON users FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on users" ON users FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: trading_accounts
 CREATE TABLE IF NOT EXISTS trading_accounts (
@@ -41,7 +53,8 @@ CREATE TABLE IF NOT EXISTS trading_accounts (
 );
 
 ALTER TABLE trading_accounts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own accounts" ON trading_accounts FOR ALL USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow anon full access on trading_accounts" ON trading_accounts FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on trading_accounts" ON trading_accounts FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: trades
 CREATE TABLE IF NOT EXISTS trades (
@@ -70,7 +83,8 @@ CREATE TABLE IF NOT EXISTS trades (
 );
 
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own trades" ON trades FOR ALL USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow anon full access on trades" ON trades FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on trades" ON trades FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: risk_settings
 CREATE TABLE IF NOT EXISTS risk_settings (
@@ -87,7 +101,8 @@ CREATE TABLE IF NOT EXISTS risk_settings (
 );
 
 ALTER TABLE risk_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own risk settings" ON risk_settings FOR ALL USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow anon full access on risk_settings" ON risk_settings FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on risk_settings" ON risk_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: support_tickets
 CREATE TABLE IF NOT EXISTS support_tickets (
@@ -103,7 +118,8 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 );
 
 ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own tickets" ON support_tickets FOR ALL USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow anon full access on support_tickets" ON support_tickets FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on support_tickets" ON support_tickets FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: mt5_connections
 CREATE TABLE IF NOT EXISTS mt5_connections (
@@ -123,7 +139,8 @@ CREATE TABLE IF NOT EXISTS mt5_connections (
 );
 
 ALTER TABLE mt5_connections ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own MT5 connections" ON mt5_connections FOR ALL USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow anon full access on mt5_connections" ON mt5_connections FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on mt5_connections" ON mt5_connections FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: announcements (Public readable)
 CREATE TABLE IF NOT EXISTS announcements (

@@ -661,32 +661,38 @@ async function saveDatabase(
   try {
     // Upsert users
     if (data.users && data.users.length > 0) {
-      await supabase.from('users').upsert(toSnake(data.users), { onConflict: 'id' });
+      const { error: usersErr } = await supabase.from('users').upsert(toSnake(data.users), { onConflict: 'id' });
+      if (usersErr) console.error('[AxyFx SQL Save Error] users upsert failed:', usersErr.message, '| code:', usersErr.code);
     }
     // Upsert accounts
     if (data.accounts && data.accounts.length > 0) {
       const accs = toSnake(data.accounts).map((a: any) => ({ ...a, user_id: uid }));
-      await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
+      const { error: accsErr } = await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
+      if (accsErr) console.error('[AxyFx SQL Save Error] trading_accounts upsert failed:', accsErr.message, '| code:', accsErr.code);
     }
     // Upsert trades
     if (data.trades && data.trades.length > 0) {
       const trds = toSnake(data.trades).map((t: any) => ({ ...t, user_id: uid }));
-      await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+      const { error: trdsErr } = await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+      if (trdsErr) console.error('[AxyFx SQL Save Error] trades upsert failed:', trdsErr.message, '| code:', trdsErr.code);
     }
     // Upsert risk settings
     if (data.riskSettings && data.riskSettings.length > 0) {
       const rs = toSnake(data.riskSettings).map((r: any) => ({ ...r, user_id: uid }));
-      await supabase.from('risk_settings').upsert(rs, { onConflict: 'id' });
+      const { error: rsErr } = await supabase.from('risk_settings').upsert(rs, { onConflict: 'id' });
+      if (rsErr) console.error('[AxyFx SQL Save Error] risk_settings upsert failed:', rsErr.message, '| code:', rsErr.code);
     }
     // Upsert support tickets
     if (data.supportTickets && data.supportTickets.length > 0) {
       const tix = toSnake(data.supportTickets).map((t: any) => ({ ...t, user_id: uid }));
-      await supabase.from('support_tickets').upsert(tix, { onConflict: 'id' });
+      const { error: tixErr } = await supabase.from('support_tickets').upsert(tix, { onConflict: 'id' });
+      if (tixErr) console.error('[AxyFx SQL Save Error] support_tickets upsert failed:', tixErr.message, '| code:', tixErr.code);
     }
     // Upsert mt5 connections
     if (data.mt5Connections && data.mt5Connections.length > 0) {
       const mt5 = toSnake(data.mt5Connections).map((m: any) => ({ ...m, user_id: uid }));
-      await supabase.from('mt5_connections').upsert(mt5, { onConflict: 'id' });
+      const { error: mt5Err } = await supabase.from('mt5_connections').upsert(mt5, { onConflict: 'id' });
+      if (mt5Err) console.error('[AxyFx SQL Save Error] mt5_connections upsert failed:', mt5Err.message, '| code:', mt5Err.code);
     }
   } catch(err) {
     console.error('[AxyFx SQL Save Error]', err);
