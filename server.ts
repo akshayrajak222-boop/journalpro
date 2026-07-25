@@ -1683,7 +1683,7 @@ const PORT = 3000;
       };
       db.mt5Connections.push(connection);
 
-      saveDatabase(db);
+      await saveDatabase(db);
       res.json({
         message: `MT5 connected via Python Bridge! Imported ${mappedTrades.length} trades from your broker.`,
         connection,
@@ -1697,7 +1697,7 @@ const PORT = 3000;
   });
 
   // Connect MT5 Expert Advisor (Method A) - automatically creates a new dedicated account
-  app.post('/api/mt5/connect-ea', (req, res) => {
+  app.post('/api/mt5/connect-ea', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -1761,7 +1761,7 @@ const PORT = 3000;
     };
     db.mt5Connections.push(connection);
 
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({
       message: 'MT5 EA account connected successfully.',
       connection,
@@ -1770,7 +1770,7 @@ const PORT = 3000;
   });
 
   // Update MT5 Connection historical import settings
-  app.post('/api/mt5/connections/:id/update-history', (req, res) => {
+  app.post('/api/mt5/connections/:id/update-history', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -1784,7 +1784,7 @@ const PORT = 3000;
     connection.historyMonths = historyMonths ? parseInt(historyMonths) : 3;
     connection.initialSyncDone = false; // reset initial sync so starting balance recalculates on next sync
 
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({
       message: 'MT5 historical trade import settings updated.',
       connection
@@ -1869,7 +1869,7 @@ const PORT = 3000;
         db.mt5Connections[connIdx].status = 'Connected';
       }
 
-      saveDatabase(db);
+      await saveDatabase(db);
       res.json({
         message: `Sync complete! ${newTrades.length} new trade(s) imported.`,
         newTradesCount: newTrades.length,
@@ -1882,7 +1882,7 @@ const PORT = 3000;
   });
 
   // Disconnect
-  app.post('/api/mt5/disconnect-investor', (req, res) => {
+  app.post('/api/mt5/disconnect-investor', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -1892,13 +1892,13 @@ const PORT = 3000;
     const idx = db.mt5Connections.findIndex((conn: any) => conn.accountId === accountId && conn.userId === currentUser?.id);
     if (idx !== -1) {
       db.mt5Connections.splice(idx, 1);
-      saveDatabase(db);
+      await saveDatabase(db);
     }
     res.json({ message: 'MT5 Investor account disconnected successfully.' });
   });
 
   // Toggle Auto Sync
-  app.post('/api/mt5/toggle-auto-sync', (req, res) => {
+  app.post('/api/mt5/toggle-auto-sync', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -1909,12 +1909,12 @@ const PORT = 3000;
     if (!connection) return res.status(404).json({ error: 'Connection not found' });
 
     connection.autoSync = !!autoSync;
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ message: 'Auto sync settings updated.', connection });
   });
 
   // Developer mock action to trigger a trade sync from the Expert Advisor simulation
-  app.post('/api/mt5/connections/test-sync', (req, res) => {
+  app.post('/api/mt5/connections/test-sync', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -1981,7 +1981,7 @@ const PORT = 3000;
       });
     }
 
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ message: 'MT5 trade synchronized successfully!', trade: simulatedTrade });
   });
 
@@ -2108,7 +2108,7 @@ const PORT = 3000;
       db.mt5Connections[finalConnIdx].totalSyncedTrades += syncedCount;
       db.mt5Connections[finalConnIdx].status = 'Connected';
     }
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ status: 'Success', syncedTradesCount: syncedCount, accountBalance: db.accounts[accountIdx].currentBalance, startingBalance: db.accounts[accountIdx].startingBalance });
   });
 
@@ -2312,7 +2312,7 @@ RESTRICTIONS:
     res.json({ tickets: userTickets });
   });
 
-  app.post('/api/tickets', (req, res) => {
+  app.post('/api/tickets', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -2333,11 +2333,11 @@ RESTRICTIONS:
     };
 
     db.supportTickets.push(newTicket);
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ message: 'Support ticket submitted successfully', ticket: newTicket });
   });
 
-  app.put('/api/tickets/:id', (req, res) => {
+  app.put('/api/tickets/:id', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -2348,7 +2348,7 @@ RESTRICTIONS:
     const idx = db.supportTickets.findIndex((t: any) => t.id === id);
     if (idx !== -1) {
       db.supportTickets[idx].status = status || 'Closed';
-      saveDatabase(db);
+      await saveDatabase(db);
       res.json({ message: 'Ticket status updated', ticket: db.supportTickets[idx] });
     } else {
       res.status(404).json({ error: 'Ticket not found' });
@@ -2380,7 +2380,7 @@ RESTRICTIONS:
     });
   });
 
-  app.post('/api/payments/verify', (req, res) => {
+  app.post('/api/payments/verify', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
@@ -2406,7 +2406,7 @@ RESTRICTIONS:
       };
 
       db.payments.push(newPayment);
-      saveDatabase(db);
+      await saveDatabase(db);
 
       res.json({ success: true, message: 'Upgraded to Pro plan successfully!', user: currentUser });
     } else {
@@ -2419,6 +2419,8 @@ RESTRICTIONS:
   // ==========================================
 
   app.get('/api/admin/users', (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
     if (!currentUser || currentUser.email !== 'admin@axyfx.com') {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -2436,7 +2438,9 @@ RESTRICTIONS:
     res.json({ users: usersWithStats });
   });
 
-  app.post('/api/admin/announcements', (req, res) => {
+  app.post('/api/admin/announcements', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
     if (!currentUser || currentUser.email !== 'admin@axyfx.com') {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -2451,11 +2455,13 @@ RESTRICTIONS:
     };
 
     db.announcements.unshift(newAnn);
-    saveDatabase(db);
+    await saveDatabase(db);
     res.json({ message: 'Announcement published successfully', announcement: newAnn });
   });
 
-  app.post('/api/admin/block-user', (req, res) => {
+  app.post('/api/admin/block-user', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
     if (!currentUser || currentUser.email !== 'admin@axyfx.com') {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -2464,7 +2470,7 @@ RESTRICTIONS:
     const idx = db.users.findIndex((u: any) => u.id === userId);
     if (idx !== -1) {
       db.users[idx].status = block ? 'Blocked' : 'Active';
-      saveDatabase(db);
+      await saveDatabase(db);
       res.json({ message: block ? 'User blocked' : 'User unblocked' });
     } else {
       res.status(404).json({ error: 'User not found' });
