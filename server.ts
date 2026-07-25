@@ -852,7 +852,8 @@ const PORT = 3000;
     res.json({
       useSupabase,
       hasSupabaseUrl: !!process.env.SUPABASE_URL || !!process.env.VITE_SUPABASE_URL,
-      hasSupabaseKey: !!process.env.SUPABASE_KEY || !!process.env.VITE_SUPABASE_KEY
+      hasSupabaseKey: !!process.env.SUPABASE_KEY || !!process.env.VITE_SUPABASE_KEY,
+      url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
     });
   });
 
