@@ -848,6 +848,14 @@ const PORT = 3000;
     }
   });
 
+  app.get('/api/debug/env', (req, res) => {
+    res.json({
+      useSupabase,
+      hasSupabaseUrl: !!process.env.SUPABASE_URL || !!process.env.VITE_SUPABASE_URL,
+      hasSupabaseKey: !!process.env.SUPABASE_KEY || !!process.env.VITE_SUPABASE_KEY
+    });
+  });
+
   app.get('/api/auth/me', async (req, res) => {
     let currentUser = (req as any).currentUser;
     if (!currentUser) {
