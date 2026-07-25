@@ -851,12 +851,21 @@ const PORT = 3000;
     }
   });
 
-  app.get('/api/debug/env', (req, res) => {
+  app.get('/api/debug/env', async (req, res) => {
+    let sbError = null;
+    let sbData = null;
+    if (useSupabase) {
+      const { data, error } = await supabase.from('users').select('id').limit(1);
+      sbError = error;
+      sbData = data;
+    }
     res.json({
       useSupabase,
       hasSupabaseUrl: !!process.env.SUPABASE_URL || !!process.env.VITE_SUPABASE_URL,
       hasSupabaseKey: !!process.env.SUPABASE_KEY || !!process.env.VITE_SUPABASE_KEY,
-      url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+      url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+      sbError,
+      sbData
     });
   });
 
