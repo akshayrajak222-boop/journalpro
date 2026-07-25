@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS mt5_connections (
   broker_server TEXT,
   is_investor_sync BOOLEAN,
   auto_sync BOOLEAN,
+  history_months INTEGER DEFAULT 3,
+  initial_sync_done BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
