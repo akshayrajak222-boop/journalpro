@@ -840,7 +840,13 @@ export default function App() {
   // Account Operations
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAccName || !newAccBroker || !newAccBalance) return;
+    const storedId = sessionStorage.getItem('auth_user_id') || user?.id || '';
+    const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
+    console.log('[handleCreateAccount] auth check — id:', storedId, 'email:', storedEmail);
+    if (!newAccName || !newAccBroker || !newAccBalance) {
+      alert('Please fill in Account Name, Broker, and Starting Balance.');
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await authFetch('/api/accounts', {
@@ -855,7 +861,9 @@ export default function App() {
           startingBalance: newAccBalance
         })
       });
+      console.log('[handleCreateAccount] response status:', res.status);
       const data = await res.json();
+      console.log('[handleCreateAccount] response data:', data);
       if (res.ok) {
         setShowAccountModal(false);
         setNewAccName('');
@@ -867,11 +875,14 @@ export default function App() {
         } else {
           await fetchAccountData();
         }
-      } else if (data.error) {
-        alert(data.error);
+      } else {
+        const errMsg = data.error || `Server error (${res.status})`;
+        console.error('[handleCreateAccount] error:', errMsg);
+        alert(errMsg);
       }
-    } catch (err) {
-      alert('Error creating account');
+    } catch (err: any) {
+      console.error('[handleCreateAccount] exception:', err);
+      alert('Error creating account: ' + (err?.message || err));
     } finally {
       setActionLoading(false);
     }
@@ -2062,7 +2073,11 @@ export default function App() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
                   <button
-                    onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+                    onClick={() => { 
+                      alert('Header button click detected!');
+                      setShowAccountModal(true); 
+                      setAccountCreationMethod('select'); 
+                    }}
                     title="Connect New Portfolio Account"
                     className="text-slate-400 hover:text-slate-900 hover:bg-slate-200/50 p-1 rounded transition duration-150"
                   >
@@ -2286,7 +2301,7 @@ export default function App() {
               <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 font-display">
                 {activeTab === 'dashboard' ? 'Dashboard' :
                  activeTab === 'journal' ? 'Trading Journal' :
-                 activeTab === 'accounts' ? 'Portfolio Accounts' :
+                 activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'settings' ? 'Settings' : 'Admin Panel'}
@@ -2814,7 +2829,12 @@ export default function App() {
 
               {/* Dotted Create Card */}
               <button
-                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+                onClick={() => { 
+                  console.log('Connect New Portfolio Account button clicked');
+                  alert('Click detected! If you see this, the button works.');
+                  setShowAccountModal(true); 
+                  setAccountCreationMethod('select'); 
+                }}
                 className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition h-56 text-xs font-bold bg-white"
               >
                 <Plus className="h-6 w-6 text-slate-400" />
@@ -4076,7 +4096,7 @@ export default function App() {
 
       {/* A. Account Creation Modal */}
       {showAccountModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
           <div className="bg-white rounded-xl shadow-2xl border border-slate-100 max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setShowAccountModal(false)}

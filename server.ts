@@ -1150,7 +1150,8 @@ const PORT = 3000;
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     const authEmail = currentUser?.email;
-    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+    console.log(`[POST /api/accounts] x-auth-user-id: "${req.headers['x-auth-user-id']}", x-auth-email: "${req.headers['x-auth-email']}", resolved currentUser: ${currentUser?.id || 'NONE'}`);
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated. Please refresh the page and log in again.' });
     
     if (!db.accounts) db.accounts = [];
     if (!db.riskSettings) db.riskSettings = [];
