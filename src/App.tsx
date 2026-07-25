@@ -2074,7 +2074,6 @@ export default function App() {
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
                   <button
                     onClick={() => { 
-                      alert('Header button click detected!');
                       setShowAccountModal(true); 
                       setAccountCreationMethod('select'); 
                     }}
@@ -2830,8 +2829,6 @@ export default function App() {
               {/* Dotted Create Card */}
               <button
                 onClick={() => { 
-                  console.log('Connect New Portfolio Account button clicked');
-                  alert('Click detected! If you see this, the button works.');
                   setShowAccountModal(true); 
                   setAccountCreationMethod('select'); 
                 }}
