@@ -922,7 +922,6 @@ const PORT = 3000;
         };
         db.users.push(user);
       } else {
-        if (authUserId) user.id = authUserId;
         if (name) user.name = name;
         if (password) user.password = await bcrypt.hash(password, 10);
         user.isEmailVerified = isEmailVerified === true ? true : (user.isEmailVerified || false);
@@ -932,7 +931,7 @@ const PORT = 3000;
         user.otpSentAt = new Date().toISOString();
       }
 
-      await saveDatabase(db, user.id, normalizedEmail, { userId: previousUserId, email: previousEmail });
+      await saveDatabase(db, user.id, normalizedEmail);
       
       if (isEmailVerified === true) {
         return res.json({
@@ -986,11 +985,6 @@ const PORT = 3000;
       } else if (password && !user.password) {
         user.password = await bcrypt.hash(password, 10);
         await saveDatabase(db, user.id, normalizedEmail);
-      }
-
-      if (authUserId && user.id !== authUserId) {
-        user.id = authUserId;
-        await saveDatabase(db, user.id, normalizedEmail, { userId: previousUserId, email: previousEmail });
       }
 
       res.json({ message: 'Login successful', user });
