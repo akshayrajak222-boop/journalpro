@@ -731,6 +731,28 @@ const PORT = 3000;
   // Middleware
   app.use(express.json({ limit: '15mb' }));
 
+  // CORS middleware — allow MT5 EA and browser requests from both domains
+  app.use((req, res, next) => {
+    const allowedOrigins = [
+      'https://fxjournalpro.com',
+      'https://www.fxjournalpro.com',
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ];
+    const origin = req.headers['origin'] as string;
+    if (!origin || allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', 'https://fxjournalpro.com');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-User-Id, X-Auth-Email');
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    next();
+  });
+
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
     try {
@@ -1987,11 +2009,27 @@ const PORT = 3000;
     res.json({ message: 'MT5 trade synchronized successfully!', trade: simulatedTrade });
   });
 
+  // ==========================================
+  // MT5 EA SYNC API — GET health check
+  // ==========================================
+  app.get('/api/mt5/sync', (req, res) => {
+    console.log('[MT5 Sync] GET /api/mt5/sync — health check ping');
+    return res.status(200).json({ status: 'MT5 Sync API Running' });
+  });
+
   // Secure EA synchronization API hit by MT5 Experts Terminal
   app.post('/api/mt5/sync', async (req, res) => {
-    let { syncToken, trades, balance } = req.body;
+    // ---- Server-side logging ----
+    console.log('[MT5 Sync] POST /api/mt5/sync called');
+    console.log('[MT5 Sync] Request headers:', JSON.stringify(req.headers, null, 2));
+    console.log('[MT5 Sync] Request body:', JSON.stringify(req.body, null, 2));
+
+    let { syncToken, email, trades, balance } = req.body;
     syncToken = (syncToken || '').trim();
-    if (!syncToken) return res.status(401).json({ error: 'Invalid or missing authorization token' });
+    if (!syncToken) {
+      console.warn('[MT5 Sync] Missing syncToken — returning 401');
+      return res.status(401).json({ error: 'Invalid or missing authorization token' });
+    }
 
     // Look up the connection directly by syncToken — no email dependency
     let connection: any = null;
@@ -2017,18 +2055,25 @@ const PORT = 3000;
 
     // Fallback: try email-based lookup if supabase lookup didn't work
     if (!connection) {
-      const email = ((req.body?.email as string) || (req.query.email as string) || '').trim().toLowerCase();
-      if (email) {
-        const emailDb = await ensureUserDbLoaded(email);
+      const emailFallback = (email || (req.query.email as string) || '').trim().toLowerCase();
+      if (emailFallback) {
+        console.log('[MT5 Sync] Supabase lookup missed, trying email fallback:', emailFallback);
+        const emailDb = await ensureUserDbLoaded(emailFallback);
         const found = emailDb?.mt5Connections?.find((c: any) => c.syncToken === syncToken);
         if (found) { connection = found; db = emailDb; }
       }
     }
 
-    if (!connection) return res.status(403).json({ error: 'EA synchronization token not found' });
+    if (!connection) {
+      console.warn('[MT5 Sync] Token not found in any user DB — returning 403');
+      return res.status(403).json({ error: 'EA synchronization token not found' });
+    }
 
     const accountIdx = db.accounts.findIndex((acc: any) => acc.id === connection.accountId);
-    if (accountIdx === -1) return res.status(404).json({ error: 'Trading account linked to this token does not exist' });
+    if (accountIdx === -1) {
+      console.warn('[MT5 Sync] Account not found for connection:', connection.accountId);
+      return res.status(404).json({ error: 'Trading account linked to this token does not exist' });
+    }
 
     const isInitialSync = !connection.initialSyncDone;
     let syncedCount = 0;
@@ -2133,7 +2178,15 @@ const PORT = 3000;
       db.mt5Connections[finalConnIdx].status = 'Connected';
     }
     await saveDatabase(db);
-    res.json({ status: 'Success', syncedTradesCount: syncedCount, accountBalance: db.accounts[accountIdx].currentBalance, startingBalance: db.accounts[accountIdx].startingBalance });
+    const syncResponse = {
+      success: true,
+      message: 'MT5 Sync completed successfully',
+      syncedTradesCount: syncedCount,
+      accountBalance: db.accounts[accountIdx].currentBalance,
+      startingBalance: db.accounts[accountIdx].startingBalance
+    };
+    console.log('[MT5 Sync] Sync complete. Response:', JSON.stringify(syncResponse));
+    res.status(200).json(syncResponse);
   });
 
   // ==========================================
