@@ -753,6 +753,15 @@ const PORT = 3000;
     next();
   });
 
+  // Disable browser caching on all API routes so fresh data is always returned
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.removeHeader('ETag');
+    next();
+  });
+
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
     try {
@@ -1162,11 +1171,33 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/accounts', async (req, res) => {
-    let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
-    if (!currentUser || !db) return res.json({ accounts: [] });
+    if (!currentUser) return res.json({ accounts: [] });
+
+    // Always fetch fresh from Supabase when available
+    if (useSupabase) {
+      try {
+        const { data: rows, error } = await supabase
+          .from('trading_accounts')
+          .select('*')
+          .eq('user_id', currentUser.id);
+        if (error) {
+          console.error('[GET /api/accounts] Supabase error:', JSON.stringify(error));
+        } else {
+          const accounts = toCamel(rows || []);
+          console.log(`[GET /api/accounts] User: ${currentUser.id}, accounts from Supabase: ${accounts.length}`);
+          return res.json({ accounts });
+        }
+      } catch (err: any) {
+        console.error('[GET /api/accounts] Exception:', err?.message);
+      }
+    }
+
+    // Fallback: use middleware db
+    const db = (req as any).userDb;
+    if (!db) return res.json({ accounts: [] });
     const userAccounts = (db.accounts || []).filter((acc: any) => acc.userId === currentUser.id);
-    console.log(`[GET /api/accounts] User: ${currentUser.id} (${currentUser.email}), total DB accounts: ${db.accounts?.length}, filtered user accounts: ${userAccounts.length}`);
+    console.log(`[GET /api/accounts] User: ${currentUser.id} (${currentUser.email}), filtered: ${userAccounts.length}`);
     res.json({ accounts: userAccounts });
   });
 
@@ -1283,24 +1314,53 @@ const PORT = 3000;
   // ==========================================
 
   app.get('/api/trades', async (req, res) => {
-    let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
-    if (!currentUser || !db) return res.json({ trades: [] });
+    if (!currentUser) return res.json({ trades: [] });
 
     const { accountId } = req.query;
-    let accountTrades = [];
-    if (accountId) {
-      const targetAccount = db.accounts.find((acc: any) => acc.id === accountId);
-      if (targetAccount && targetAccount.userId !== currentUser.id) {
-        return res.status(403).json({ error: 'You can only view trades for your own accounts.' });
-      }
-      accountTrades = (db.trades || []).filter((t: any) => t.accountId === accountId);
-    } else {
-      accountTrades = db.trades || [];
-    }
+    let accountTrades: any[] = [];
 
-    // Sort descending by date
-    accountTrades.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Always fetch fresh from Supabase when available (bypasses stale middleware cache)
+    if (useSupabase) {
+      try {
+        let query = supabase
+          .from('trades')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .order('date', { ascending: false });
+
+        if (accountId) {
+          // Security: verify account belongs to this user
+          const { data: accCheck } = await supabase
+            .from('trading_accounts')
+            .select('user_id')
+            .eq('id', accountId)
+            .maybeSingle();
+          if (accCheck && accCheck.user_id !== currentUser.id) {
+            return res.status(403).json({ error: 'You can only view trades for your own accounts.' });
+          }
+          query = query.eq('account_id', accountId as string);
+        }
+
+        const { data: rows, error } = await query;
+        if (error) {
+          console.error('[GET /api/trades] Supabase error:', JSON.stringify(error));
+        } else {
+          accountTrades = toCamel(rows || []);
+          console.log(`[GET /api/trades] Fetched ${accountTrades.length} trades for user ${currentUser.id} from Supabase`);
+        }
+      } catch (err: any) {
+        console.error('[GET /api/trades] Exception:', err?.message);
+      }
+    } else {
+      // Fallback: use middleware-loaded db
+      const db = (req as any).userDb;
+      if (!db) return res.json({ trades: [] });
+      accountTrades = accountId
+        ? (db.trades || []).filter((t: any) => t.accountId === accountId)
+        : db.trades || [];
+      accountTrades.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
 
     res.json({ trades: accountTrades });
   });
