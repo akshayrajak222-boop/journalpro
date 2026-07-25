@@ -2080,230 +2080,326 @@ const PORT = 3000;
   // Secure EA synchronization API hit by MT5 Experts Terminal
   app.post('/api/mt5/sync', async (req, res) => {
     // ---- Server-side logging ----
-    console.log('[MT5 Sync] POST /api/mt5/sync called');
-    console.log('[MT5 Sync] Request headers:', JSON.stringify(req.headers, null, 2));
-    console.log('[MT5 Sync] Request body:', JSON.stringify(req.body, null, 2));
 
-    let { syncToken, email, trades, balance } = req.body;
+    // ═══════════════════════════════════════════════════
+    // STEP 1: LOG FULL INCOMING PAYLOAD
+    // ═══════════════════════════════════════════════════
+    const rawBody = req.body || {};
+    console.log('═══════════════════════════════════════');
+    console.log('[MT5 Sync] ▶ POST /api/mt5/sync received');
+    console.log('[MT5 Sync] Content-Type:', req.headers['content-type']);
+    console.log('[MT5 Sync] syncToken:', rawBody.syncToken ? `"${rawBody.syncToken}"` : 'MISSING');
+    console.log('[MT5 Sync] email:', rawBody.email || 'NOT PROVIDED');
+    console.log('[MT5 Sync] balance:', rawBody.balance);
+    console.log('[MT5 Sync] trades array length:', Array.isArray(rawBody.trades) ? rawBody.trades.length : `NOT AN ARRAY (type: ${typeof rawBody.trades})`);
+    if (Array.isArray(rawBody.trades) && rawBody.trades.length > 0) {
+      console.log('[MT5 Sync] First trade sample:', JSON.stringify(rawBody.trades[0]));
+      console.log('[MT5 Sync] Last trade sample:', JSON.stringify(rawBody.trades[rawBody.trades.length - 1]));
+    } else {
+      console.log('[MT5 Sync] ⚠ EA sent EMPTY trades array — no closed trades in history period');
+    }
+    console.log('═══════════════════════════════════════');
+
+    let { syncToken, email, trades, balance } = rawBody;
     syncToken = (syncToken || '').trim();
     if (!syncToken) {
-      console.warn('[MT5 Sync] Missing syncToken — returning 401');
+      console.warn('[MT5 Sync] ✗ Missing syncToken — returning 401');
       return res.status(401).json({ error: 'Invalid or missing authorization token' });
     }
 
-    // Look up the connection directly by syncToken — no email dependency
+    // ═══════════════════════════════════════════════════
+    // STEP 2: LOOK UP CONNECTION BY SYNC TOKEN
+    // ═══════════════════════════════════════════════════
     let connection: any = null;
     let db: any = null;
+    let connRow: any = null;
 
     if (useSupabase) {
       try {
-        const { data: connRow } = await supabase
+        const result = await supabase
           .from('mt5_connections')
           .select('*')
           .eq('sync_token', syncToken)
           .maybeSingle();
 
-        if (connRow) {
-          // Load the full user DB using the userId from the connection
+        console.log('[MT5 Sync] Supabase token lookup error:', result.error ? JSON.stringify(result.error) : 'none');
+        console.log('[MT5 Sync] Supabase connRow found:', result.data ? `YES — user_id=${result.data.user_id}, account_id=${result.data.account_id}` : 'NO');
+
+        if (result.data) {
+          connRow = result.data;
           db = await ensureUserDbLoaded(connRow.user_id);
-          connection = db.mt5Connections.find((c: any) => c.syncToken === syncToken);
+          console.log('[MT5 Sync] User DB loaded — users:', db.users?.length, '| accounts:', db.accounts?.length, '| trades:', db.trades?.length, '| connections:', db.mt5Connections?.length);
+          // Find connection in camelCase db
+          connection = db.mt5Connections.find((c: any) =>
+            c.syncToken === syncToken || c.sync_token === syncToken
+          );
+          console.log('[MT5 Sync] Connection found in db:', connection ? `YES (accountId=${connection.accountId || connection.account_id})` : 'NO — falling back to connRow');
+
+          // If toCamel didn't work, use the raw connRow
+          if (!connection) {
+            connection = {
+              id: connRow.id,
+              userId: connRow.user_id,
+              accountId: connRow.account_id,
+              syncToken: connRow.sync_token,
+              initialSyncDone: connRow.initial_sync_done,
+              totalSyncedTrades: connRow.total_synced_trades || 0,
+              status: connRow.status
+            };
+            console.log('[MT5 Sync] Using raw connRow as connection fallback');
+          }
         }
       } catch (err) {
-        console.error('[MT5 Sync] Supabase token lookup error:', err);
+        console.error('[MT5 Sync] ✗ Supabase token lookup exception:', err);
       }
     }
 
-    // Fallback: try email-based lookup if supabase lookup didn't work
+    // Email-based fallback
     if (!connection) {
       const emailFallback = (email || (req.query.email as string) || '').trim().toLowerCase();
       if (emailFallback) {
-        console.log('[MT5 Sync] Supabase lookup missed, trying email fallback:', emailFallback);
+        console.log('[MT5 Sync] Trying email fallback:', emailFallback);
         const emailDb = await ensureUserDbLoaded(emailFallback);
-        const found = emailDb?.mt5Connections?.find((c: any) => c.syncToken === syncToken);
+        const found = emailDb?.mt5Connections?.find((c: any) =>
+          c.syncToken === syncToken || c.sync_token === syncToken
+        );
         if (found) { connection = found; db = emailDb; }
+        console.log('[MT5 Sync] Email fallback result:', found ? 'FOUND' : 'NOT FOUND');
       }
     }
 
     if (!connection) {
-      console.warn('[MT5 Sync] Token not found in any user DB — returning 403');
-      return res.status(403).json({ error: 'EA synchronization token not found' });
+      console.warn('[MT5 Sync] ✗ Token not found — returning 403');
+      return res.status(403).json({ error: 'EA synchronization token not found. Check your syncToken in EA settings.' });
     }
 
-    const accountIdx = db.accounts.findIndex((acc: any) => acc.id === connection.accountId);
+    // ═══════════════════════════════════════════════════
+    // STEP 3: RESOLVE ACCOUNT ID (handle camel + snake)
+    // ═══════════════════════════════════════════════════
+    const resolvedAccountId = connection.accountId || connection.account_id || connRow?.account_id;
+    const resolvedUserId = db.users[0]?.id || connection.userId || connection.user_id || connRow?.user_id;
+
+    console.log('[MT5 Sync] Resolved accountId:', resolvedAccountId);
+    console.log('[MT5 Sync] Resolved userId:', resolvedUserId);
+    console.log('[MT5 Sync] All db account IDs:', db.accounts?.map((a: any) => a.id).join(', ') || 'none');
+
+    const accountIdx = db.accounts.findIndex((acc: any) =>
+      acc.id === resolvedAccountId
+    );
+
     if (accountIdx === -1) {
-      console.warn('[MT5 Sync] Account not found for connection:', connection.accountId);
-      return res.status(404).json({ error: 'Trading account linked to this token does not exist' });
+      // Account not in db — try fetching directly from Supabase
+      console.warn('[MT5 Sync] Account not in user DB. Fetching from Supabase...');
+      if (useSupabase && resolvedAccountId) {
+        const { data: accData } = await supabase
+          .from('trading_accounts')
+          .select('*')
+          .eq('id', resolvedAccountId)
+          .maybeSingle();
+        if (accData) {
+          db.accounts.push(toCamel(accData));
+          console.log('[MT5 Sync] Account fetched from Supabase and added to db:', accData.id);
+        } else {
+          console.error('[MT5 Sync] ✗ Account not found in Supabase either:', resolvedAccountId);
+          return res.status(404).json({ error: 'Trading account linked to this token does not exist' });
+        }
+      } else {
+        return res.status(404).json({ error: 'Trading account not found' });
+      }
     }
 
-    const isInitialSync = !connection.initialSyncDone;
+    // Re-find index after potential push
+    const finalAccountIdx = db.accounts.findIndex((acc: any) => acc.id === resolvedAccountId);
+    console.log('[MT5 Sync] Account found:', db.accounts[finalAccountIdx]?.name, '| Current balance:', db.accounts[finalAccountIdx]?.currentBalance);
+
+    // ═══════════════════════════════════════════════════
+    // STEP 4: PROCESS INCOMING TRADES
+    // ═══════════════════════════════════════════════════
+    const isInitialSync = !connection.initialSyncDone && !connection.initial_sync_done;
     let syncedCount = 0;
-    let totalImportedNet = 0;
+    let skippedDuplicates = 0;
+    let updatedCount = 0;
+    const newTradeRows: any[] = [];
 
-    console.log(`[MT5 Sync] Incoming trades count: ${trades?.length || 0}`);
-    console.log(`[MT5 Sync] Connection accountId: ${connection.accountId} | userId: ${db.users[0]?.id}`);
+    if (trades && Array.isArray(trades) && trades.length > 0) {
+      console.log(`[MT5 Sync] Processing ${trades.length} incoming trades...`);
 
-    if (trades && Array.isArray(trades)) {
-      trades.forEach((incomingTrade: any) => {
-        const eaTicket = incomingTrade.id || incomingTrade.ticket;
+      trades.forEach((incomingTrade: any, idx: number) => {
+        const eaTicket = String(incomingTrade.id || incomingTrade.ticket || '');
 
-        // Better deduplication logic to prevent the same trade showing multiple times when profit fluctuates
+        // Dedup check: ID-based first, then composite
         const existingIdx = db.trades.findIndex((t: any) => {
-          if (t.accountId !== connection.accountId) return false;
-          
-          if (eaTicket && t.id === String(eaTicket)) return true;
-          
-          // Composite match ignoring profit (which floats) and time (which might differ slightly)
-          const isSameSymbol = t.symbol === (incomingTrade.symbol || '').toUpperCase();
+          const tAccountId = t.accountId || t.account_id;
+          if (tAccountId !== resolvedAccountId) return false;
+          if (eaTicket && (t.id === eaTicket || String(t.id) === eaTicket)) return true;
+          // Composite match
+          const isSameSymbol = (t.symbol || '').toUpperCase() === (incomingTrade.symbol || '').toUpperCase();
           const isSameType = t.type === (incomingTrade.type || 'Buy');
-          const isSameEntry = Math.abs(t.entryPrice - parseFloat(incomingTrade.entryPrice || 1.0)) < 0.0001;
-          const isSameLot = Math.abs(t.lotSize - parseFloat(incomingTrade.lotSize || 0.1)) < 0.001;
-          
+          const isSameEntry = Math.abs((t.entryPrice || t.entry_price || 0) - parseFloat(incomingTrade.entryPrice || 0)) < 0.0001;
+          const isSameLot = Math.abs((t.lotSize || t.lot_size || 0) - parseFloat(incomingTrade.lotSize || 0)) < 0.001;
           return isSameSymbol && isSameType && isSameEntry && isSameLot;
         });
 
         if (existingIdx !== -1) {
-          // Update the existing trade since profit or exit price might have changed
+          skippedDuplicates++;
+          if (idx < 3) console.log(`[MT5 Sync] Trade[${idx}] ticket=${eaTicket} → DUPLICATE (existing id=${db.trades[existingIdx].id}), updating profit`);
+          // Update profit fields
           const t = db.trades[existingIdx];
-          const oldNet = t.profit + t.commission + t.swap;
-          
-          t.exitPrice = parseFloat(incomingTrade.exitPrice || t.exitPrice);
-          if (incomingTrade.stopLoss) t.stopLoss = parseFloat(incomingTrade.stopLoss);
-          if (incomingTrade.takeProfit) t.takeProfit = parseFloat(incomingTrade.takeProfit);
           t.profit = parseFloat(incomingTrade.profit || 0);
           t.commission = parseFloat(incomingTrade.commission || 0);
           t.swap = parseFloat(incomingTrade.swap || 0);
-          
-          const newNet = t.profit + t.commission + t.swap;
-          const netDiff = newNet - oldNet;
-          db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + netDiff).toFixed(2));
+          updatedCount++;
         } else {
-          const newTrade: Trade = {
-            id: eaTicket ? String(eaTicket) : `mt5_ea_${Date.now()}_${Math.floor(Math.random()*100000)}`,
-            accountId: connection.accountId,
+          const newId = eaTicket || `mt5_ea_${Date.now()}_${idx}`;
+          console.log(`[MT5 Sync] Trade[${idx}] ticket=${eaTicket} symbol=${incomingTrade.symbol} → NEW (id=${newId})`);
+          const newTrade = {
+            id: newId,
+            accountId: resolvedAccountId,
+            account_id: resolvedAccountId,
+            user_id: resolvedUserId,
             date: incomingTrade.date || new Date().toISOString(),
-            symbol: incomingTrade.symbol.toUpperCase(),
+            symbol: (incomingTrade.symbol || 'UNKNOWN').toUpperCase(),
             type: incomingTrade.type || 'Buy',
             lotSize: parseFloat(incomingTrade.lotSize || 0.1),
+            lot_size: parseFloat(incomingTrade.lotSize || 0.1),
             entryPrice: parseFloat(incomingTrade.entryPrice || 1.0),
+            entry_price: parseFloat(incomingTrade.entryPrice || 1.0),
             exitPrice: parseFloat(incomingTrade.exitPrice || 1.0),
-            stopLoss: incomingTrade.stopLoss ? parseFloat(incomingTrade.stopLoss) : undefined,
-            takeProfit: incomingTrade.takeProfit ? parseFloat(incomingTrade.takeProfit) : undefined,
+            exit_price: parseFloat(incomingTrade.exitPrice || 1.0),
+            stopLoss: incomingTrade.stopLoss ? parseFloat(incomingTrade.stopLoss) : null,
+            stop_loss: incomingTrade.stopLoss ? parseFloat(incomingTrade.stopLoss) : null,
+            takeProfit: incomingTrade.takeProfit ? parseFloat(incomingTrade.takeProfit) : null,
+            take_profit: incomingTrade.takeProfit ? parseFloat(incomingTrade.takeProfit) : null,
             profit: parseFloat(incomingTrade.profit || 0),
             commission: parseFloat(incomingTrade.commission || 0),
             swap: parseFloat(incomingTrade.swap || 0),
             riskPercentage: parseFloat(incomingTrade.riskPercentage || 1.0),
-            strategy: incomingTrade.type === 'Deposit' || incomingTrade.type === 'Withdrawal' ? 'Balance Operation' : 'MT5 Expert EA Sync',
+            risk_percentage: parseFloat(incomingTrade.riskPercentage || 1.0),
+            strategy: 'MT5 Expert EA Sync',
             emotion: 'Calm',
-            notes: incomingTrade.notes || 'Automated execution sync.',
+            notes: incomingTrade.notes || 'Synchronized from MT5 terminal.',
             tags: ['MT5 AutoSync'],
-            isMt5Sync: true
+            isMt5Sync: true,
+            is_mt5_sync: true
           };
-
           db.trades.push(newTrade);
+          newTradeRows.push(newTrade);
           syncedCount++;
-
-          // Adjust account balance
-          const net = newTrade.profit + newTrade.commission + newTrade.swap;
-          totalImportedNet += net;
-          db.accounts[accountIdx].currentBalance = parseFloat((db.accounts[accountIdx].currentBalance + net).toFixed(2));
         }
       });
-    }
 
-    console.log(`[MT5 Sync] Processed ${trades?.length || 0} incoming trades. New: ${syncedCount}`);
-
-    // Set Live Balance & Recalculate Starting Balance on Initial Sync
-    const liveBalance = (balance !== undefined && balance !== null && !isNaN(Number(balance))) ? parseFloat(Number(balance).toFixed(2)) : db.accounts[accountIdx].currentBalance;
-    db.accounts[accountIdx].currentBalance = liveBalance;
-    db.accounts[accountIdx].equity = liveBalance;
-
-    if (isInitialSync) {
-      // Fetch all trades for this account
-      const accountTrades = db.trades.filter((t: any) => t.accountId === connection.accountId);
-      let totalPL = 0;
-      accountTrades.forEach((t: any) => {
-        totalPL += (parseFloat(t.profit || 0) + parseFloat(t.commission || 0) + parseFloat(t.swap || 0));
-      });
-
-      // Initial Balance = Current Live MT5 Balance - Total P&L of imported trades
-      const initialBalance = parseFloat((liveBalance - totalPL).toFixed(2));
-      db.accounts[accountIdx].startingBalance = initialBalance;
-
-      // Mark connection's initial sync as completed
-      const connIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
-      if (connIdx !== -1) {
-        db.mt5Connections[connIdx].initialSyncDone = true;
-      }
-    }
-
-    const finalConnIdx = db.mt5Connections.findIndex((c: any) => c.id === connection.id);
-    if (finalConnIdx !== -1) {
-      db.mt5Connections[finalConnIdx].lastSyncTime = new Date().toISOString();
-      db.mt5Connections[finalConnIdx].totalSyncedTrades += syncedCount;
-      db.mt5Connections[finalConnIdx].status = 'Connected';
-    }
-
-    // ---- Direct Supabase persistence with per-operation error logging ----
-    if (useSupabase) {
-      const userId = db.users[0]?.id;
-      if (!userId) {
-        console.error('[MT5 Sync] Cannot persist: no user ID found in db');
-      } else {
-        // 1. Upsert the trading account (balance update)
-        const accountRow = {
-          ...toSnake(db.accounts[accountIdx]),
-          user_id: userId
-        };
-        const { error: accErr } = await supabase
-          .from('trading_accounts')
-          .upsert(accountRow, { onConflict: 'id' });
-        if (accErr) console.error('[MT5 Sync] Account upsert error:', JSON.stringify(accErr));
-        else console.log('[MT5 Sync] Account balance saved OK:', liveBalance);
-
-        // 2. Upsert only the trades belonging to this account (new + updated)
-        const accountTrades = db.trades.filter((t: any) => t.accountId === connection.accountId);
-        if (accountTrades.length > 0) {
-          const tradeRows = accountTrades.map((t: any) => ({
-            ...toSnake(t),
-            user_id: userId,
-            account_id: connection.accountId
-          }));
-          // Upsert in chunks of 50 to avoid payload limits
-          const chunkSize = 50;
-          for (let i = 0; i < tradeRows.length; i += chunkSize) {
-            const chunk = tradeRows.slice(i, i + chunkSize);
-            const { error: tradeErr } = await supabase
-              .from('trades')
-              .upsert(chunk, { onConflict: 'id' });
-            if (tradeErr) {
-              console.error(`[MT5 Sync] Trade upsert error (chunk ${i}–${i + chunkSize}):`, JSON.stringify(tradeErr));
-              console.error('[MT5 Sync] Sample row that failed:', JSON.stringify(chunk[0]));
-            } else {
-              console.log(`[MT5 Sync] Trades chunk ${i}–${i + chunkSize} saved OK (${chunk.length} rows)`);
-            }
-          }
-        } else {
-          console.log('[MT5 Sync] No trades to upsert for this account.');
-        }
-
-        // 3. Update the MT5 connection record
-        if (finalConnIdx !== -1) {
-          const connRow = {
-            ...toSnake(db.mt5Connections[finalConnIdx]),
-            user_id: userId
-          };
-          const { error: connErr } = await supabase
-            .from('mt5_connections')
-            .upsert(connRow, { onConflict: 'id' });
-          if (connErr) console.error('[MT5 Sync] Connection upsert error:', JSON.stringify(connErr));
-          else console.log('[MT5 Sync] MT5 connection record updated OK');
-        }
-      }
+      console.log(`[MT5 Sync] ✓ Processing complete — New: ${syncedCount} | Duplicates: ${skippedDuplicates} | Updated: ${updatedCount}`);
     } else {
-      // Fallback: generic save for non-Supabase environments
+      console.log('[MT5 Sync] ⚠ trades array is empty or missing — nothing to import');
+      console.log('[MT5 Sync] ⚠ If you have closed trades in MT5 history, check:');
+      console.log('[MT5 Sync]   1. EA HistoryMonths setting covers the date range');
+      console.log('[MT5 Sync]   2. MT5 history is loaded (Ctrl+Shift+H → show all)');
+    }
+
+    // ═══════════════════════════════════════════════════
+    // STEP 5: UPDATE BALANCE
+    // ═══════════════════════════════════════════════════
+    const liveBalance = (balance !== undefined && balance !== null && !isNaN(Number(balance)) && Number(balance) > 0)
+      ? parseFloat(Number(balance).toFixed(2))
+      : db.accounts[finalAccountIdx].currentBalance;
+    db.accounts[finalAccountIdx].currentBalance = liveBalance;
+    db.accounts[finalAccountIdx].equity = liveBalance;
+    console.log(`[MT5 Sync] Balance set to: ${liveBalance} (received: ${balance})`);
+
+    if (isInitialSync && syncedCount > 0) {
+      const accountTrades = db.trades.filter((t: any) => (t.accountId || t.account_id) === resolvedAccountId);
+      const totalPL = accountTrades.reduce((sum: number, t: any) =>
+        sum + parseFloat(t.profit || 0) + parseFloat(t.commission || 0) + parseFloat(t.swap || 0), 0);
+      db.accounts[finalAccountIdx].startingBalance = parseFloat((liveBalance - totalPL).toFixed(2));
+      console.log('[MT5 Sync] Initial sync — starting balance calculated:', db.accounts[finalAccountIdx].startingBalance);
+    }
+
+    // ═══════════════════════════════════════════════════
+    // STEP 6: PERSIST TO SUPABASE
+    // ═══════════════════════════════════════════════════
+    if (useSupabase && resolvedUserId) {
+      // 6a. Update account balance
+      const { error: accErr } = await supabase
+        .from('trading_accounts')
+        .update({
+          current_balance: liveBalance,
+          equity: liveBalance,
+          starting_balance: db.accounts[finalAccountIdx].startingBalance || liveBalance
+        })
+        .eq('id', resolvedAccountId);
+      if (accErr) console.error('[MT5 Sync] ✗ Account balance update error:', JSON.stringify(accErr));
+      else console.log('[MT5 Sync] ✓ Account balance updated in Supabase');
+
+      // 6b. Insert only NEW trades (avoid upsert conflict on existing trades)
+      if (newTradeRows.length > 0) {
+        const supabaseTradeRows = newTradeRows.map((t: any) => ({
+          id: t.id,
+          account_id: resolvedAccountId,
+          user_id: resolvedUserId,
+          date: t.date,
+          symbol: t.symbol,
+          type: t.type,
+          lot_size: t.lotSize,
+          entry_price: t.entryPrice,
+          exit_price: t.exitPrice,
+          stop_loss: t.stopLoss || null,
+          take_profit: t.takeProfit || null,
+          profit: t.profit,
+          commission: t.commission,
+          swap: t.swap,
+          risk_percentage: t.riskPercentage || 1.0,
+          strategy: t.strategy,
+          emotion: t.emotion,
+          notes: t.notes,
+          tags: t.tags,
+          is_mt5_sync: true
+        }));
+
+        console.log(`[MT5 Sync] Inserting ${supabaseTradeRows.length} new trades into Supabase...`);
+        console.log('[MT5 Sync] Sample Supabase row:', JSON.stringify(supabaseTradeRows[0]));
+
+        // Use upsert (ignore duplicates gracefully)
+        const { data: insertedData, error: tradeErr } = await supabase
+          .from('trades')
+          .upsert(supabaseTradeRows, { onConflict: 'id', ignoreDuplicates: true });
+
+        if (tradeErr) {
+          console.error('[MT5 Sync] ✗ Trade insert error:', JSON.stringify(tradeErr));
+          console.error('[MT5 Sync] ✗ Failed row sample:', JSON.stringify(supabaseTradeRows[0]));
+        } else {
+          console.log(`[MT5 Sync] ✓ ${supabaseTradeRows.length} trades upserted to Supabase successfully`);
+        }
+      } else {
+        console.log('[MT5 Sync] No new trades to insert into Supabase.');
+      }
+
+      // 6c. Update connection record
+      const { error: connUpdErr } = await supabase
+        .from('mt5_connections')
+        .update({
+          last_sync_time: new Date().toISOString(),
+          status: 'Connected',
+          total_synced_trades: (connection.totalSyncedTrades || connection.total_synced_trades || 0) + syncedCount,
+          initial_sync_done: true
+        })
+        .eq('id', connection.id);
+      if (connUpdErr) console.error('[MT5 Sync] ✗ Connection update error:', JSON.stringify(connUpdErr));
+      else console.log('[MT5 Sync] ✓ MT5 connection record updated');
+
+      // 6d. Verify: count trades now in Supabase for this account
+      const { count } = await supabase
+        .from('trades')
+        .select('*', { count: 'exact', head: true })
+        .eq('account_id', resolvedAccountId);
+      console.log(`[MT5 Sync] ✓ Supabase trade count for account ${resolvedAccountId}: ${count}`);
+
+    } else {
       await saveDatabase(db);
     }
 
+    // ═══════════════════════════════════════════════════
+    // STEP 7: FINAL RESPONSE
+    // ═══════════════════════════════════════════════════
     const syncResponse = {
       success: true,
       message: 'MT5 Sync completed successfully',
