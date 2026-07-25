@@ -830,31 +830,9 @@ const PORT = 3000;
 
         let db = await ensureUserDbLoaded(userId, email);
 
-        let dbUser = db.users.find((u: any) => 
-          (userId && u.id === userId) || 
-          (email && u.email?.toLowerCase() === email)
-        );
-
-        if (!dbUser) {
-          dbUser = {
-            id: userId || `user_${Date.now()}`,
-            email: email,
-            name: email ? email.split('@')[0] : 'Trader',
-            experience: 'Intermediate',
-            tradingStyle: 'Day Trading',
-            mainMarkets: ['Forex', 'Gold'],
-            onboardingCompleted: false,
-            isPro: false,
-            isEmailVerified: true
-          };
-          db.users.push(dbUser);
-          await saveDatabase(db, userId, email);
-        } else if (userId && dbUser.id !== userId) {
-          const previousUserId = dbUser.id;
-          const previousEmail = dbUser.email;
-          dbUser.id = userId;
-          await saveDatabase(db, userId, email, { userId: previousUserId, email: previousEmail });
-        }
+        // Use the user already resolved by ensureUserDbLoaded (by email lookup)
+        // Never mutate the canonical user ID with a temporary session ID
+        let dbUser = db.users[0] || null;
 
         (req as any).userDb = db;
         (req as any).currentUser = dbUser;
