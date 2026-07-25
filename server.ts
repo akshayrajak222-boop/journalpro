@@ -652,49 +652,133 @@ async function saveDatabase(
 ) {
   if (!data || !useSupabase) return;
   const usersToSync = Array.isArray(data.users) ? data.users : [];
-  if(usersToSync.length === 0) return;
+  if (usersToSync.length === 0) return;
 
   const targetUser = usersToSync[0];
   const uid = targetUser.id;
-  if(!uid) return;
+  if (!uid) return;
 
   try {
-    // Upsert users
+    // 1. Upsert users (ONLY valid table columns)
     if (data.users && data.users.length > 0) {
-      const { error: usersErr } = await supabase.from('users').upsert(toSnake(data.users), { onConflict: 'id' });
+      const cleanUsers = data.users.map((u: any) => ({
+        id: u.id,
+        email: u.email || null,
+        name: u.name || null,
+        experience: u.experience || null,
+        trading_style: u.trading_style || u.tradingStyle || null,
+        main_markets: u.main_markets || u.mainMarkets || null,
+        onboarding_completed: u.onboarding_completed ?? u.onboardingCompleted ?? false,
+        is_pro: u.is_pro ?? u.isPro ?? false,
+        is_email_verified: u.is_email_verified ?? u.isEmailVerified ?? false
+      }));
+      const { error: usersErr } = await supabase.from('users').upsert(cleanUsers, { onConflict: 'id' });
       if (usersErr) console.error('[AxyFx SQL Save Error] users upsert failed:', usersErr.message, '| code:', usersErr.code);
     }
-    // Upsert accounts
+
+    // 2. Upsert accounts (ONLY valid table columns)
     if (data.accounts && data.accounts.length > 0) {
-      const accs = toSnake(data.accounts).map((a: any) => ({ ...a, user_id: uid }));
-      const { error: accsErr } = await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
+      const cleanAccs = data.accounts.map((a: any) => ({
+        id: a.id,
+        user_id: uid,
+        name: a.name || null,
+        broker: a.broker || null,
+        platform: a.platform || null,
+        account_type: a.account_type || a.accountType || null,
+        currency: a.currency || null,
+        starting_balance: a.starting_balance ?? a.startingBalance ?? 0,
+        current_balance: a.current_balance ?? a.currentBalance ?? 0,
+        equity: a.equity ?? 0,
+        status: a.status || 'Active'
+      }));
+      const { error: accsErr } = await supabase.from('trading_accounts').upsert(cleanAccs, { onConflict: 'id' });
       if (accsErr) console.error('[AxyFx SQL Save Error] trading_accounts upsert failed:', accsErr.message, '| code:', accsErr.code);
     }
-    // Upsert trades
+
+    // 3. Upsert trades (ONLY valid table columns)
     if (data.trades && data.trades.length > 0) {
-      const trds = toSnake(data.trades).map((t: any) => ({ ...t, user_id: uid }));
-      const { error: trdsErr } = await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+      const cleanTrades = data.trades.map((t: any) => ({
+        id: String(t.id),
+        account_id: t.account_id || t.accountId || null,
+        user_id: uid,
+        date: t.date || null,
+        symbol: t.symbol || null,
+        type: t.type || null,
+        lot_size: t.lot_size ?? t.lotSize ?? 0,
+        entry_price: t.entry_price ?? t.entryPrice ?? 0,
+        exit_price: t.exit_price ?? t.exitPrice ?? 0,
+        stop_loss: t.stop_loss ?? t.stopLoss ?? null,
+        take_profit: t.take_profit ?? t.takeProfit ?? null,
+        profit: t.profit ?? 0,
+        commission: t.commission ?? 0,
+        swap: t.swap ?? 0,
+        risk_percentage: t.risk_percentage ?? t.riskPercentage ?? 0,
+        strategy: t.strategy || null,
+        emotion: t.emotion || null,
+        notes: t.notes || null,
+        screenshot: t.screenshot || null,
+        tags: t.tags || null,
+        is_mt5_sync: t.is_mt5_sync ?? t.isMt5Sync ?? false
+      }));
+      const { error: trdsErr } = await supabase.from('trades').upsert(cleanTrades, { onConflict: 'id' });
       if (trdsErr) console.error('[AxyFx SQL Save Error] trades upsert failed:', trdsErr.message, '| code:', trdsErr.code);
     }
-    // Upsert risk settings
+
+    // 4. Upsert risk settings (ONLY valid table columns)
     if (data.riskSettings && data.riskSettings.length > 0) {
-      const rs = toSnake(data.riskSettings).map((r: any) => ({ ...r, user_id: uid }));
-      const { error: rsErr } = await supabase.from('risk_settings').upsert(rs, { onConflict: 'id' });
+      const cleanRisk = data.riskSettings.map((r: any) => ({
+        id: r.id,
+        account_id: r.account_id || r.accountId || null,
+        user_id: uid,
+        risk_per_trade_limit: r.risk_per_trade_limit ?? r.riskPerTradeLimit ?? 2.0,
+        daily_loss_limit: r.daily_loss_limit ?? r.dailyLossLimit ?? 500,
+        weekly_loss_limit: r.weekly_loss_limit ?? r.weeklyLossLimit ?? 1500,
+        max_drawdown_limit: r.max_drawdown_limit ?? r.maxDrawdownLimit ?? 10.0,
+        discipline_enabled: r.discipline_enabled ?? r.disciplineEnabled ?? true,
+        max_trades_per_day: r.max_trades_per_day ?? r.maxTradesPerDay ?? 5
+      }));
+      const { error: rsErr } = await supabase.from('risk_settings').upsert(cleanRisk, { onConflict: 'id' });
       if (rsErr) console.error('[AxyFx SQL Save Error] risk_settings upsert failed:', rsErr.message, '| code:', rsErr.code);
     }
-    // Upsert support tickets
+
+    // 5. Upsert support tickets (ONLY valid table columns)
     if (data.supportTickets && data.supportTickets.length > 0) {
-      const tix = toSnake(data.supportTickets).map((t: any) => ({ ...t, user_id: uid }));
-      const { error: tixErr } = await supabase.from('support_tickets').upsert(tix, { onConflict: 'id' });
+      const cleanTickets = data.supportTickets.map((t: any) => ({
+        id: t.id,
+        user_id: uid,
+        user_email: t.user_email || t.userEmail || null,
+        title: t.title || null,
+        description: t.description || null,
+        status: t.status || 'Open',
+        category: t.category || 'Other',
+        date: t.date || null
+      }));
+      const { error: tixErr } = await supabase.from('support_tickets').upsert(cleanTickets, { onConflict: 'id' });
       if (tixErr) console.error('[AxyFx SQL Save Error] support_tickets upsert failed:', tixErr.message, '| code:', tixErr.code);
     }
-    // Upsert mt5 connections
+
+    // 6. Upsert mt5 connections (ONLY valid table columns)
     if (data.mt5Connections && data.mt5Connections.length > 0) {
-      const mt5 = toSnake(data.mt5Connections).map((m: any) => ({ ...m, user_id: uid }));
-      const { error: mt5Err } = await supabase.from('mt5_connections').upsert(mt5, { onConflict: 'id' });
+      const cleanMt5 = data.mt5Connections.map((m: any) => ({
+        id: m.id,
+        user_id: uid,
+        account_id: m.account_id || m.accountId || null,
+        broker_name: m.broker_name || m.brokerName || null,
+        status: m.status || 'Connected',
+        last_sync_time: m.last_sync_time || m.lastSyncTime || null,
+        sync_token: m.sync_token || m.syncToken || null,
+        total_synced_trades: m.total_synced_trades ?? m.totalSyncedTrades ?? 0,
+        login_number: m.login_number || m.loginNumber || null,
+        broker_server: m.broker_server || m.brokerServer || null,
+        is_investor_sync: m.is_investor_sync ?? m.isInvestorSync ?? false,
+        auto_sync: m.auto_sync ?? m.autoSync ?? true,
+        history_months: m.history_months ?? m.historyMonths ?? 3,
+        initial_sync_done: m.initial_sync_done ?? m.initialSyncDone ?? false
+      }));
+      const { error: mt5Err } = await supabase.from('mt5_connections').upsert(cleanMt5, { onConflict: 'id' });
       if (mt5Err) console.error('[AxyFx SQL Save Error] mt5_connections upsert failed:', mt5Err.message, '| code:', mt5Err.code);
     }
-  } catch(err) {
+  } catch (err) {
     console.error('[AxyFx SQL Save Error]', err);
   }
 }
