@@ -2079,6 +2079,9 @@ const PORT = 3000;
     let syncedCount = 0;
     let totalImportedNet = 0;
 
+    console.log(`[MT5 Sync] Incoming trades count: ${trades?.length || 0}`);
+    console.log(`[MT5 Sync] Connection accountId: ${connection.accountId} | userId: ${db.users[0]?.id}`);
+
     if (trades && Array.isArray(trades)) {
       trades.forEach((incomingTrade: any) => {
         const eaTicket = incomingTrade.id || incomingTrade.ticket;
@@ -2147,6 +2150,8 @@ const PORT = 3000;
       });
     }
 
+    console.log(`[MT5 Sync] Processed ${trades?.length || 0} incoming trades. New: ${syncedCount}`);
+
     // Set Live Balance & Recalculate Starting Balance on Initial Sync
     const liveBalance = (balance !== undefined && balance !== null && !isNaN(Number(balance))) ? parseFloat(Number(balance).toFixed(2)) : db.accounts[accountIdx].currentBalance;
     db.accounts[accountIdx].currentBalance = liveBalance;
@@ -2177,7 +2182,68 @@ const PORT = 3000;
       db.mt5Connections[finalConnIdx].totalSyncedTrades += syncedCount;
       db.mt5Connections[finalConnIdx].status = 'Connected';
     }
-    await saveDatabase(db);
+
+    // ---- Direct Supabase persistence with per-operation error logging ----
+    if (useSupabase) {
+      const userId = db.users[0]?.id;
+      if (!userId) {
+        console.error('[MT5 Sync] Cannot persist: no user ID found in db');
+      } else {
+        // 1. Upsert the trading account (balance update)
+        const accountRow = {
+          ...toSnake(db.accounts[accountIdx]),
+          user_id: userId
+        };
+        const { error: accErr } = await supabase
+          .from('trading_accounts')
+          .upsert(accountRow, { onConflict: 'id' });
+        if (accErr) console.error('[MT5 Sync] Account upsert error:', JSON.stringify(accErr));
+        else console.log('[MT5 Sync] Account balance saved OK:', liveBalance);
+
+        // 2. Upsert only the trades belonging to this account (new + updated)
+        const accountTrades = db.trades.filter((t: any) => t.accountId === connection.accountId);
+        if (accountTrades.length > 0) {
+          const tradeRows = accountTrades.map((t: any) => ({
+            ...toSnake(t),
+            user_id: userId,
+            account_id: connection.accountId
+          }));
+          // Upsert in chunks of 50 to avoid payload limits
+          const chunkSize = 50;
+          for (let i = 0; i < tradeRows.length; i += chunkSize) {
+            const chunk = tradeRows.slice(i, i + chunkSize);
+            const { error: tradeErr } = await supabase
+              .from('trades')
+              .upsert(chunk, { onConflict: 'id' });
+            if (tradeErr) {
+              console.error(`[MT5 Sync] Trade upsert error (chunk ${i}–${i + chunkSize}):`, JSON.stringify(tradeErr));
+              console.error('[MT5 Sync] Sample row that failed:', JSON.stringify(chunk[0]));
+            } else {
+              console.log(`[MT5 Sync] Trades chunk ${i}–${i + chunkSize} saved OK (${chunk.length} rows)`);
+            }
+          }
+        } else {
+          console.log('[MT5 Sync] No trades to upsert for this account.');
+        }
+
+        // 3. Update the MT5 connection record
+        if (finalConnIdx !== -1) {
+          const connRow = {
+            ...toSnake(db.mt5Connections[finalConnIdx]),
+            user_id: userId
+          };
+          const { error: connErr } = await supabase
+            .from('mt5_connections')
+            .upsert(connRow, { onConflict: 'id' });
+          if (connErr) console.error('[MT5 Sync] Connection upsert error:', JSON.stringify(connErr));
+          else console.log('[MT5 Sync] MT5 connection record updated OK');
+        }
+      }
+    } else {
+      // Fallback: generic save for non-Supabase environments
+      await saveDatabase(db);
+    }
+
     const syncResponse = {
       success: true,
       message: 'MT5 Sync completed successfully',
@@ -2187,6 +2253,49 @@ const PORT = 3000;
     };
     console.log('[MT5 Sync] Sync complete. Response:', JSON.stringify(syncResponse));
     res.status(200).json(syncResponse);
+  });
+
+  // ==========================================
+  // MT5 DEBUG ENDPOINT — inspect stored data for a sync token
+  // GET /api/mt5/debug?token=YOUR_SYNC_TOKEN
+  // ==========================================
+  app.get('/api/mt5/debug', async (req, res) => {
+    const token = (req.query.token as string || '').trim();
+    if (!token) return res.status(400).json({ error: 'Provide ?token=YOUR_SYNC_TOKEN' });
+    if (!useSupabase) return res.status(503).json({ error: 'Supabase not configured' });
+
+    try {
+      const { data: conn, error: connErr } = await supabase
+        .from('mt5_connections')
+        .select('*')
+        .eq('sync_token', token)
+        .maybeSingle();
+
+      if (connErr) return res.status(500).json({ error: 'Supabase error', details: connErr });
+      if (!conn) return res.status(404).json({ error: 'No connection found for this sync token' });
+
+      const { data: trades } = await supabase
+        .from('trades')
+        .select('id, symbol, type, profit, date, account_id, user_id, is_mt5_sync')
+        .eq('account_id', conn.account_id)
+        .order('date', { ascending: false })
+        .limit(20);
+
+      const { data: account } = await supabase
+        .from('trading_accounts')
+        .select('id, name, current_balance, user_id')
+        .eq('id', conn.account_id)
+        .maybeSingle();
+
+      return res.json({
+        connection: conn,
+        account,
+        recentTrades: trades || [],
+        tradeCount: trades?.length || 0
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Unknown error' });
+    }
   });
 
   // ==========================================
