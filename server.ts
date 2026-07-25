@@ -28,6 +28,9 @@ try {
   let supabaseUrl = process.env.SUPABASE_URL?.trim() || process.env.VITE_SUPABASE_URL?.trim();
   let supabaseKey = process.env.SUPABASE_KEY?.trim() || process.env.VITE_SUPABASE_KEY?.trim();
 
+  if (supabaseUrl && supabaseUrl.endsWith('/rest/v1/')) supabaseUrl = supabaseUrl.replace('/rest/v1/', '');
+  if (supabaseUrl && supabaseUrl.endsWith('/rest/v1')) supabaseUrl = supabaseUrl.replace('/rest/v1', '');
+
   // Strip wrapping quotes if any (common in some env setups)
   if (supabaseUrl?.startsWith('"') && supabaseUrl?.endsWith('"')) {
     supabaseUrl = supabaseUrl.slice(1, -1);
