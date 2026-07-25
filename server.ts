@@ -1993,17 +1993,38 @@ const PORT = 3000;
     syncToken = (syncToken || '').trim();
     if (!syncToken) return res.status(401).json({ error: 'Invalid or missing authorization token' });
 
-    const email = ((req.body?.email as string) || (req.query.email as string) || (req.headers['x-auth-email'] as string | undefined) || '').trim().toLowerCase();
-    let db = (req as any).userDb;
-    if (email) {
-      db = await ensureUserDbLoaded(email);
-    }
-    if (!db) {
-      return res.status(400).json({ error: 'Unable to resolve account database for MT5 sync.' });
+    // Look up the connection directly by syncToken — no email dependency
+    let connection: any = null;
+    let db: any = null;
+
+    if (useSupabase) {
+      try {
+        const { data: connRow } = await supabase
+          .from('mt5_connections')
+          .select('*')
+          .eq('sync_token', syncToken)
+          .maybeSingle();
+
+        if (connRow) {
+          // Load the full user DB using the userId from the connection
+          db = await ensureUserDbLoaded(connRow.user_id);
+          connection = db.mt5Connections.find((c: any) => c.syncToken === syncToken);
+        }
+      } catch (err) {
+        console.error('[MT5 Sync] Supabase token lookup error:', err);
+      }
     }
 
-    // Locate connection
-    const connection = db.mt5Connections.find((conn: any) => conn.syncToken === syncToken);
+    // Fallback: try email-based lookup if supabase lookup didn't work
+    if (!connection) {
+      const email = ((req.body?.email as string) || (req.query.email as string) || '').trim().toLowerCase();
+      if (email) {
+        const emailDb = await ensureUserDbLoaded(email);
+        const found = emailDb?.mt5Connections?.find((c: any) => c.syncToken === syncToken);
+        if (found) { connection = found; db = emailDb; }
+      }
+    }
+
     if (!connection) return res.status(403).json({ error: 'EA synchronization token not found' });
 
     const accountIdx = db.accounts.findIndex((acc: any) => acc.id === connection.accountId);
