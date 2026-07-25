@@ -543,26 +543,41 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
   }
 
   // Load from SQL tables if Supabase is enabled
-  if (useSupabase && cleanUserId) {
+  if (useSupabase) {
     try {
+      // 1. Resolve canonical user by ID or Email
+      let userQuery = supabase.from('users').select('*');
+      if (cleanUserId && cleanEmail) {
+        userQuery = userQuery.or(`id.eq.${cleanUserId},email.ilike.${cleanEmail}`);
+      } else if (cleanUserId) {
+        userQuery = userQuery.eq('id', cleanUserId);
+      } else if (cleanEmail) {
+        userQuery = userQuery.eq('email', cleanEmail);
+      }
+
+      const { data: matchedUsers, error: userQueryErr } = await userQuery;
+      if (userQueryErr) console.error('[AxyFx SQL User Query Error]', userQueryErr);
+
+      const resolvedUser = matchedUsers && matchedUsers.length > 0 ? matchedUsers[0] : null;
+      const effectiveUserId = resolvedUser ? resolvedUser.id : (cleanUserId || `user_${Date.now()}`);
+
+      // 2. Fetch all child data using effectiveUserId
       const [
-        { data: users },
         { data: accounts },
         { data: trades },
         { data: riskSettings },
         { data: supportTickets },
         { data: mt5Connections }
       ] = await Promise.all([
-        supabase.from('users').select('*').eq('id', cleanUserId),
-        supabase.from('trading_accounts').select('*').eq('user_id', cleanUserId),
-        supabase.from('trades').select('*').eq('user_id', cleanUserId),
-        supabase.from('risk_settings').select('*').eq('user_id', cleanUserId),
-        supabase.from('support_tickets').select('*').eq('user_id', cleanUserId),
-        supabase.from('mt5_connections').select('*').eq('user_id', cleanUserId)
+        supabase.from('trading_accounts').select('*').eq('user_id', effectiveUserId),
+        supabase.from('trades').select('*').eq('user_id', effectiveUserId),
+        supabase.from('risk_settings').select('*').eq('user_id', effectiveUserId),
+        supabase.from('support_tickets').select('*').eq('user_id', effectiveUserId),
+        supabase.from('mt5_connections').select('*').eq('user_id', effectiveUserId)
       ]);
 
       const loadedDb = {
-        users: toCamel(users || []),
+        users: resolvedUser ? toCamel([resolvedUser]) : [],
         accounts: toCamel(accounts || []),
         trades: toCamel(trades || []),
         riskSettings: toCamel(riskSettings || []),
@@ -573,7 +588,7 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
 
       if (loadedDb.users.length === 0) {
         loadedDb.users.push({
-          id: cleanUserId,
+          id: effectiveUserId,
           email: cleanEmail,
           name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
           experience: 'Intermediate',
