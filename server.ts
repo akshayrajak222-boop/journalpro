@@ -589,6 +589,20 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
         payments: []
       };
 
+      // Check in-memory userDatabases cache if Supabase returned 0 accounts/trades
+      const cached = userDatabases.get(cleanUserId) || (cleanEmail ? userDatabases.get(cleanEmail) : null);
+      if (cached) {
+        if (loadedDb.accounts.length === 0 && cached.accounts?.length > 0) {
+          loadedDb.accounts = cached.accounts.filter((a: any) => a.userId === cleanUserId || !a.userId);
+        }
+        if (loadedDb.trades.length === 0 && cached.trades?.length > 0) {
+          loadedDb.trades = cached.trades.filter((t: any) => t.userId === cleanUserId || !t.userId);
+        }
+        if (loadedDb.riskSettings.length === 0 && cached.riskSettings?.length > 0) {
+          loadedDb.riskSettings = cached.riskSettings;
+        }
+      }
+
       if (loadedDb.users.length === 0) {
         loadedDb.users.push({
           id: cleanUserId,
@@ -607,6 +621,10 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
       console.error('[AxyFx SQL Query Error]', err);
     }
   }
+
+  const cached = userDatabases.get(cleanUserId) || (cleanEmail ? userDatabases.get(cleanEmail) : null);
+  if (cached) return cached;
+
   return createEmptyUserDb(cleanUserId, cleanEmail);
 }
 
@@ -668,42 +686,81 @@ async function saveDatabase(
   overrideEmail?: string,
   previousAliases?: { userId?: string; email?: string }
 ) {
-  if (!data || !useSupabase) return;
+  if (!data) return;
   const usersToSync = Array.isArray(data.users) ? data.users : [];
-  if(usersToSync.length === 0) return;
+  if (usersToSync.length === 0) return;
 
   const targetUser = usersToSync[0];
   const uid = targetUser.id;
-  if(!uid) return;
+  const email = targetUser.email;
+  if (!uid) return;
+
+  if (uid) userDatabases.set(uid, data);
+  if (email) userDatabases.set(email.toLowerCase(), data);
+  if (overrideUserId) userDatabases.set(overrideUserId, data);
+  if (overrideEmail) userDatabases.set(overrideEmail.toLowerCase(), data);
+
+  if (!useSupabase) return;
 
   try {
     // Upsert users
     if (data.users && data.users.length > 0) {
-      await supabase.from('users').upsert(toSnake(data.users), { onConflict: 'id' });
+      const validUserCols = new Set([
+        'id', 'email', 'name', 'password', 'experience', 'trading_style',
+        'main_markets', 'is_pro', 'is_email_verified', 'created_at', 'updated_at'
+      ]);
+      const sanitizedUsers = toSnake(data.users).map((u: any) => {
+        const clean: any = {};
+        for (const key of Object.keys(u)) {
+          if (validUserCols.has(key)) {
+            clean[key] = u[key];
+          }
+        }
+        return clean;
+      });
+      const { error: err1 } = await supabase.from('users').upsert(sanitizedUsers, { onConflict: 'id' });
+      if (err1) console.error('[saveDatabase] users upsert error:', err1);
     }
     // Upsert accounts
     if (data.accounts && data.accounts.length > 0) {
-      const accs = toSnake(data.accounts).map((a: any) => ({ ...a, user_id: uid }));
-      await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
+      const validAccCols = new Set([
+        'id', 'user_id', 'name', 'broker', 'platform', 'account_type',
+        'currency', 'starting_balance', 'current_balance', 'equity', 'status',
+        'created_at', 'updated_at'
+      ]);
+      const accs = toSnake(data.accounts).map((a: any) => {
+        const clean: any = {};
+        for (const key of Object.keys(a)) {
+          if (validAccCols.has(key)) {
+            clean[key] = a[key];
+          }
+        }
+        clean.user_id = clean.user_id || uid;
+        return clean;
+      });
+      const { error: err2 } = await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
+      if (err2) console.error('[saveDatabase] trading_accounts upsert error:', err2);
     }
     // Upsert trades
     if (data.trades && data.trades.length > 0) {
-      const trds = toSnake(data.trades).map((t: any) => ({ ...t, user_id: uid }));
-      await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+      const trds = toSnake(data.trades).map((t: any) => ({ ...t, user_id: t.user_id || uid }));
+      const { error: err3 } = await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+      if (err3) console.error('[saveDatabase] trades upsert error:', err3);
     }
     // Upsert risk settings
     if (data.riskSettings && data.riskSettings.length > 0) {
-      const rs = toSnake(data.riskSettings).map((r: any) => ({ ...r, user_id: uid }));
-      await supabase.from('risk_settings').upsert(rs, { onConflict: 'id' });
+      const rs = toSnake(data.riskSettings).map((r: any) => ({ ...r, user_id: r.user_id || uid }));
+      const { error: err4 } = await supabase.from('risk_settings').upsert(rs, { onConflict: 'id' });
+      if (err4) console.error('[saveDatabase] risk_settings upsert error:', err4);
     }
     // Upsert support tickets
     if (data.supportTickets && data.supportTickets.length > 0) {
-      const tix = toSnake(data.supportTickets).map((t: any) => ({ ...t, user_id: uid }));
+      const tix = toSnake(data.supportTickets).map((t: any) => ({ ...t, user_id: t.user_id || uid }));
       await supabase.from('support_tickets').upsert(tix, { onConflict: 'id' });
     }
     // Upsert mt5 connections
     if (data.mt5Connections && data.mt5Connections.length > 0) {
-      const mt5 = toSnake(data.mt5Connections).map((m: any) => ({ ...m, user_id: uid }));
+      const mt5 = toSnake(data.mt5Connections).map((m: any) => ({ ...m, user_id: m.user_id || uid }));
       await supabase.from('mt5_connections').upsert(mt5, { onConflict: 'id' });
     }
   } catch(err) {
@@ -1120,6 +1177,26 @@ const PORT = 3000;
         };
         db.accounts.push(newAcc);
 
+        if (useSupabase) {
+          try {
+            await supabase.from('trading_accounts').upsert({
+              id: newAcc.id,
+              user_id: currentUser.id,
+              name: newAcc.name,
+              broker: newAcc.broker,
+              platform: newAcc.platform,
+              account_type: newAcc.accountType,
+              currency: newAcc.currency,
+              starting_balance: newAcc.startingBalance,
+              current_balance: newAcc.currentBalance,
+              equity: newAcc.equity,
+              status: newAcc.status
+            }, { onConflict: 'id' });
+          } catch (e) {
+            console.error('[Onboarding] Supabase account insert error:', e);
+          }
+        }
+
         // Add a starter Risk Setting
         const newRisk: RiskSettings = {
           id: `r_${Date.now()}`,
@@ -1186,7 +1263,9 @@ const PORT = 3000;
         } else {
           const accounts = toCamel(rows || []);
           console.log(`[GET /api/accounts] User: ${currentUser.id}, accounts from Supabase: ${accounts.length}`);
-          return res.json({ accounts });
+          if (accounts.length > 0) {
+            return res.json({ accounts });
+          }
         }
       } catch (err: any) {
         console.error('[GET /api/accounts] Exception:', err?.message);
@@ -1196,8 +1275,8 @@ const PORT = 3000;
     // Fallback: use middleware db
     const db = (req as any).userDb;
     if (!db) return res.json({ accounts: [] });
-    const userAccounts = (db.accounts || []).filter((acc: any) => acc.userId === currentUser.id);
-    console.log(`[GET /api/accounts] User: ${currentUser.id} (${currentUser.email}), filtered: ${userAccounts.length}`);
+    const userAccounts = (db.accounts || []).filter((acc: any) => acc.userId === currentUser.id || acc.user_id === currentUser.id);
+    console.log(`[GET /api/accounts] User: ${currentUser.id} (${currentUser.email}), db.accounts count: ${(db.accounts || []).length}, filtered: ${userAccounts.length}`);
     res.json({ accounts: userAccounts });
   });
 
@@ -1352,14 +1431,17 @@ const PORT = 3000;
       } catch (err: any) {
         console.error('[GET /api/trades] Exception:', err?.message);
       }
-    } else {
+    }
+
+    if (accountTrades.length === 0) {
       // Fallback: use middleware-loaded db
       const db = (req as any).userDb;
-      if (!db) return res.json({ trades: [] });
-      accountTrades = accountId
-        ? (db.trades || []).filter((t: any) => t.accountId === accountId)
-        : db.trades || [];
-      accountTrades.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (db) {
+        accountTrades = accountId
+          ? (db.trades || []).filter((t: any) => t.accountId === accountId && (t.userId === currentUser.id || !t.userId))
+          : (db.trades || []).filter((t: any) => t.userId === currentUser.id);
+        accountTrades.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
     }
 
     res.json({ trades: accountTrades });
@@ -1616,24 +1698,27 @@ const PORT = 3000;
 
     const idx = db.riskSettings.findIndex((r: any) => r.accountId === accountId);
     if (idx !== -1) {
-      db.riskSettings[idx].riskPerTradeLimit = parseFloat(riskPerTradeLimit);
-      db.riskSettings[idx].dailyLossLimit = parseFloat(dailyLossLimit);
-      db.riskSettings[idx].weeklyLossLimit = parseFloat(weeklyLossLimit);
-      db.riskSettings[idx].maxDrawdownLimit = parseFloat(maxDrawdownLimit);
-      db.riskSettings[idx].disciplineEnabled = !!disciplineEnabled;
-      db.riskSettings[idx].maxTradesPerDay = parseInt(maxTradesPerDay) || 5;
+      const existing = db.riskSettings[idx];
+      existing.riskPerTradeLimit = !isNaN(parseFloat(riskPerTradeLimit)) ? parseFloat(riskPerTradeLimit) : (existing.riskPerTradeLimit ?? 2.0);
+      existing.dailyLossLimit = !isNaN(parseFloat(dailyLossLimit)) ? parseFloat(dailyLossLimit) : (existing.dailyLossLimit ?? 500);
+      existing.weeklyLossLimit = !isNaN(parseFloat(weeklyLossLimit)) ? parseFloat(weeklyLossLimit) : (existing.weeklyLossLimit ?? 1500);
+      existing.maxDrawdownLimit = !isNaN(parseFloat(maxDrawdownLimit)) ? parseFloat(maxDrawdownLimit) : (existing.maxDrawdownLimit ?? 10.0);
+      if (disciplineEnabled !== undefined) {
+        existing.disciplineEnabled = !!disciplineEnabled;
+      }
+      existing.maxTradesPerDay = !isNaN(parseInt(maxTradesPerDay)) ? parseInt(maxTradesPerDay) : (existing.maxTradesPerDay ?? 5);
       await saveDatabase(db, authEmail);
-      res.json({ message: 'Risk parameters saved', riskSettings: db.riskSettings[idx] });
+      res.json({ message: 'Risk parameters saved', riskSettings: existing });
     } else {
       const newRisk: RiskSettings = {
         id: `r_${Date.now()}`,
         accountId,
-        riskPerTradeLimit: parseFloat(riskPerTradeLimit || 2.0),
-        dailyLossLimit: parseFloat(dailyLossLimit || 500),
-        weeklyLossLimit: parseFloat(weeklyLossLimit || 1500),
-        maxDrawdownLimit: parseFloat(maxDrawdownLimit || 10.0),
+        riskPerTradeLimit: !isNaN(parseFloat(riskPerTradeLimit)) ? parseFloat(riskPerTradeLimit) : 2.0,
+        dailyLossLimit: !isNaN(parseFloat(dailyLossLimit)) ? parseFloat(dailyLossLimit) : 500,
+        weeklyLossLimit: !isNaN(parseFloat(weeklyLossLimit)) ? parseFloat(weeklyLossLimit) : 1500,
+        maxDrawdownLimit: !isNaN(parseFloat(maxDrawdownLimit)) ? parseFloat(maxDrawdownLimit) : 10.0,
         disciplineEnabled: disciplineEnabled !== undefined ? !!disciplineEnabled : true,
-        maxTradesPerDay: parseInt(maxTradesPerDay || 5)
+        maxTradesPerDay: !isNaN(parseInt(maxTradesPerDay)) ? parseInt(maxTradesPerDay) : 5
       };
       db.riskSettings.push(newRisk);
       await saveDatabase(db, authEmail);
