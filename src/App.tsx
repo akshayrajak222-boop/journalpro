@@ -493,17 +493,20 @@ export default function App() {
             password: authPassword
           });
 
-          if (!supabaseError && supabaseData?.session?.user) {
+          if (supabaseError || !supabaseData?.session?.user) {
+            setAuthError(supabaseError?.message || 'Invalid email or password.');
+          } else {
             await syncSupabaseUser(supabaseData.session.user);
-            return;
           }
+          return;
         } catch (sErr) {
-          console.warn('[AxyFx] Supabase login warning, falling back to backend:', sErr);
+          console.error('[AxyFx] Supabase login error:', sErr);
+          setAuthError('Unable to sign in. Please try again.');
+          return;
         }
       }
 
       // Login/Sync with Express backend
-      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '', authEmail);
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 

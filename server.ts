@@ -791,21 +791,7 @@ const PORT = 3000;
           (email && u.email?.toLowerCase() === email)
         );
 
-        if (!dbUser) {
-          dbUser = {
-            id: userId || `user_${Date.now()}`,
-            email: email,
-            name: email ? email.split('@')[0] : 'Trader',
-            experience: 'Intermediate',
-            tradingStyle: 'Day Trading',
-            mainMarkets: ['Forex', 'Gold'],
-            onboardingCompleted: false,
-            isPro: false,
-            isEmailVerified: true
-          };
-          db.users.push(dbUser);
-          await saveDatabase(db, userId, email);
-        } else if (userId && dbUser.id !== userId) {
+        if (dbUser && userId && dbUser.id !== userId) {
           const previousUserId = dbUser.id;
           const previousEmail = dbUser.email;
           dbUser.id = userId;
@@ -913,40 +899,23 @@ const PORT = 3000;
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', authRateLimiter, async (req, res) => {
     try {
-      const { email, password, id, userId } = req.body;
-      if (!email) {
-        return res.status(400).json({ error: 'Email is required' });
+      const { email, password } = req.body;
+      if (!email || typeof password !== 'string' || password.length === 0) {
+        return res.status(400).json({ error: 'Email and password are required' });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      const authUserId = (req.headers['x-auth-user-id'] as string) || id || userId || '';
-      let db = await ensureUserDbLoaded(authUserId, normalizedEmail);
-      let user = db.users.find((u: any) => 
-        (authUserId && u.id === authUserId) || 
-        u.email.toLowerCase() === normalizedEmail
-      );
-      const previousUserId = user?.id;
-      const previousEmail = user?.email;
+      let db = await ensureUserDbLoaded('', normalizedEmail);
+      let user = db.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
 
       if (!user) {
-        return res.status(404).json({ error: 'No account found with this email. Please register first.' });
+        return res.status(401).json({ error: 'Invalid email or password.' });
       }
 
-      if (user.password && password) {
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-          return res.status(401).json({ error: 'Invalid password. Please check your credentials and try again.' });
-        }
-      } else if (password && !user.password) {
-        user.password = await bcrypt.hash(password, 10);
-        await saveDatabase(db, user.id, normalizedEmail);
-      }
-
-      if (authUserId && user.id !== authUserId) {
-        user.id = authUserId;
-        await saveDatabase(db, user.id, normalizedEmail, { userId: previousUserId, email: previousEmail });
+      if (!user.password || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid email or password.' });
       }
 
       res.json({ message: 'Login successful', user });
