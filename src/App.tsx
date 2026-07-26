@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  BarChart3, BookOpen, Calendar, Shield, HelpCircle, User, 
+  BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
@@ -28,6 +28,7 @@ import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
+import { TraderRankCard } from './components/TraderRankCard';
 
 export default function App() {
   const persistAuthSession = (userId: string, email?: string) => {
@@ -840,7 +841,13 @@ export default function App() {
   // Account Operations
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAccName || !newAccBroker || !newAccBalance) return;
+    const storedId = sessionStorage.getItem('auth_user_id') || user?.id || '';
+    const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
+    console.log('[handleCreateAccount] auth check — id:', storedId, 'email:', storedEmail);
+    if (!newAccName || !newAccBroker || !newAccBalance) {
+      alert('Please fill in Account Name, Broker, and Starting Balance.');
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await authFetch('/api/accounts', {
@@ -855,7 +862,9 @@ export default function App() {
           startingBalance: newAccBalance
         })
       });
+      console.log('[handleCreateAccount] response status:', res.status);
       const data = await res.json();
+      console.log('[handleCreateAccount] response data:', data);
       if (res.ok) {
         setShowAccountModal(false);
         setNewAccName('');
@@ -867,11 +876,14 @@ export default function App() {
         } else {
           await fetchAccountData();
         }
-      } else if (data.error) {
-        alert(data.error);
+      } else {
+        const errMsg = data.error || `Server error (${res.status})`;
+        console.error('[handleCreateAccount] error:', errMsg);
+        alert(errMsg);
       }
-    } catch (err) {
-      alert('Error creating account');
+    } catch (err: any) {
+      console.error('[handleCreateAccount] exception:', err);
+      alert('Error creating account: ' + (err?.message || err));
     } finally {
       setActionLoading(false);
     }
@@ -1362,22 +1374,88 @@ export default function App() {
   // Update Risk Rules
   const handleSaveRiskSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!riskSettings || !selectedAccountId) return;
+    const accId = selectedAccountId || activeAccount?.id || (accounts.length > 0 ? accounts[0].id : '');
+    if (!accId) return;
+    const currentRisk = riskSettings || {
+      id: `r_${Date.now()}`,
+      accountId: accId,
+      riskPerTradeLimit: 2.0,
+      dailyLossLimit: 500,
+      weeklyLossLimit: 1500,
+      maxDrawdownLimit: 10.0,
+      disciplineEnabled: true,
+      maxTradesPerDay: 5
+    };
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/risk-settings/${selectedAccountId}`, {
+      const res = await authFetch(`/api/risk-settings/${accId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(riskSettings)
+        body: JSON.stringify(currentRisk)
       });
       if (res.ok) {
+        const data = await res.json();
+        if (data.riskSettings) {
+          setRiskSettings(data.riskSettings);
+        }
         alert('Risk parameters saved successfully. Drawdown scanners are active.');
+      } else {
+        alert('Error saving risk settings');
       }
     } catch (err) {
       alert('Error saving risk settings');
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const isPortfolioGuardOn = riskSettings ? (riskSettings.disciplineEnabled ?? true) : true;
+
+  const handleTogglePortfolioGuard = async (newState: boolean) => {
+    const accId = selectedAccountId || activeAccount?.id || (accounts.length > 0 ? accounts[0].id : '');
+    if (!accId) return;
+    const currentRisk: RiskSettings = riskSettings || {
+      id: `r_${Date.now()}`,
+      accountId: accId,
+      riskPerTradeLimit: 2.0,
+      dailyLossLimit: 500,
+      weeklyLossLimit: 1500,
+      maxDrawdownLimit: 10.0,
+      disciplineEnabled: true,
+      maxTradesPerDay: 5
+    };
+    const updated = { ...currentRisk, accountId: accId, disciplineEnabled: newState };
+    setRiskSettings(updated);
+    try {
+      const res = await authFetch(`/api/risk-settings/${accId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.riskSettings) {
+          setRiskSettings(data.riskSettings);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle portfolio guard', err);
+    }
+  };
+
+  const updateRiskSettingField = (field: keyof RiskSettings, value: any) => {
+    const accId = selectedAccountId || activeAccount?.id || (accounts.length > 0 ? accounts[0].id : '');
+    const currentRisk: RiskSettings = riskSettings || {
+      id: `r_${Date.now()}`,
+      accountId: accId,
+      riskPerTradeLimit: 2.0,
+      dailyLossLimit: 500,
+      weeklyLossLimit: 1500,
+      maxDrawdownLimit: 10.0,
+      disciplineEnabled: true,
+      maxTradesPerDay: 5
+    };
+    setRiskSettings({ ...currentRisk, accountId: accId, [field]: value });
   };
 
   // Add tag helper
@@ -2062,7 +2140,10 @@ export default function App() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
                   <button
-                    onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+                    onClick={() => { 
+                      setShowAccountModal(true); 
+                      setAccountCreationMethod('select'); 
+                    }}
                     title="Connect New Portfolio Account"
                     className="text-slate-400 hover:text-slate-900 hover:bg-slate-200/50 p-1 rounded transition duration-150"
                   >
@@ -2286,7 +2367,7 @@ export default function App() {
               <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 font-display">
                 {activeTab === 'dashboard' ? 'Dashboard' :
                  activeTab === 'journal' ? 'Trading Journal' :
-                 activeTab === 'accounts' ? 'Portfolio Accounts' :
+                 activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'settings' ? 'Settings' : 'Admin Panel'}
@@ -2314,9 +2395,12 @@ export default function App() {
                 <Moon className="h-4 w-4 text-indigo-600" />
               )}
             </button>
-            <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded inline-flex items-center gap-1">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Risk Guard Active
-            </span>
+            {isPortfolioGuardOn && (
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-2xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Risk Guard Active</span>
+              </span>
+            )}
             <button
               onClick={() => handleOpenTradeModal()}
               disabled={accounts.length === 0}
@@ -2346,52 +2430,15 @@ export default function App() {
         {/* 1. DASHBOARD VIEW */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
-            {/* Quick Metrics Cards */}
-            <section className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Balance</span>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xl md:text-2xl font-extrabold text-slate-900 font-display">
-                    {activeAccount ? formatValue(activeAccount.currentBalance) : '$0.00'}
-                  </span>
-                  <span className={`text-[11px] font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {netProfit >= 0 ? '▲' : '▼'} {startingBal > 0 ? ((netProfit / startingBal) * 100).toFixed(1) : '0.0'}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Net Profit</span>
-                <div className="flex items-baseline justify-between">
-                  <span className={`text-xl md:text-2xl font-extrabold font-display ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {netProfit >= 0 ? '+' : ''}{formatValue(netProfit)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block font-semibold">cumulative</span>
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Win Rate</span>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xl md:text-2xl font-extrabold text-slate-900 font-display">
-                    {winRate.toFixed(1)}%
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-semibold block">
-                    {wins.length} wins / {totalTradesCount}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Trades</span>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xl md:text-2xl font-extrabold text-slate-900 font-display">
-                    {totalTradesCount}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block font-semibold">positions</span>
-                </div>
-              </div>
-            </section>
+            {/* Dynamic Trader Rank & Drawdown Protection System */}
+            <TraderRankCard 
+              account={activeAccount || null} 
+              formatValue={formatValue} 
+              netProfit={netProfit}
+              winRate={winRate}
+              winsCount={wins.length}
+              totalTradesCount={totalTradesCount}
+            />
 
             {/* Main Visualizations Grid */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2437,83 +2484,109 @@ export default function App() {
               {/* Quick Risk Auditor status inside Dashboard */}
               <div className="lg:col-span-1 bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between">
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">Portfolio Guard Rules</h3>
-                    <p className="text-[10px] text-slate-400">Drawdown status and protection systems</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">Portfolio Guard Rules</h3>
+                      <p className="text-[10px] text-slate-400">Drawdown status and protection systems</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePortfolioGuard(!isPortfolioGuardOn)}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full border uppercase tracking-wider cursor-pointer transition hover:opacity-80 ${
+                        isPortfolioGuardOn 
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                          : 'text-slate-600 bg-slate-100 border-slate-200 hover:bg-slate-200'
+                      }`}
+                      title={isPortfolioGuardOn ? 'Click to turn Portfolio Guard OFF' : 'Click to turn Portfolio Guard ON'}
+                    >
+                      {isPortfolioGuardOn ? 'Active' : 'Disabled'}
+                    </button>
                   </div>
                   
-                  <div className="space-y-3">
-                    {/* Daily Loss Guard */}
-                    {(() => {
-                      const limit = riskSettings?.dailyLossLimit || 500;
-                      const breached = todayLoss >= limit;
-                      return (
-                        <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
-                          breached 
-                            ? 'bg-rose-50/50 border border-rose-100' 
-                            : 'bg-emerald-50/50 border border-emerald-100'
-                        }`}>
-                          <div className={`font-bold flex items-center justify-between ${
-                            breached ? 'text-rose-950' : 'text-emerald-950'
+                  {isPortfolioGuardOn ? (
+                    <div className="space-y-3">
+                      {/* Daily Loss Guard */}
+                      {(() => {
+                        const limit = riskSettings?.dailyLossLimit || 500;
+                        const breached = todayLoss >= limit;
+                        return (
+                          <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
+                            breached 
+                              ? 'bg-rose-50/50 border border-rose-100' 
+                              : 'bg-emerald-50/50 border border-emerald-100'
                           }`}>
-                            <span>Daily Loss Guard</span>
-                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
-                              breached 
-                                ? 'text-rose-600 bg-white border-rose-200' 
-                                : 'text-emerald-600 bg-white border-emerald-200'
+                            <div className={`font-bold flex items-center justify-between ${
+                              breached ? 'text-rose-950' : 'text-emerald-950'
                             }`}>
-                              {breached ? 'Breached' : 'Active'}
-                            </span>
+                              <span>Daily Loss Guard</span>
+                              <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                breached 
+                                  ? 'text-rose-600 bg-white border-rose-200' 
+                                  : 'text-emerald-600 bg-white border-emerald-200'
+                              }`}>
+                                {breached ? 'Breached' : 'Active'}
+                              </span>
+                            </div>
+                            <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
+                              {breached 
+                                ? `Today's cumulative loss is ${formatValue(todayLoss)}, exceeding your limit of ${formatValue(limit)}!`
+                                : `Today's loss is ${formatValue(todayLoss)} (Limit: ${formatValue(limit)}). Safe.`
+                              }
+                            </p>
                           </div>
-                          <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
-                            {breached 
-                              ? `Today's cumulative loss is ${formatValue(todayLoss)}, exceeding your limit of ${formatValue(limit)}!`
-                              : `Today's loss is ${formatValue(todayLoss)} (Limit: ${formatValue(limit)}). Safe.`
-                            }
-                          </p>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
 
-                    {/* Overtrading Scanner */}
-                    {(() => {
-                      const limit = riskSettings?.maxTradesPerDay || 5;
-                      const breached = todayTradesCount >= limit;
-                      return (
-                        <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
-                          breached 
-                            ? 'bg-rose-50/50 border border-rose-100' 
-                            : 'bg-emerald-50/50 border border-emerald-100'
-                        }`}>
-                          <div className={`font-bold flex items-center justify-between ${
-                            breached ? 'text-rose-950' : 'text-emerald-950'
+                      {/* Overtrading Scanner */}
+                      {(() => {
+                        const limit = riskSettings?.maxTradesPerDay || 5;
+                        const breached = todayTradesCount >= limit;
+                        return (
+                          <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
+                            breached 
+                              ? 'bg-rose-50/50 border border-rose-100' 
+                              : 'bg-emerald-50/50 border border-emerald-100'
                           }`}>
-                            <span>Overtrading Scanner</span>
-                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
-                              breached 
-                                ? 'text-rose-600 bg-white border-rose-200' 
-                                : 'text-emerald-600 bg-white border-emerald-200'
+                            <div className={`font-bold flex items-center justify-between ${
+                              breached ? 'text-rose-950' : 'text-emerald-950'
                             }`}>
-                              {breached ? 'Breached' : 'Active'}
-                            </span>
+                              <span>Overtrading Scanner</span>
+                              <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                breached 
+                                  ? 'text-rose-600 bg-white border-rose-200' 
+                                  : 'text-emerald-600 bg-white border-emerald-200'
+                              }`}>
+                                {breached ? 'Breached' : 'Active'}
+                              </span>
+                            </div>
+                            <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
+                              {breached 
+                                ? `Executed ${todayTradesCount} trades today, breaching your limit of ${limit}!`
+                                : `Executed ${todayTradesCount} of ${limit} maximum daily positions. Safe.`
+                              }
+                            </p>
                           </div>
-                          <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
-                            {breached 
-                              ? `Executed ${todayTradesCount} trades today, breaching your limit of ${limit}!`
-                              : `Executed ${todayTradesCount} of ${limit} maximum daily positions. Safe.`
-                            }
-                          </p>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
 
-                    {riskSettings && (
-                      <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg text-xs">
-                        <div className="font-bold text-blue-950">Risk-Per-Trade Cap</div>
-                        <p className="text-blue-700/80 mt-0.5">Maximum limit set to {riskSettings.riskPerTradeLimit}% per position.</p>
+                      {riskSettings && (
+                        <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg text-xs">
+                          <div className="font-bold text-blue-950">Risk-Per-Trade Cap</div>
+                          <p className="text-blue-700/80 mt-0.5">Maximum limit set to {riskSettings.riskPerTradeLimit}% per position.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl text-center space-y-2 my-2">
+                      <div className="inline-flex p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 mb-1">
+                        <ShieldOff className="h-5 w-5 text-slate-400" />
                       </div>
-                    )}
-                  </div>
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Portfolio Guard Rules Disabled</h4>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-xs mx-auto">
+                        Portfolio guard rules and risk limits are currently disabled. Toggle ON to enable active drawdown protection and discipline limits.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <button onClick={() => { setActiveTab('settings'); setSettingsTab('risk'); }} className="w-full text-center py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg transition mt-4">
@@ -2814,7 +2887,10 @@ export default function App() {
 
               {/* Dotted Create Card */}
               <button
-                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+                onClick={() => { 
+                  setShowAccountModal(true); 
+                  setAccountCreationMethod('select'); 
+                }}
                 className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition h-56 text-xs font-bold bg-white"
               >
                 <Plus className="h-6 w-6 text-slate-400" />
@@ -3732,12 +3808,38 @@ export default function App() {
               {/* Configure Guard Limits Sub-tab */}
               {settingsTab === 'risk' && (
                 <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs space-y-6">
-                  <div>
-                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                      <Shield className="h-5 w-5 text-indigo-500" />
-                      Configure Portfolio Guard Limits
-                    </h3>
-                    <p className="text-xs text-slate-400">Establish drawdown, loss, and overtrading limits to protect your capital and maintain strict discipline.</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-indigo-500" />
+                        Configure Portfolio Guard Limits
+                      </h3>
+                      <p className="text-xs text-slate-400">Establish drawdown, loss, and overtrading limits to protect your capital and maintain strict discipline.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePortfolioGuard(!isPortfolioGuardOn)}
+                      className="flex items-center gap-2 cursor-pointer group hover:opacity-90 transition p-1 rounded-lg"
+                      title={isPortfolioGuardOn ? 'Turn Portfolio Guard OFF' : 'Turn Portfolio Guard ON'}
+                    >
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${isPortfolioGuardOn ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {isPortfolioGuardOn ? 'ON' : 'OFF'}
+                      </span>
+                      <div
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                          isPortfolioGuardOn ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                        }`}
+                        role="switch"
+                        aria-checked={isPortfolioGuardOn}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                            isPortfolioGuardOn ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                    </button>
                   </div>
 
                   {accounts.length > 0 && (
@@ -3777,7 +3879,7 @@ export default function App() {
                           type="number"
                           required
                           value={riskSettings?.dailyLossLimit ?? 500}
-                          onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, dailyLossLimit: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateRiskSettingField('dailyLossLimit', parseFloat(e.target.value) || 0)}
                           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
@@ -3792,7 +3894,7 @@ export default function App() {
                           type="number"
                           required
                           value={riskSettings?.maxTradesPerDay ?? 5}
-                          onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, maxTradesPerDay: parseInt(e.target.value) || 0 })}
+                          onChange={(e) => updateRiskSettingField('maxTradesPerDay', parseInt(e.target.value) || 0)}
                           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
@@ -3807,7 +3909,7 @@ export default function App() {
                           type="number"
                           required
                           value={riskSettings?.weeklyLossLimit ?? 1500}
-                          onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, weeklyLossLimit: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateRiskSettingField('weeklyLossLimit', parseFloat(e.target.value) || 0)}
                           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
@@ -3823,7 +3925,7 @@ export default function App() {
                           step="0.1"
                           required
                           value={riskSettings?.maxDrawdownLimit ?? 10.0}
-                          onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, maxDrawdownLimit: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateRiskSettingField('maxDrawdownLimit', parseFloat(e.target.value) || 0)}
                           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
@@ -3839,7 +3941,7 @@ export default function App() {
                           step="0.1"
                           required
                           value={riskSettings?.riskPerTradeLimit ?? 2.0}
-                          onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, riskPerTradeLimit: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateRiskSettingField('riskPerTradeLimit', parseFloat(e.target.value) || 0)}
                           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 mt-2 text-slate-800 dark:text-slate-100 shadow-xs"
                         />
                       </div>
@@ -3856,8 +3958,8 @@ export default function App() {
                           <input
                             type="checkbox"
                             id="disciplineEnabled"
-                            checked={riskSettings?.disciplineEnabled ?? true}
-                            onChange={(e) => riskSettings && setRiskSettings({ ...riskSettings, disciplineEnabled: e.target.checked })}
+                            checked={isPortfolioGuardOn}
+                            onChange={(e) => handleTogglePortfolioGuard(e.target.checked)}
                             className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
                           <label htmlFor="disciplineEnabled" className="font-bold text-slate-800 dark:text-slate-200 cursor-pointer select-none">
@@ -4076,7 +4178,7 @@ export default function App() {
 
       {/* A. Account Creation Modal */}
       {showAccountModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
           <div className="bg-white rounded-xl shadow-2xl border border-slate-100 max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setShowAccountModal(false)}

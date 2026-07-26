@@ -7,6 +7,15 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+html:not(.dark) #trader-rank-card {
+  background-color: #ffffff !important;
+}
+
+html:not(.dark) #trader-rank-card .trader-rank-card-overlay {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
 /* Custom scrollbars for a cleaner SaaS interface */
 ::-webkit-scrollbar {
   width: 6px;
