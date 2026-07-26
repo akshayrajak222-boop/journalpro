@@ -28,6 +28,7 @@ import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
+import { TraderRankCard } from './components/TraderRankCard';
 
 export default function App() {
   const persistAuthSession = (userId: string, email?: string) => {
@@ -2429,52 +2430,15 @@ export default function App() {
         {/* 1. DASHBOARD VIEW */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
-            {/* Quick Metrics Cards */}
-            <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-              <div className="bg-white border border-slate-100 rounded-xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1 min-w-0 overflow-hidden">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block truncate">Total Balance</span>
-                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2 min-w-0">
-                  <span className="text-lg sm:text-xl md:text-2xl font-extrabold text-slate-900 font-display truncate">
-                    {activeAccount ? formatValue(activeAccount.currentBalance) : '$0.00'}
-                  </span>
-                  <span className={`text-[10px] sm:text-[11px] font-bold shrink-0 truncate ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {netProfit >= 0 ? '▲' : '▼'} {startingBal > 0 ? ((netProfit / startingBal) * 100).toFixed(1) : '0.0'}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-100 rounded-xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1 min-w-0 overflow-hidden">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block truncate">Net Profit</span>
-                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2 min-w-0">
-                  <span className={`text-lg sm:text-xl md:text-2xl font-extrabold font-display truncate ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {netProfit >= 0 ? '+' : ''}{formatValue(netProfit)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block font-semibold shrink-0 truncate">cumulative</span>
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-100 rounded-xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1 min-w-0 overflow-hidden">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block truncate">Win Rate</span>
-                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2 min-w-0">
-                  <span className="text-lg sm:text-xl md:text-2xl font-extrabold text-slate-900 font-display truncate">
-                    {winRate.toFixed(1)}%
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-semibold block shrink-0 truncate">
-                    {wins.length} wins / {totalTradesCount}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-100 rounded-xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition duration-200 space-y-1 min-w-0 overflow-hidden">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block truncate">Total Trades</span>
-                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2 min-w-0">
-                  <span className="text-lg sm:text-xl md:text-2xl font-extrabold text-slate-900 font-display truncate">
-                    {totalTradesCount}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block font-semibold shrink-0 truncate">positions</span>
-                </div>
-              </div>
-            </section>
+            {/* Dynamic Trader Rank & Drawdown Protection System */}
+            <TraderRankCard 
+              account={activeAccount || null} 
+              formatValue={formatValue} 
+              netProfit={netProfit}
+              winRate={winRate}
+              winsCount={wins.length}
+              totalTradesCount={totalTradesCount}
+            />
 
             {/* Main Visualizations Grid */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
