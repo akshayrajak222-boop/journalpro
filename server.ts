@@ -1000,7 +1000,9 @@ const PORT = 3000;
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      let db = await ensureUserDbLoaded(normalizedEmail);
+
+      // Check in-memory cache first — new unverified users are cached but not yet in Supabase
+      let db = userDatabases.get(normalizedEmail) || await ensureUserDbLoaded(normalizedEmail);
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
 
       if (!user) {
@@ -1017,7 +1019,7 @@ const PORT = 3000;
         delete user.emailOtp;
         delete user.otpExpiresAt;
 
-        await saveDatabase(db, normalizedEmail);
+        await saveDatabase(db, user.id, normalizedEmail);
         return res.json({ message: 'Email verified successfully.', user });
       } else {
         return res.status(400).json({ error: 'Invalid 6-digit verification code.' });
@@ -1036,7 +1038,8 @@ const PORT = 3000;
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      let db = await ensureUserDbLoaded(normalizedEmail);
+      // Check in-memory cache first — new unverified users are cached but not yet in Supabase
+      let db = userDatabases.get(normalizedEmail) || await ensureUserDbLoaded(normalizedEmail);
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
 
       if (!user) {
