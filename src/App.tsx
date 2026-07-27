@@ -4424,7 +4424,16 @@ export default function App() {
                   type="datetime-local"
                   value={tradeDate}
                   onChange={(e) => setTradeDate(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500"
+                  onClick={(e) => {
+                    try {
+                      if ('showPicker' in e.target) {
+                        (e.target as HTMLInputElement).showPicker();
+                      }
+                    } catch (err) {
+                      // ignore cross-origin or unsupported errors
+                    }
+                  }}
+                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 cursor-pointer"
                 />
               </div>
 
