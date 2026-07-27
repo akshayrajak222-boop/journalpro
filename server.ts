@@ -709,7 +709,9 @@ async function saveDatabase(
     if (data.users && data.users.length > 0) {
       const validUserCols = new Set([
         'id', 'email', 'name', 'password', 'experience', 'trading_style',
-        'main_markets', 'is_pro', 'is_email_verified', 'created_at', 'updated_at'
+        'main_markets', 'is_pro', 'is_email_verified', 'created_at', 'updated_at',
+        'email_otp', 'otp_expires_at', 'otp_attempts', 'otp_sent_at',
+        'reset_otp', 'reset_otp_expires_at'
       ]);
       const sanitizedUsers = toSnake(data.users).map((u: any) => {
         const clean: any = {};
@@ -886,65 +888,90 @@ const PORT = 3000;
 
       const normalizedEmail = email.toLowerCase().trim();
       const authUserId = (req.headers['x-auth-user-id'] as string) || id || userId || '';
-      let db = await ensureUserDbLoaded(authUserId, normalizedEmail);
 
-      let user = db.users.find((u: any) => 
-        (authUserId && u.id === authUserId) || 
-        u.email.toLowerCase() === normalizedEmail
-      );
-      const previousUserId = user?.id;
-      const previousEmail = user?.email;
-      
-      if (user && user.isEmailVerified && !isEmailVerified) {
+      // Check Supabase first for existing user
+      let existingUserRow: any = null;
+      if (useSupabase) {
+        const { data } = await supabase.from('users').select('*').eq('email', normalizedEmail).maybeSingle();
+        existingUserRow = data;
+      }
+
+      if (existingUserRow && existingUserRow.is_email_verified && !isEmailVerified) {
         return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
       }
-      
-      const otp = generateOtp();
-      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
-      if (!user) {
-        user = {
-          id: authUserId || `user_${Date.now()}`,
+      const otp = generateOtp();
+      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      if (isEmailVerified === true) {
+        // Supabase SSO path — user already verified externally
+        const uid = existingUserRow?.id || authUserId || `user_${Date.now()}`;
+        const userRecord = {
+          id: uid,
           email: normalizedEmail,
           name: name || normalizedEmail.split('@')[0],
-          password: password ? await bcrypt.hash(password, 10) : '',
+          password: password ? await bcrypt.hash(password, 10) : (existingUserRow?.password || ''),
           experience: 'Intermediate',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold'],
-          onboardingCompleted: false,
-          isPro: false,
-          isEmailVerified: isEmailVerified === true ? true : false,
-          emailOtp: otp,
-          otpExpiresAt: otpExpiresAt,
-          otpAttempts: 0,
-          otpSentAt: new Date().toISOString()
+          trading_style: 'Day Trading',
+          main_markets: ['Forex', 'Gold'],
+          onboarding_completed: existingUserRow?.onboarding_completed || false,
+          is_pro: existingUserRow?.is_pro || false,
+          is_email_verified: true
         };
-        db.users.push(user);
-      } else {
-        if (name) user.name = name;
-        if (password) user.password = await bcrypt.hash(password, 10);
-        user.isEmailVerified = isEmailVerified === true ? true : (user.isEmailVerified || false);
-        user.emailOtp = otp;
-        user.otpExpiresAt = otpExpiresAt;
-        user.otpAttempts = 0;
-        user.otpSentAt = new Date().toISOString();
+        if (useSupabase) {
+          await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
+        }
+        const camelUser = toCamel(userRecord);
+        return res.json({ message: 'Registration successful.', user: camelUser, requiresOtp: false });
       }
 
-      await saveDatabase(db, user.id, normalizedEmail);
-      
-      if (isEmailVerified === true) {
-        return res.json({
-          message: 'Registration successful.',
-          user,
-          requiresOtp: false
-        });
+      // Standard registration path — generate OTP and save to Supabase
+      const uid = existingUserRow?.id || authUserId || `user_${Date.now()}`;
+      const hashedPassword = password ? await bcrypt.hash(password, 10) : (existingUserRow?.password || '');
+
+      const userRecord = {
+        id: uid,
+        email: normalizedEmail,
+        name: name || existingUserRow?.name || normalizedEmail.split('@')[0],
+        password: hashedPassword,
+        experience: existingUserRow?.experience || 'Intermediate',
+        trading_style: existingUserRow?.trading_style || 'Day Trading',
+        main_markets: existingUserRow?.main_markets || ['Forex', 'Gold'],
+        onboarding_completed: existingUserRow?.onboarding_completed || false,
+        is_pro: existingUserRow?.is_pro || false,
+        is_email_verified: false,
+        email_otp: otp,
+        otp_expires_at: otpExpiresAt,
+        otp_attempts: 0,
+        otp_sent_at: new Date().toISOString()
+      };
+
+      if (useSupabase) {
+        const { error: upsertErr } = await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
+        if (upsertErr) {
+          console.error('[Register] Supabase upsert error:', upsertErr);
+          return res.status(500).json({ error: 'Failed to create account. Please try again.' });
+        }
+      } else {
+        // Fallback: in-memory
+        let db = await ensureUserDbLoaded(uid, normalizedEmail);
+        let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+        if (!user) {
+          user = { ...toCamel(userRecord) };
+          db.users.push(user);
+        } else {
+          Object.assign(user, toCamel(userRecord));
+        }
+        userDatabases.set(normalizedEmail, db);
+        userDatabases.set(uid, db);
       }
 
       const emailResult = await sendOtpEmail(normalizedEmail, otp);
+      const camelUser = toCamel(userRecord);
 
-      res.json({ 
-        message: emailResult.success ? 'Registration successful. OTP sent to your email.' : 'Registration successful. Please enter your 6-digit verification code.', 
-        user, 
+      res.json({
+        message: emailResult.success ? 'Registration successful. OTP sent to your email.' : 'Registration successful. Please enter your 6-digit verification code.',
+        user: camelUser,
         requiresOtp: true,
         emailSent: emailResult.success,
         devOtp: emailResult.otp
@@ -1001,7 +1028,50 @@ const PORT = 3000;
 
       const normalizedEmail = email.toLowerCase().trim();
 
-      // Check in-memory cache first — new unverified users are cached but not yet in Supabase
+      // Always load OTP directly from Supabase so it works on serverless (Vercel)
+      if (useSupabase) {
+        const { data: row, error: fetchErr } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', normalizedEmail)
+          .maybeSingle();
+
+        if (fetchErr) {
+          console.error('[verify-otp] Supabase fetch error:', fetchErr);
+          return res.status(500).json({ error: 'Server error verifying OTP.' });
+        }
+
+        if (!row) {
+          return res.status(404).json({ error: 'Account not found. Please register first.' });
+        }
+
+        const storedOtp = row.email_otp;
+        const expiresAt = row.otp_expires_at ? new Date(row.otp_expires_at).getTime() : 0;
+
+        if (!storedOtp || storedOtp !== otp.toString().trim()) {
+          return res.status(400).json({ error: 'Invalid 6-digit verification code.' });
+        }
+
+        if (Date.now() > expiresAt) {
+          return res.status(400).json({ error: 'Verification code has expired. Please click resend to get a new code.' });
+        }
+
+        // Mark email as verified and clear OTP
+        const { error: updateErr } = await supabase
+          .from('users')
+          .update({ is_email_verified: true, email_otp: null, otp_expires_at: null })
+          .eq('email', normalizedEmail);
+
+        if (updateErr) {
+          console.error('[verify-otp] Supabase update error:', updateErr);
+          return res.status(500).json({ error: 'Server error confirming email.' });
+        }
+
+        const verifiedUser = toCamel({ ...row, is_email_verified: true, email_otp: null, otp_expires_at: null });
+        return res.json({ message: 'Email verified successfully.', user: verifiedUser });
+      }
+
+      // Fallback: in-memory path (local dev without Supabase)
       let db = userDatabases.get(normalizedEmail) || await ensureUserDbLoaded(normalizedEmail);
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
 
@@ -1014,11 +1084,9 @@ const PORT = 3000;
         if (Date.now() > expiresAt) {
           return res.status(400).json({ error: 'Verification code has expired. Please click resend to get a new code.' });
         }
-
         user.isEmailVerified = true;
         delete user.emailOtp;
         delete user.otpExpiresAt;
-
         await saveDatabase(db, user.id, normalizedEmail);
         return res.json({ message: 'Email verified successfully.', user });
       } else {
@@ -1038,7 +1106,31 @@ const PORT = 3000;
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      // Check in-memory cache first — new unverified users are cached but not yet in Supabase
+
+      if (useSupabase) {
+        const { data: row } = await supabase.from('users').select('*').eq('email', normalizedEmail).maybeSingle();
+        if (!row) {
+          return res.status(404).json({ error: 'User account not found.' });
+        }
+
+        const newOtp = generateOtp();
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await supabase.from('users').update({
+          email_otp: newOtp,
+          otp_expires_at: otpExpiresAt,
+          otp_sent_at: new Date().toISOString()
+        }).eq('email', normalizedEmail);
+
+        const emailResult = await sendOtpEmail(normalizedEmail, newOtp);
+        return res.json({
+          message: emailResult.success ? 'New verification code sent to ' + normalizedEmail : 'New verification code generated.',
+          emailSent: emailResult.success,
+          devOtp: emailResult.otp
+        });
+      }
+
+      // Fallback in-memory
       let db = userDatabases.get(normalizedEmail) || await ensureUserDbLoaded(normalizedEmail);
       let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
 
@@ -1048,7 +1140,6 @@ const PORT = 3000;
 
       const newOtp = generateOtp();
       const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
       user.emailOtp = newOtp;
       user.otpExpiresAt = otpExpiresAt;
       user.otpSentAt = new Date().toISOString();
@@ -1056,7 +1147,7 @@ const PORT = 3000;
       await saveDatabase(db, normalizedEmail);
       const emailResult = await sendOtpEmail(normalizedEmail, newOtp);
 
-      return res.json({ 
+      return res.json({
         message: emailResult.success ? 'New verification code sent to ' + normalizedEmail : 'New verification code generated.',
         emailSent: emailResult.success,
         devOtp: emailResult.otp
@@ -1077,28 +1168,43 @@ const PORT = 3000;
       if (!email) return res.status(400).json({ error: 'Email is required.' });
 
       const normalizedEmail = email.toLowerCase().trim();
+
+      if (useSupabase) {
+        const { data: row } = await supabase.from('users').select('id, is_email_verified').eq('email', normalizedEmail).maybeSingle();
+        // Neutral response to prevent account enumeration
+        if (!row || !row.is_email_verified) {
+          return res.json({ message: 'If this email is registered, a password reset code has been sent.' });
+        }
+
+        const otp = generateOtp();
+        const resetOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await supabase.from('users').update({
+          reset_otp: otp,
+          reset_otp_expires_at: resetOtpExpiresAt
+        }).eq('email', normalizedEmail);
+
+        const emailResult = await sendOtpEmail(normalizedEmail, otp, 'Password Reset Code');
+        console.log(`[Auth] Password reset OTP sent to ${normalizedEmail}, emailSent: ${emailResult.success}`);
+
+        return res.json({
+          message: 'If this email is registered, a password reset code has been sent.',
+          devOtp: emailResult.otp
+        });
+      }
+
+      // Fallback in-memory
       const db = await ensureUserDbLoaded(normalizedEmail);
       const user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
-
-      // If user not found or not verified, respond with neutral message (prevent account enumeration)
       if (!user || !user.isEmailVerified) {
         return res.json({ message: 'If this email is registered, a password reset code has been sent.' });
       }
-
       const otp = generateOtp();
       user.resetOtp = otp;
       user.resetOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
       await saveDatabase(db, normalizedEmail);
-
       const emailResult = await sendOtpEmail(normalizedEmail, otp, 'Password Reset Code');
-      console.log(`[Auth] Password reset OTP sent to ${normalizedEmail}, emailSent: ${emailResult.success}`);
-
-      return res.json({ 
-        message: 'If this email is registered, a password reset code has been sent.',
-        // In dev/fallback mode only, expose the OTP so it can be shown in UI
-        devOtp: emailResult.otp
-      });
+      return res.json({ message: 'If this email is registered, a password reset code has been sent.', devOtp: emailResult.otp });
     } catch (err: any) {
       console.error('[Auth] Forgot password error:', err);
       return res.status(500).json({ error: 'Server error during password reset request.' });
@@ -1116,30 +1222,50 @@ const PORT = 3000;
       }
 
       const normalizedEmail = email.toLowerCase().trim();
+
+      if (useSupabase) {
+        const { data: row } = await supabase.from('users').select('*').eq('email', normalizedEmail).maybeSingle();
+        if (!row) {
+          return res.status(400).json({ error: 'Invalid or expired reset code.' });
+        }
+
+        if (!row.reset_otp || row.reset_otp !== otp.toString().trim()) {
+          return res.status(400).json({ error: 'Invalid reset code. Please check the code sent to your email.' });
+        }
+
+        const expiry = row.reset_otp_expires_at ? new Date(row.reset_otp_expires_at).getTime() : 0;
+        if (Date.now() > expiry) {
+          return res.status(400).json({ error: 'Reset link expired. Please request a new password reset.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await supabase.from('users').update({
+          password: hashedPassword,
+          reset_otp: null,
+          reset_otp_expires_at: null
+        }).eq('email', normalizedEmail);
+
+        console.log(`[Auth] Password successfully reset for ${normalizedEmail}`);
+        return res.json({ message: 'Password updated successfully. You can now log in with your new password.' });
+      }
+
+      // Fallback in-memory
       const db = await ensureUserDbLoaded(normalizedEmail);
       const user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
-
       if (!user) {
         return res.status(400).json({ error: 'Invalid or expired reset code.' });
       }
-
       if (!user.resetOtp || user.resetOtp !== otp.toString().trim()) {
         return res.status(400).json({ error: 'Invalid reset code. Please check the code sent to your email.' });
       }
-
       const expiry = user.resetOtpExpiresAt ? new Date(user.resetOtpExpiresAt).getTime() : 0;
       if (Date.now() > expiry) {
         return res.status(400).json({ error: 'Reset link expired. Please request a new password reset.' });
       }
-
-      // Hash and update password
       user.password = await bcrypt.hash(newPassword, 10);
       delete user.resetOtp;
       delete user.resetOtpExpiresAt;
-
       await saveDatabase(db, normalizedEmail);
-      console.log(`[Auth] Password successfully reset for ${normalizedEmail}`);
-
       return res.json({ message: 'Password updated successfully. You can now log in with your new password.' });
     } catch (err: any) {
       console.error('[Auth] Reset password error:', err);
