@@ -1511,6 +1511,13 @@ const PORT = 3000;
       // Clean up trades associated with this account
       db.trades = db.trades.filter((t: any) => t.accountId !== id);
       db.riskSettings = db.riskSettings.filter((r: any) => r.accountId !== id);
+      
+      if (useSupabase) {
+        await supabase.from('trading_accounts').delete().eq('id', id);
+        await supabase.from('trades').delete().eq('account_id', id);
+        await supabase.from('risk_settings').delete().eq('account_id', id);
+      }
+      
       await saveDatabase(db, authEmail);
       res.json({ message: 'Account and associated trades deleted successfully' });
     } else {
@@ -1772,6 +1779,11 @@ const PORT = 3000;
     db.accounts[accIdx].equity = db.accounts[accIdx].currentBalance;
 
     db.trades.splice(tradeIdx, 1);
+    
+    if (useSupabase) {
+      await supabase.from('trades').delete().eq('id', id);
+    }
+    
     await saveDatabase(db, authEmail);
 
     res.json({ message: 'Trade deleted successfully', updatedAccount: db.accounts[accIdx] });
