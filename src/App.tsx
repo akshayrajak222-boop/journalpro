@@ -422,14 +422,15 @@ export default function App() {
       setAccounts(loadedAccs);
 
       if (loadedAccs.length > 0) {
-        // Automatically select the first active account if none is chosen
         const storedSelectedId = sessionStorage.getItem('selected_account_id');
-        const defaultId = overrideAccountId 
-          ? overrideAccountId 
+        // Prefer stored selection → then MT5 EA account → then first account
+        const mt5Account = loadedAccs.find((a: any) => a.id?.startsWith('acc_mt5_ea_'));
+        const defaultId = overrideAccountId
+          ? overrideAccountId
           : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
-            ? storedSelectedId 
-            : loadedAccs[0].id);
-        
+            ? storedSelectedId
+            : (mt5Account ? mt5Account.id : loadedAccs[0].id));
+
         setSelectedAccountId(defaultId);
         persistSelectedAccount(defaultId);
         await fetchTradesAndParams(defaultId);
@@ -455,6 +456,26 @@ export default function App() {
       console.error('Error fetching dashboard tables:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [tradesRefreshing, setTradesRefreshing] = useState(false);
+
+  const refreshTrades = async () => {
+    if (!selectedAccountId) return;
+    setTradesRefreshing(true);
+    try {
+      const tradesRes = await authFetch(`/api/trades?accountId=${selectedAccountId}`);
+      const tradesData = await tradesRes.json();
+      setTrades(tradesData.trades || []);
+      // Also refresh account balance
+      const accsRes = await authFetch('/api/accounts');
+      const accsData = await accsRes.json();
+      if (Array.isArray(accsData.accounts)) setAccounts(accsData.accounts);
+    } catch (e) {
+      console.error('Error refreshing trades:', e);
+    } finally {
+      setTradesRefreshing(false);
     }
   };
 
@@ -2699,6 +2720,21 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* MT5 Sync Refresh button */}
+                  {activeAccount?.id?.startsWith('acc_mt5_ea_') && (
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg flex items-center gap-1">
+                      <Radio className="h-2.5 w-2.5 animate-pulse" /> MT5 EA Account
+                    </span>
+                  )}
+                  <button
+                    onClick={refreshTrades}
+                    disabled={tradesRefreshing}
+                    title="Reload trades from Supabase"
+                    className="border border-blue-200 hover:bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg px-3 py-2 transition flex items-center gap-1 bg-white disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${tradesRefreshing ? 'animate-spin' : ''}`} />
+                    {tradesRefreshing ? 'Syncing...' : 'Sync Trades'}
+                  </button>
                   <button
                     onClick={handleExportCSV}
                     className="border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg px-3 py-2 transition flex items-center gap-1 bg-white"

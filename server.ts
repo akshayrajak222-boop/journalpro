@@ -970,18 +970,17 @@ const PORT = 3000;
       const previousUserId = user?.id;
       const previousEmail = user?.email;
 
-      if (!user) {
+      if (!user || !user.password) {
         return res.status(404).json({ error: 'No account found with this email. Please register first.' });
       }
 
-      if (user.password && password) {
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-          return res.status(401).json({ error: 'Invalid password. Please check your credentials and try again.' });
-        }
-      } else if (password && !user.password) {
-        user.password = await bcrypt.hash(password, 10);
-        await saveDatabase(db, user.id, normalizedEmail);
+      if (!password) {
+        return res.status(400).json({ error: 'Password is required to login.' });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({ error: 'Invalid password. Please check your credentials and try again.' });
       }
 
       res.json({ message: 'Login successful', user });
