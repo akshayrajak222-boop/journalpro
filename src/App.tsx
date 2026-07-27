@@ -4420,21 +4420,24 @@ export default function App() {
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
                   Trade Date &amp; Time <span className="text-[10px] text-slate-400 font-normal">(Optional - defaults to current time)</span>
                 </label>
-                <input
-                  type="datetime-local"
-                  value={tradeDate}
-                  onChange={(e) => setTradeDate(e.target.value)}
-                  onClick={(e) => {
-                    try {
-                      if ('showPicker' in e.target) {
-                        (e.target as HTMLInputElement).showPicker();
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={tradeDate}
+                    onChange={(e) => setTradeDate(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        if ('showPicker' in e.target) {
+                          (e.target as HTMLInputElement).showPicker();
+                        }
+                      } catch (err) {
+                        // ignore cross-origin or unsupported errors
                       }
-                    } catch (err) {
-                      // ignore cross-origin or unsupported errors
-                    }
-                  }}
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 cursor-pointer"
-                />
+                    }}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 pr-10 w-full font-semibold focus:ring-slate-500 focus:border-slate-500 cursor-pointer"
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
