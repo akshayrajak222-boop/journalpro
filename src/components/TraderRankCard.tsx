@@ -292,7 +292,7 @@ export const TraderRankCard: React.FC<TraderRankCardProps> = ({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className={`relative overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xs hover:shadow-md transition-all duration-300 space-y-5 ${
+      className={`relative overflow-hidden bg-[#fdfbf7] dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xs hover:shadow-md transition-all duration-300 space-y-5 ${
         rankData.isSpecialGod ? 'ring-2 ring-amber-400/40 dark:ring-amber-400/30' : ''
       }`}
     >
