@@ -463,25 +463,28 @@ async function sendOtpEmail(email, otp, subject = 'Your FX Journal Pro Verificat
   return { success: false, provider: 'None', otp: otp };
 }
 
-function createEmptyUserDb(userId?: string, email?: string) {
+function createEmptyUserDb(userId?: string, email?: string, injectDummyUser = false) {
   const cleanUserId = userId?.trim() || `user_${Date.now()}`;
   const cleanEmail = email ? email.toLowerCase().trim() : '';
   const isDemo = cleanEmail === 'admin@axyfx.com' || cleanEmail === 'demo@axyfx.com';
 
+  const users = [];
+  if (injectDummyUser || isDemo) {
+    users.push({
+      id: cleanUserId,
+      email: cleanEmail,
+      name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
+      experience: 'Intermediate',
+      tradingStyle: 'Day Trading',
+      mainMarkets: ['Forex', 'Gold'],
+      onboardingCompleted: isDemo ? true : false,
+      isPro: isDemo ? true : false,
+      isEmailVerified: true
+    });
+  }
+
   return {
-    users: [
-      {
-        id: cleanUserId,
-        email: cleanEmail,
-        name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
-        experience: 'Intermediate',
-        tradingStyle: 'Day Trading',
-        mainMarkets: ['Forex', 'Gold'],
-        onboardingCompleted: isDemo ? true : false,
-        isPro: isDemo ? true : false,
-        isEmailVerified: true
-      }
-    ],
+    users: users,
     accounts: isDemo ? [
       {
         id: 'acc_demo_1',
@@ -544,7 +547,7 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
     cleanUserId = '';
   }
   if (!cleanUserId && !cleanEmail) {
-    return createEmptyUserDb('guest_user', 'guest@example.com');
+    return createEmptyUserDb('guest_user', 'guest@example.com', false);
   }
 
   // Load from SQL tables if Supabase is enabled
@@ -560,7 +563,7 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
 
       if (!cleanUserId) {
         // Could not resolve a userId from email — return empty DB
-        return createEmptyUserDb('', cleanEmail);
+        return createEmptyUserDb('', cleanEmail, false);
       }
 
       const [
@@ -615,19 +618,6 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
         }
       }
 
-      if (loadedDb.users.length === 0) {
-        loadedDb.users.push({
-          id: cleanUserId,
-          email: cleanEmail,
-          name: cleanEmail ? cleanEmail.split('@')[0] : 'Trader',
-          experience: 'Intermediate',
-          tradingStyle: 'Day Trading',
-          mainMarkets: ['Forex', 'Gold'],
-          onboardingCompleted: false,
-          isPro: false,
-          isEmailVerified: true
-        });
-      }
       return loadedDb;
     } catch (err) {
       console.error('[AxyFx SQL Query Error]', err);
@@ -637,7 +627,7 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
   const cached = userDatabases.get(cleanUserId) || (cleanEmail ? userDatabases.get(cleanEmail) : null);
   if (cached) return cached;
 
-  return createEmptyUserDb(cleanUserId, cleanEmail);
+  return createEmptyUserDb(cleanUserId, cleanEmail, false);
 }
 
 async function ensureDbLoaded() {
