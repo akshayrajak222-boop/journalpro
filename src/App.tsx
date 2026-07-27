@@ -2391,7 +2391,9 @@ export default function App() {
                  activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
-                 activeTab === 'settings' ? 'Settings' : 'Admin Panel'}
+                 activeTab === 'settings' ? 'Settings' :
+                 activeTab === 'mt5' ? 'MT5 Automation' :
+                 activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
               <p className="text-xs text-slate-400 mt-1">
                 {activeTab === 'dashboard' ? 'Welcome back! Here\'s an overview of your trading performance.' :
@@ -2399,7 +2401,9 @@ export default function App() {
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
-                 activeTab === 'settings' ? 'Configure portfolio guard, MT5 automation link, and co-pilot preferences.' : 'Administrative system configs.'}
+                 activeTab === 'settings' ? 'Configure portfolio guard, MT5 automation link, and co-pilot preferences.' :
+                 activeTab === 'mt5' ? 'Connect your MetaTrader terminal for real-time synchronization.' :
+                 activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
           </div>

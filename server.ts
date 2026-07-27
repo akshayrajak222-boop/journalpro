@@ -601,6 +601,18 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
         if (loadedDb.riskSettings.length === 0 && cached.riskSettings?.length > 0) {
           loadedDb.riskSettings = cached.riskSettings;
         }
+
+        // Merge transient fields (OTPs) from cache into loaded users
+        if (cached.users && cached.users.length > 0 && loadedDb.users.length > 0) {
+          const cachedUser = cached.users[0];
+          const loadedUser = loadedDb.users[0];
+          if (cachedUser.resetOtp) loadedUser.resetOtp = cachedUser.resetOtp;
+          if (cachedUser.resetOtpExpiresAt) loadedUser.resetOtpExpiresAt = cachedUser.resetOtpExpiresAt;
+          if (cachedUser.emailOtp) loadedUser.emailOtp = cachedUser.emailOtp;
+          if (cachedUser.otpExpiresAt) loadedUser.otpExpiresAt = cachedUser.otpExpiresAt;
+          if (cachedUser.otpAttempts !== undefined) loadedUser.otpAttempts = cachedUser.otpAttempts;
+          if (cachedUser.otpSentAt) loadedUser.otpSentAt = cachedUser.otpSentAt;
+        }
       }
 
       if (loadedDb.users.length === 0) {
