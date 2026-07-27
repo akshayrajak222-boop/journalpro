@@ -4417,7 +4417,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                   Trade Date &amp; Time <span className="text-[10px] text-slate-400 font-normal">(Optional - defaults to current time)</span>
                 </label>
                 <div className="relative flex items-center">
@@ -4426,8 +4426,10 @@ export default function App() {
                     type="datetime-local"
                     value={tradeDate}
                     onChange={(e) => setTradeDate(e.target.value)}
-                    style={{ colorScheme: 'light' }}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 pr-10 w-full font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 focus:border-slate-400 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                    style={{
+                      colorScheme: 'light',
+                    }}
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 pr-10 w-full font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 focus:border-slate-400 [&::-webkit-calendar-picker-indicator]:hidden"
                   />
                   <button
                     type="button"
@@ -4438,7 +4440,7 @@ export default function App() {
                         try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
                       }
                     }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10 pointer-events-auto"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors z-10"
                     title="Open date & time picker"
                   >
                     <Calendar className="h-4 w-4" />
