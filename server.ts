@@ -2987,11 +2987,45 @@ RESTRICTIONS:
   // ADMIN DASHBOARD ROUTES
   // ==========================================
 
-  app.get('/api/admin/users', (req, res) => {
+  // Helper: check if the current user is an admin (checks Supabase role column directly)
+  const checkIsAdmin = async (currentUser: any): Promise<boolean> => {
+    if (!currentUser) return false;
+    // Hardcoded fallback email
+    if (currentUser.email === 'admin@axyfx.com') return true;
+    // Check role already loaded in the user object
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN') return true;
+    // Re-fetch from Supabase to be sure (in case role was updated after login)
+    if (useSupabase && (currentUser.id || currentUser.email)) {
+      const query = currentUser.id
+        ? supabase.from('users').select('role').eq('id', currentUser.id).maybeSingle()
+        : supabase.from('users').select('role').eq('email', currentUser.email).maybeSingle();
+      const { data } = await query;
+      if (data?.role === 'SUPER_ADMIN' || data?.role === 'ADMIN') return true;
+    }
+    return false;
+  };
+
+  // Endpoint for frontend to check if current user has admin access
+  app.get('/api/admin/check', async (req, res) => {
+    let currentUser = (req as any).currentUser;
+    const isAdminUser = await checkIsAdmin(currentUser);
+    res.json({ isAdmin: isAdminUser });
+  });
+
+  app.get('/api/admin/users', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
-    if (!currentUser || currentUser.email !== 'admin@axyfx.com') {
+    if (!(await checkIsAdmin(currentUser))) {
       return res.status(403).json({ error: 'Admin access required' });
+    }
+    if (useSupabase) {
+      const { data: allUsers } = await supabase.from('users').select('*');
+      const { data: allAccounts } = await supabase.from('trading_accounts').select('*');
+      const usersWithStats = (allUsers || []).map((u: any) => {
+        const uAccounts = (allAccounts || []).filter((acc: any) => acc.user_id === u.id);
+        return { ...toCamel(u), accountsCount: uAccounts.length };
+      });
+      return res.json({ users: usersWithStats });
     }
     // Return all users with their accounts count and total trades count
     const usersWithStats = db.users.map((u: any) => {
@@ -3010,7 +3044,7 @@ RESTRICTIONS:
   app.post('/api/admin/announcements', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
-    if (!currentUser || currentUser.email !== 'admin@axyfx.com') {
+    if (!(await checkIsAdmin(currentUser))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
     const { title, content } = req.body;
@@ -3031,7 +3065,7 @@ RESTRICTIONS:
   app.post('/api/admin/block-user', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
-    if (!currentUser || currentUser.email !== 'admin@axyfx.com') {
+    if (!(await checkIsAdmin(currentUser))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
     const { userId, block } = req.body;
@@ -3044,6 +3078,90 @@ RESTRICTIONS:
     } else {
       res.status(404).json({ error: 'User not found' });
     }
+  });
+
+  app.get('/api/admin/dashboard', async (req, res) => {
+    let currentUser = (req as any).currentUser;
+    if (!(await checkIsAdmin(currentUser))) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    if (useSupabase) {
+      const [{ data: allUsers }, { data: allAccounts }, { data: allTrades }, { data: allTickets }] = await Promise.all([
+        supabase.from('users').select('id, status'),
+        supabase.from('trading_accounts').select('id'),
+        supabase.from('trades').select('id'),
+        supabase.from('support_tickets').select('id, status')
+      ]);
+      const totalUsers = allUsers?.length || 0;
+      const activeUsers = (allUsers || []).filter((u: any) => u.status === 'ACTIVE' || !u.status).length;
+      const totalMt5 = allAccounts?.length || 0;
+      const totalTrades = allTrades?.length || 0;
+      const pendingTickets = (allTickets || []).filter((t: any) => t.status === 'Open' || t.status === 'In Progress').length;
+      return res.json({ totalUsers, activeUsers, totalMt5, totalTrades, totalRevenue: 0, pendingTickets });
+    }
+    // fallback to per-user db
+    const db = (req as any).userDb;
+    res.json({
+      totalUsers: db?.users?.length || 0,
+      activeUsers: db?.users?.filter((u: any) => u.status === 'ACTIVE' || !u.status).length || 0,
+      totalMt5: db?.accounts?.length || 0,
+      totalTrades: db?.trades?.length || 0,
+      totalRevenue: 0,
+      pendingTickets: db?.supportTickets?.filter((t: any) => t.status === 'Open').length || 0
+    });
+  });
+
+  app.post('/api/admin/users/:id/status', async (req, res) => {
+    let currentUser = (req as any).currentUser;
+    if (!(await checkIsAdmin(currentUser))) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (useSupabase) {
+      const { error } = await supabase.from('users').update({ status }).eq('id', id);
+      if (error) {
+        console.error('Error updating supabase user:', error);
+        return res.status(500).json({ error: 'Failed to update user status' });
+      }
+      return res.json({ message: `User status updated to ${status}` });
+    }
+
+    const db = (req as any).userDb;
+    const idx = db?.users?.findIndex((u: any) => u.id === id);
+    if (idx !== undefined && idx !== -1) {
+      db.users[idx].status = status;
+      res.json({ message: `User status updated to ${status}` });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  });
+
+  app.get('/api/admin/bugs', async (req, res) => {
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || (currentUser.email !== 'admin@axyfx.com' && currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'ADMIN')) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    if (useSupabase) {
+      const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', { ascending: false });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ bugs: data });
+    }
+    res.json({ bugs: [] });
+  });
+
+  app.get('/api/admin/features', async (req, res) => {
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || (currentUser.email !== 'admin@axyfx.com' && currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'ADMIN')) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    if (useSupabase) {
+      const { data, error } = await supabase.from('feature_requests').select('*').order('created_at', { ascending: false });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ features: data });
+    }
+    res.json({ features: [] });
   });
 
   // ==========================================

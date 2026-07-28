@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, CreditCard, Radio, AlertCircle, FileText, Plus, CheckCircle, Ban, RefreshCw, Star
+  Users, CreditCard, Radio, AlertCircle, FileText, Plus, CheckCircle, Ban, RefreshCw, Star, BarChart3, Shield, Bug, Lightbulb
 } from 'lucide-react';
 import { User, SupportTicket, Announcement } from '../types';
 
@@ -9,37 +9,70 @@ interface AdminPanelProps {
 }
 
 export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'users' | 'billing' | 'mt5' | 'tickets' | 'announcements'>('users');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'billing' | 'mt5' | 'tickets' | 'bugs' | 'features' | 'announcements'>('dashboard');
+  
+  const [dashboardStats, setDashboardStats] = useState<any>({});
   const [users, setUsers] = useState<any[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [bugs, setBugs] = useState<any[]>([]);
+  const [features, setFeatures] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Announcement fields
   const [annTitle, setAnnTitle] = useState('');
   const [annContent, setAnnContent] = useState('');
 
-  // Supported brokers
   const supportedBrokers = ['IC Markets', 'Pepperstone', 'Exness', 'FP Markets', 'XM', 'FBS'];
+
+  // Auth headers — must be sent to all admin API calls
+  const getAuthHeaders = (): Record<string, string> => {
+    const userId = sessionStorage.getItem('auth_user_id') || '';
+    const email = sessionStorage.getItem('auth_email') || '';
+    const headers: Record<string, string> = {};
+    if (userId) headers['x-auth-user-id'] = userId;
+    if (email) headers['x-auth-email'] = email;
+    return headers;
+  };
 
   const fetchData = async () => {
     setLoading(true);
+    const authHeaders = getAuthHeaders();
     try {
-      // Fetch users
-      const usersRes = await fetch('/api/admin/users');
-      const usersData = await usersRes.json();
-      if (usersData.users) setUsers(usersData.users);
-
-      // Fetch tickets
-      const ticketsRes = await fetch('/api/tickets');
-      const ticketsData = await ticketsRes.json();
-      if (ticketsData.tickets) setTickets(ticketsData.tickets);
-
-      // Fetch announcements
-      const annRes = await fetch('/api/announcements');
-      const annData = await annRes.json();
-      if (annData.announcements) setAnnouncements(annData.announcements);
-
+      if (activeTab === 'dashboard') {
+        const res = await fetch('/api/admin/dashboard', { headers: authHeaders });
+        if (res.ok) setDashboardStats(await res.json());
+      } else if (activeTab === 'users') {
+        const res = await fetch('/api/admin/users', { headers: authHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.users) setUsers(data.users);
+        }
+      } else if (activeTab === 'tickets') {
+        const res = await fetch('/api/tickets', { headers: authHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.tickets) setTickets(data.tickets);
+        }
+      } else if (activeTab === 'announcements') {
+        const res = await fetch('/api/announcements', { headers: authHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.announcements) setAnnouncements(data.announcements);
+        }
+      } else if (activeTab === 'bugs') {
+        const res = await fetch('/api/admin/bugs', { headers: authHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bugs) setBugs(data.bugs);
+        }
+      } else if (activeTab === 'features') {
+        const res = await fetch('/api/admin/features', { headers: authHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.features) setFeatures(data.features);
+        }
+      }
     } catch (e) {
       console.error('Error loading admin tables:', e);
     } finally {
@@ -51,19 +84,19 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
     fetchData();
   }, [activeTab]);
 
-  const handleToggleBlock = async (userId: string, isBlocked: boolean) => {
+  const handleUpdateUserStatus = async (userId: string, newStatus: string) => {
     try {
-      const res = await fetch('/api/admin/block-user', {
+      const res = await fetch(`/api/admin/users/${userId}/status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, block: !isBlocked })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ status: newStatus })
       });
       if (res.ok) {
-        alert(!isBlocked ? 'User blocked successfully.' : 'User unblocked successfully.');
+        alert(`User status updated to ${newStatus}.`);
         fetchData();
       }
     } catch (e) {
-      alert('Failed to modify user block status.');
+      alert('Failed to modify user status.');
     }
   };
 
@@ -71,7 +104,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
     try {
       const res = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: 'Closed' })
       });
       if (res.ok) {
@@ -90,7 +123,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
     try {
       const res = await fetch('/api/admin/announcements', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ title: annTitle, content: annContent })
       });
       if (res.ok) {
@@ -106,301 +139,260 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
   };
 
   return (
-    <div id="admin-management-panel" className="bg-white border border-slate-100 rounded-xl p-6 shadow-sm">
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 mb-6">
+    <div id="admin-management-panel" className="bg-slate-900 text-slate-200 border border-slate-800 rounded-xl p-6 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800 pb-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
             FX Journal Pro Operations Console
-            <span className="text-xs bg-red-50 text-red-600 font-bold px-2 py-0.5 rounded border border-red-200">
+            <span className="text-xs bg-red-500/10 text-red-500 font-bold px-2 py-0.5 rounded border border-red-500/20">
               Admin Access
             </span>
           </h2>
-          <p className="text-xs text-slate-500">Global SaaS telemetry, subscribers billing, and support queues</p>
+          <p className="text-xs text-slate-400">Global SaaS telemetry, subscribers billing, and support queues</p>
         </div>
         
         <button
           onClick={fetchData}
           disabled={loading}
-          className="mt-3 md:mt-0 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg py-2 px-3 transition flex items-center gap-1.5"
+          className="mt-3 md:mt-0 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-semibold text-xs rounded-lg py-2 px-4 transition flex items-center gap-2"
         >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh Data
         </button>
       </div>
 
-      {/* Stats Summary strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100/60">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Subscribers</span>
-          <span className="text-xl font-extrabold text-slate-800">
-            {users.filter(u => u.isPro).length} <span className="text-xs font-normal text-slate-400">Pro</span>
-          </span>
-        </div>
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100/60">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Free Users</span>
-          <span className="text-xl font-extrabold text-slate-800">
-            {users.filter(u => !u.isPro).length} <span className="text-xs font-normal text-slate-400">Basic</span>
-          </span>
-        </div>
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100/60">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">MT5 Sync Signals</span>
-          <span className="text-xl font-extrabold text-emerald-600">Active</span>
-        </div>
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100/60">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Open Tickets</span>
-          <span className="text-xl font-extrabold text-orange-600">
-            {tickets.filter(t => t.status !== 'Closed').length}
-          </span>
-        </div>
-      </div>
-
       {/* Tabs */}
-      <div className="flex border-b border-slate-100 overflow-x-auto mb-6 gap-2">
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`py-2 px-4 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'users' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Users className="h-4 w-4" />
-          User Registry
-        </button>
-        <button
-          onClick={() => setActiveTab('billing')}
-          className={`py-2 px-4 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'billing' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <CreditCard className="h-4 w-4" />
-          Billing History
-        </button>
-        <button
-          onClick={() => setActiveTab('mt5')}
-          className={`py-2 px-4 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'mt5' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Radio className="h-4 w-4" />
-          MT5 Brokers & Sync
-        </button>
-        <button
-          onClick={() => setActiveTab('tickets')}
-          className={`py-2 px-4 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'tickets' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <AlertCircle className="h-4 w-4" />
-          Support Tickets ({tickets.filter(t => t.status !== 'Closed').length})
-        </button>
-        <button
-          onClick={() => setActiveTab('announcements')}
-          className={`py-2 px-4 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'announcements' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          Broadcast Alerts
-        </button>
+      <div className="flex border-b border-slate-800 overflow-x-auto mb-6 gap-1 pb-1 scrollbar-hide">
+        {[
+          { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+          { id: 'users', label: 'User Registry', icon: Users },
+          { id: 'billing', label: 'Billing History', icon: CreditCard },
+          { id: 'mt5', label: 'MT5 Sync', icon: Radio },
+          { id: 'tickets', label: 'Tickets', icon: AlertCircle },
+          { id: 'bugs', label: 'Bugs', icon: Bug },
+          { id: 'features', label: 'Features', icon: Lightbulb },
+          { id: 'announcements', label: 'Alerts', icon: FileText }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`py-2 px-4 text-xs font-semibold rounded-t-lg transition flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === tab.id ? 'bg-slate-800 text-blue-400 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Tab Panels */}
+      {activeTab === 'dashboard' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Users</span>
+              <span className="text-2xl font-extrabold text-white">{dashboardStats?.totalUsers || 0}</span>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Active Users</span>
+              <span className="text-2xl font-extrabold text-blue-400">{dashboardStats?.activeUsers || 0}</span>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total MT5</span>
+              <span className="text-2xl font-extrabold text-purple-400">{dashboardStats?.totalMt5 || 0}</span>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Trades</span>
+              <span className="text-2xl font-extrabold text-emerald-400">{dashboardStats?.totalTrades || 0}</span>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Revenue</span>
+              <span className="text-2xl font-extrabold text-yellow-400">₹{dashboardStats?.totalRevenue || 0}</span>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Pending Tickets</span>
+              <span className="text-2xl font-extrabold text-red-400">{dashboardStats?.pendingTickets || 0}</span>
+            </div>
+          </div>
+          <div className="p-6 bg-slate-800/30 border border-slate-800 rounded-xl flex items-center justify-center min-h-[300px]">
+            <span className="text-slate-500">More charts coming soon...</span>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'users' && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-slate-800/50 rounded-xl border border-slate-800">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
-                <th className="pb-3 pl-2">User details</th>
-                <th className="pb-3">Plan tier</th>
-                <th className="pb-3">Experience / Style</th>
-                <th className="pb-3">Accounts</th>
-                <th className="pb-3">Trades logged</th>
-                <th className="pb-3 text-right">Actions</th>
+              <tr className="border-b border-slate-700/50 text-slate-400 uppercase tracking-wider font-bold bg-slate-800/80">
+                <th className="py-3 px-4">User details</th>
+                <th className="py-3 px-4">Plan tier</th>
+                <th className="py-3 px-4">Experience / Style</th>
+                <th className="py-3 px-4 text-center">Accounts</th>
+                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
-                  <td className="py-3 pl-2">
-                    <div className="font-semibold text-slate-800">{u.name}</div>
-                    <div className="text-[10px] text-slate-400">{u.email}</div>
-                  </td>
-                  <td className="py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${
-                      u.isPro ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-500'
-                    }`}>
-                      {u.isPro ? <Star className="h-3 w-3 fill-blue-600" /> : null}
-                      {u.isPro ? 'Pro Member' : 'Free Basic'}
-                    </span>
-                  </td>
-                  <td className="py-3">
-                    <div className="text-slate-700">{u.experience || 'Onboarding Pending'}</div>
-                    <div className="text-[10px] text-slate-400">{u.tradingStyle || 'Not set'}</div>
-                  </td>
-                  <td className="py-3 font-semibold text-slate-600">{u.accountsCount || 0} Accounts</td>
-                  <td className="py-3 font-semibold text-slate-600">{u.tradesCount || 0} Trades</td>
-                  <td className="py-3 text-right">
-                    <button
-                      onClick={() => handleToggleBlock(u.id, u.status === 'Blocked')}
-                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition ${
-                        u.status === 'Blocked' 
-                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                      }`}
-                    >
-                      {u.status === 'Blocked' ? 'Unblock User' : 'Block User'}
-                    </button>
-                  </td>
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-slate-500">No users found.</td>
                 </tr>
-              ))}
+              ) : (
+                users.map((u) => (
+                  <tr key={u.id} className="border-b border-slate-800 hover:bg-slate-800/70 transition">
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-slate-200">{u.name || 'Unknown'}</div>
+                      <div className="text-[10px] text-slate-400">{u.email}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${
+                        u.isPro ? 'bg-blue-500/10 text-blue-400' : 'bg-slate-700 text-slate-400'
+                      }`}>
+                        {u.isPro ? <Star className="h-3 w-3 fill-blue-400" /> : null}
+                        {u.isPro ? 'Pro Member' : 'Free Basic'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-slate-300">{u.experience || 'N/A'}</div>
+                      <div className="text-[10px] text-slate-500">{u.tradingStyle || 'Not set'}</div>
+                    </td>
+                    <td className="py-3 px-4 text-center font-semibold text-slate-300">{u.accountsCount || 0}</td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        !u.status || u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' :
+                        u.status === 'SUSPENDED' ? 'bg-orange-500/10 text-orange-400' : 'bg-red-500/10 text-red-400'
+                      }`}>
+                        {u.status || 'ACTIVE'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {(!u.status || u.status === 'ACTIVE') ? (
+                        <button
+                          onClick={() => handleUpdateUserStatus(u.id, 'SUSPENDED')}
+                          className="text-[10px] font-semibold px-2 py-1 rounded bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition"
+                        >
+                          Suspend
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleUpdateUserStatus(u.id, 'ACTIVE')}
+                          className="text-[10px] font-semibold px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition"
+                        >
+                          Reactivate
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       )}
 
       {activeTab === 'billing' && (
-        <div>
-          <h3 className="font-semibold text-sm text-slate-800 mb-4">Pro Plan Payments Ledger</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 text-slate-400 uppercase font-bold">
-                  <th className="pb-3 pl-2">Razorpay Reference</th>
-                  <th className="pb-3">User</th>
-                  <th className="pb-3">Amount Charged</th>
-                  <th className="pb-3">Charge date</th>
-                  <th className="pb-3 text-right">Receipt status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="py-3 pl-2 font-mono text-blue-600">pay_rzp_82910_akshay</td>
-                  <td className="py-3">akshayrajak222@gmail.com</td>
-                  <td className="py-3 font-semibold text-slate-800">₹99.00 INR</td>
-                  <td className="py-3 text-slate-500">2026-07-11 12:00:00</td>
-                  <td className="py-3 text-right">
-                    <span className="bg-emerald-50 text-emerald-600 font-semibold px-2 py-0.5 rounded-full">
-                      Success
-                    </span>
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="py-3 pl-2 font-mono text-slate-500">pay_rzp_mock_demo</td>
-                  <td className="py-3">demo_scalper@yahoo.com</td>
-                  <td className="py-3 font-semibold text-slate-800">₹99.00 INR</td>
-                  <td className="py-3 text-slate-500">2026-07-09 18:24:11</td>
-                  <td className="py-3 text-right">
-                    <span className="bg-emerald-50 text-emerald-600 font-semibold px-2 py-0.5 rounded-full">
-                      Success
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div className="p-6 text-center text-slate-400 bg-slate-800/50 rounded-xl border border-slate-800">
+          Billing history is mock-only currently.
         </div>
       )}
-
       {activeTab === 'mt5' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-5 border border-slate-100 rounded-xl bg-slate-50/50">
-              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-3">Supported Forex Brokers</h4>
-              <ul className="space-y-2 text-xs">
-                {supportedBrokers.map((b, idx) => (
-                  <li key={idx} className="flex justify-between items-center bg-white p-2 border border-slate-100 rounded-lg">
-                    <span className="font-semibold text-slate-700">{b}</span>
-                    <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-2 py-0.5 rounded-full">
-                      Compatible
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="p-5 border border-slate-100 rounded-xl bg-slate-50/50">
-              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-3">MQL EA Sync Channels</h4>
-              <div className="space-y-3">
-                <div className="bg-white p-3 border border-slate-100 rounded-lg">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-xs text-slate-800">Akshay Raj (IC Markets)</span>
-                    <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded">ONLINE</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 block">Token: axy_token_88291_akshay</span>
-                  <span className="text-[10px] text-slate-500 mt-2 block">Last trade matched: Today, 12:00:00</span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="p-6 text-center text-slate-400 bg-slate-800/50 rounded-xl border border-slate-800">
+          MT5 accounts list goes here.
         </div>
       )}
-
+      
       {activeTab === 'tickets' && (
         <div className="space-y-4">
-          <h3 className="font-semibold text-sm text-slate-800">Support Ticket Queue</h3>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {tickets.map((t) => (
-              <div key={t.id} className="p-4 border border-slate-100 bg-slate-50/50 rounded-xl flex justify-between items-start hover:border-slate-200 transition">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                      t.category === 'Billing' ? 'bg-amber-50 text-amber-600' :
-                      t.category === 'MT5 Sync' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      {t.category}
-                    </span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      t.status === 'Open' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {t.status}
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-slate-800 text-sm">{t.title}</h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">{t.description}</p>
-                  <span className="text-[10px] text-slate-400 block">Submitted by {t.userEmail} on {new Date(t.date).toLocaleDateString()}</span>
+              <div key={t.id} className="p-4 border border-slate-700 bg-slate-800/50 rounded-xl flex flex-col hover:border-slate-600 transition">
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                    t.category === 'Billing' ? 'bg-amber-500/10 text-amber-400' :
+                    t.category === 'MT5 Sync' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700 text-slate-300'
+                  }`}>
+                    {t.category}
+                  </span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                    t.status === 'Open' ? 'bg-red-500/10 text-red-400' : 'bg-slate-700 text-slate-400'
+                  }`}>
+                    {t.status}
+                  </span>
                 </div>
-
-                {t.status !== 'Closed' && (
-                  <button
-                    onClick={() => handleCloseTicket(t.id)}
-                    className="border border-slate-200 hover:bg-white text-slate-700 hover:text-emerald-600 font-semibold text-xs py-1.5 px-3 rounded-lg transition flex items-center gap-1 bg-white shadow-sm"
-                  >
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    Close Ticket
-                  </button>
-                )}
+                <h4 className="font-bold text-slate-200 text-sm mb-1">{t.title}</h4>
+                <p className="text-xs text-slate-400 leading-relaxed flex-1">{t.description}</p>
+                <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-700/50">
+                  <span className="text-[10px] text-slate-500">{t.userEmail} &bull; {new Date(t.date).toLocaleDateString()}</span>
+                  {t.status !== 'Closed' && (
+                    <button
+                      onClick={() => handleCloseTicket(t.id)}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold"
+                    >
+                      Mark Closed
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
-            {tickets.length === 0 && (
-              <div className="text-center py-8 text-slate-400 text-xs">No active support tickets reported.</div>
-            )}
+          </div>
+          {tickets.length === 0 && <div className="text-center py-8 text-slate-500 text-xs">No active support tickets reported.</div>}
+        </div>
+      )}
+
+      {activeTab === 'bugs' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
+            {bugs.length === 0 ? <div className="text-center py-8 text-slate-500 text-xs">No bugs reported.</div> : bugs.map((b) => (
+              <div key={b.id} className="p-4 border border-slate-700 bg-slate-800/50 rounded-xl flex flex-col">
+                <h4 className="font-bold text-slate-200 text-sm mb-1">{b.title}</h4>
+                <p className="text-xs text-slate-400 leading-relaxed mb-2">{b.description}</p>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 w-max">Priority: {b.priority}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'features' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
+            {features.length === 0 ? <div className="text-center py-8 text-slate-500 text-xs">No feature requests.</div> : features.map((f) => (
+              <div key={f.id} className="p-4 border border-slate-700 bg-slate-800/50 rounded-xl flex flex-col">
+                <h4 className="font-bold text-slate-200 text-sm mb-1">{f.title}</h4>
+                <p className="text-xs text-slate-400 leading-relaxed mb-2">{f.description}</p>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 w-max">Status: {f.status}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {activeTab === 'announcements' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <form onSubmit={handleCreateAnnouncement} className="lg:col-span-1 p-5 border border-slate-100 rounded-xl bg-slate-50/50 space-y-4">
-            <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-2">Publish announcement</h4>
+          <form onSubmit={handleCreateAnnouncement} className="lg:col-span-1 p-5 border border-slate-700 rounded-xl bg-slate-800/50 space-y-4">
+            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-2">Publish announcement</h4>
             <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Title</label>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Title</label>
               <input
                 type="text"
                 required
                 value={annTitle}
                 onChange={(e) => setAnnTitle(e.target.value)}
                 placeholder="Announcing v2.5 Update"
-                className="bg-white border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Content Body</label>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Content Body</label>
               <textarea
                 required
                 rows={4}
                 value={annContent}
                 onChange={(e) => setAnnContent(e.target.value)}
                 placeholder="Type details of your global notification here..."
-                className="bg-white border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <button
@@ -408,17 +400,17 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg py-2.5 px-4 transition flex items-center justify-center gap-1.5"
             >
               <Plus className="h-4 w-4" />
-              Publish Broadcast Alert
+              Publish Broadcast
             </button>
           </form>
 
           <div className="lg:col-span-2 space-y-3">
             <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-2">Announcement Registry</h4>
             {announcements.map((ann) => (
-              <div key={ann.id} className="p-4 border border-slate-100 rounded-xl bg-white shadow-sm hover:border-slate-200 transition">
+              <div key={ann.id} className="p-4 border border-slate-700 rounded-xl bg-slate-800/50 hover:border-slate-600 transition">
                 <span className="text-[10px] text-slate-400 block">{new Date(ann.date).toLocaleDateString()} {new Date(ann.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
-                <h5 className="font-bold text-slate-800 text-sm mt-1">{ann.title}</h5>
-                <p className="text-xs text-slate-600 mt-2 leading-relaxed">{ann.content}</p>
+                <h5 className="font-bold text-slate-200 text-sm mt-1">{ann.title}</h5>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed">{ann.content}</p>
               </div>
             ))}
           </div>

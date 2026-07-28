@@ -412,7 +412,7 @@ void SendTradesToFXJournalPro() {
    
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    
-   string payload = "{\\"syncToken\\":\\"" + InpSyncToken + "\\",\\"email\\":\\"" + InpAuthEmail + "\\",\\"balance\\":" + DoubleToString(balance, 2) + ",\\"trades\\":[";
+   string payload = "{\\\"syncToken\\\":\\\"" + InpSyncToken + "\\\",\\\"email\\\":\\\"" + InpAuthEmail + "\\\",\\\"balance\\\":" + DoubleToString(balance, 2) + ",\\\"trades\\\":[";
    
    int total = HistoryDealsTotal();
    bool first = true;
@@ -423,34 +423,59 @@ void SendTradesToFXJournalPro() {
          long entry = HistoryDealGetInteger(ticket, DEAL_ENTRY);
          long typeInt = HistoryDealGetInteger(ticket, DEAL_TYPE);
          
-         // Look at OUT or INOUT deals (closed trades) OR balance operations
-         if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT || typeInt == DEAL_TYPE_BALANCE) {
+         // Only process closed trade deals (DEAL_ENTRY_OUT = closing deal of a position)
+         // Skip deposits, withdrawals, and balance adjustments
+         if((entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT) && typeInt != DEAL_TYPE_BALANCE) {
             string symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
-            double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
-            double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
-            double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
-            long dealTime = HistoryDealGetInteger(ticket, DEAL_TIME);
+            if(symbol == "") continue; // Skip non-trading operations
             
-            // Format time for javascript: YYYY-MM-DD HH:MI
-            string dateStr = TimeToString((datetime)dealTime, TIME_DATE|TIME_MINUTES);
-            StringReplace(dateStr, ".", "-");
+            double profit     = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+            double commission = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+            double swap       = HistoryDealGetDouble(ticket, DEAL_SWAP);
+            double volume     = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+            double exitPrice  = HistoryDealGetDouble(ticket, DEAL_PRICE);
+            long   dealTime   = HistoryDealGetInteger(ticket, DEAL_TIME);
+            ulong  posId      = (ulong)HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
             
-            string type = (typeInt == DEAL_TYPE_BUY) ? "Sell" : "Buy"; 
-            if(typeInt == DEAL_TYPE_BALANCE) {
-               type = (profit > 0) ? "Deposit" : "Withdrawal";
-               symbol = "BALANCE";
-            } else if (symbol == "") {
-               continue; // Skip other non-trading operations
+            // In MT5: the EXIT deal type is opposite to the original trade direction.
+            // DEAL_TYPE_SELL exit = was a BUY trade. DEAL_TYPE_BUY exit = was a SELL trade.
+            string type = (typeInt == DEAL_TYPE_SELL) ? "Buy" : "Sell";
+            
+            // Try to get entry price from the matching IN deal for this position
+            double entryPrice = exitPrice; // fallback
+            if(posId > 0 && HistorySelectByPosition(posId)) {
+               int posDeals = HistoryDealsTotal();
+               for(int j = 0; j < posDeals; j++) {
+                  ulong inTicket = HistoryDealGetTicket(j);
+                  if(inTicket > 0) {
+                     long inEntry = HistoryDealGetInteger(inTicket, DEAL_ENTRY);
+                     if(inEntry == DEAL_ENTRY_IN || inEntry == DEAL_ENTRY_INOUT) {
+                        entryPrice = HistoryDealGetDouble(inTicket, DEAL_PRICE);
+                        break;
+                     }
+                  }
+               }
+               // Re-select the full history range so outer loop continues correctly
+               HistorySelect(from_date, to_date);
             }
+            
+            // Format time as ISO 8601 (YYYY-MM-DDTHH:MM:SS)
+            string dateStr = TimeToString((datetime)dealTime, TIME_DATE|TIME_SECONDS);
+            StringReplace(dateStr, ".", "-");
+            StringReplace(dateStr, " ", "T");
             
             if(!first) payload += ",";
             payload += "{";
-            payload += "\\"symbol\\":\\"" + symbol + "\\",";
-            payload += "\\"type\\":\\"" + type + "\\",";
-            payload += "\\"lotSize\\":" + DoubleToString(volume, 2) + ",";
-            payload += "\\"profit\\":" + DoubleToString(profit, 2) + ",";
-            payload += "\\"entryPrice\\":" + DoubleToString(price, 5) + ",";
-            payload += "\\"date\\":\\"" + dateStr + "\\"";
+            payload += "\\\"id\\\":" + IntegerToString((long)ticket) + ",";
+            payload += "\\\"symbol\\\":\\\"" + symbol + "\\\",";
+            payload += "\\\"type\\\":\\\"" + type + "\\\",";
+            payload += "\\\"lotSize\\\":" + DoubleToString(volume, 2) + ",";
+            payload += "\\\"profit\\\":" + DoubleToString(profit, 2) + ",";
+            payload += "\\\"commission\\\":" + DoubleToString(commission, 2) + ",";
+            payload += "\\\"swap\\\":" + DoubleToString(swap, 2) + ",";
+            payload += "\\\"entryPrice\\\":" + DoubleToString(entryPrice, 5) + ",";
+            payload += "\\\"exitPrice\\\":" + DoubleToString(exitPrice, 5) + ",";
+            payload += "\\\"date\\\":\\\"" + dateStr + "\\\"";
             payload += "}";
             
             first = false;

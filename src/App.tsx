@@ -96,6 +96,7 @@ export default function App() {
   const [riskSettings, setRiskSettings] = useState<RiskSettings | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Loading indicator states
   const [loading, setLoading] = useState(true);
@@ -236,6 +237,16 @@ export default function App() {
           setUser(data.user);
           setShowOnboardingWizard(false);
           await fetchAccountData();
+          // Check admin status directly after login
+          try {
+            const adminRes = await fetch('/api/admin/check', {
+              headers: { 'x-auth-user-id': userId, 'x-auth-email': email }
+            });
+            if (adminRes.ok) {
+              const adminData = await adminRes.json();
+              setIsAdmin(!!adminData.isAdmin);
+            }
+          } catch (_) {}
           setLoading(false);
           return;
         }
@@ -279,6 +290,13 @@ export default function App() {
     if (user) {
       setSettingsName(user.name);
       setSettingsEmail(user.email);
+      // Check admin status from server (accounts for role updates in Supabase after login)
+      authFetch('/api/admin/check')
+        .then(res => res.json())
+        .then(data => setIsAdmin(!!data.isAdmin))
+        .catch(() => setIsAdmin(false));
+    } else {
+      setIsAdmin(false);
     }
   }, [user]);
 
@@ -366,6 +384,14 @@ export default function App() {
               setUser(data.user);
               setShowOnboardingWizard(false);
               await fetchAccountData();
+              // Check admin status directly after session restore
+              try {
+                const adminRes = await fetch('/api/admin/check', { headers });
+                if (adminRes.ok) {
+                  const adminData = await adminRes.json();
+                  setIsAdmin(!!adminData.isAdmin);
+                }
+              } catch (_) {}
               setLoading(false);
               return;
             }
@@ -2189,6 +2215,21 @@ export default function App() {
 
           {/* Primary Sidebar Links */}
           <nav className={`space-y-1.5 ${sidebarCollapsed ? 'flex flex-col items-center' : ''}`}>
+            {isAdmin && (
+              <button
+                onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
+                title="Admin Panel"
+                className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+                } ${
+                  activeTab === 'admin' ? 'bg-[#efefee] text-slate-900' : 'text-red-500 hover:bg-red-50 hover:text-red-600'
+                }`}
+              >
+                <Shield className="h-4 w-4 text-red-500" />
+                {!sidebarCollapsed && 'Admin Panel'}
+              </button>
+            )}
+            
             <button
               onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
               title="Dashboard"
