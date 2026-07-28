@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
@@ -29,8 +30,12 @@ import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
+import LoginPage from './pages/LoginPage';
 
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const persistAuthSession = (userId: string, email?: string) => {
     if (typeof window === 'undefined') return;
     if (userId) {
@@ -792,7 +797,6 @@ export default function App() {
       console.error('[AxyFx] Error during Supabase signout:', e);
     }
 
-    // Complete session purge
     clearAuthSession();
 
     setUser(null);
@@ -813,6 +817,7 @@ export default function App() {
     setAuthEmail('');
     setAuthPassword('');
     setAuthName('');
+    navigate('/login', { replace: true });
   };
 
   const submitOnboarding = async () => {
@@ -1667,341 +1672,27 @@ export default function App() {
     );
   }
 
-  // Auth Layout (if no user)
+  // No user - show login page
   if (!user) {
+    if (location.pathname !== '/login') {
+      navigate('/login', { replace: true });
+      return null;
+    }
     return (
-      <div className="min-h-screen bg-[#05070d] relative overflow-hidden flex items-center justify-center p-4 font-sans antialiased text-slate-100">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-500/15 blur-3xl"></div>
-          <div className="absolute -bottom-16 right-0 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl"></div>
-        </div>
-        <div className="relative w-full max-w-[560px]">
-          <div className="relative bg-[#090d16] backdrop-blur border border-white/10 rounded-[2.3rem] shadow-[0_28px_80px_-32px_rgba(0,0,0,0.75)] p-8 md:p-10 space-y-6 overflow-hidden">
-            <div className="absolute left-0 top-0 h-1 w-full rounded-t-[2.3rem] bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500"></div>
-            <div className="absolute inset-y-8 left-6 w-px bg-white/5"></div>
-            <div className="absolute inset-y-8 right-6 w-px bg-white/5"></div>
-            <div className="text-center space-y-3">
-              <Logo size={46} className="mx-auto" />
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white font-display">FX Journal Pro</h1>
-                <p className="mt-2 text-sm text-slate-400">
-                  {isRegistering
-                    ? 'Create your account'
-                    : isForgotPassword
-                    ? 'Reset your password'
-                    : 'Sign in to continue'}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <span className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-300">Professional trading journal</span>
-              <p className="mt-2 text-[11px] leading-5 text-slate-400">
-                Simple login, clean layout, and quick access to your dashboard.
-              </p>
-            </div>
-
-            {isForgotPassword ? (
-              resetSuccess ? (
-                <div className="space-y-4 text-center">
-                  <div className="bg-green-500/10 text-green-300 text-sm rounded-xl p-4 border border-green-500/20">
-                    ✅ Password updated successfully! Redirecting to login...
-                  </div>
-                </div>
-              ) : isResetOtpMode ? (
-                <form onSubmit={handleResetPassword} className="space-y-4">
-                  <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center mb-2 text-xs text-slate-300">
-                    A 6-digit password reset code has been sent to <br/><strong className="font-bold">{resetEmail}</strong>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Enter Reset Code</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={6}
-                      value={resetOtpCode}
-                      onChange={(e) => setResetOtpCode(e.target.value.replace(/\D/g, ''))}
-                      className="bg-[#0f1420] border border-white/10 text-lg text-center tracking-[0.5em] rounded-xl p-3 w-full font-mono text-slate-100 focus:ring-cyan-500 focus:border-cyan-500"
-                      placeholder="------"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">New Password</label>
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                      placeholder="Minimum 6 characters"
-                    />
-                  </div>
-                  {authError && (
-                    <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20">{authError}</div>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={actionLoading || resetOtpCode.length !== 6 || !newPassword}
-                    className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition shadow-sm disabled:opacity-50"
-                  >
-                    {actionLoading ? 'Resetting...' : 'Reset Password'}
-                  </button>
-                  <button type="button" onClick={() => { setIsResetOtpMode(false); setAuthError(null); }} className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center">
-                    ← Back
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleForgotPassword} className="space-y-4">
-                  <p className="text-xs text-slate-400 text-center">Enter your registered email and we'll send you a password reset code.</p>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                      placeholder="name@email.com"
-                    />
-                  </div>
-                  {authError && (
-                    <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20">{authError}</div>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={actionLoading}
-                    className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition shadow-sm disabled:opacity-50"
-                  >
-                    {actionLoading ? 'Sending...' : 'Send Reset Code'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setIsForgotPassword(false); setAuthError(null); }}
-                    className="w-full text-slate-400 hover:text-slate-200 text-xs font-medium block text-center"
-                  >
-                    Back to Sign In
-                  </button>
-                </form>
-              )
-          ) : isOtpMode ? (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center mb-4 text-xs text-slate-300">
-                A 6-digit confirmation code has been sent to <br/><strong className="font-bold">{authEmail}</strong>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Enter 6-Digit Code</label>
-                <input 
-                  type="text" 
-                  required 
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  className="bg-[#0f1420] border border-white/10 text-lg text-center tracking-[0.5em] rounded-xl p-3 w-full font-mono text-slate-100 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="------"
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={actionLoading || otpCode.length !== 6}
-                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
-              >
-                {actionLoading ? 'Verifying...' : 'Verify Code & Login'}
-                <CheckCircle2 className="h-3.5 w-3.5" />
-              </button>
-
-              {authError && (
-                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-xs pt-2">
-                <button 
-                  type="button" 
-                  onClick={handleResendOtp}
-                  disabled={actionLoading}
-                  className="text-cyan-400 hover:text-cyan-300 font-medium"
-                >
-                  Resend 6-Digit Code
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => { setIsOtpMode(false); setOtpCode(''); setAuthError(null); }}
-                  className="text-slate-400 hover:text-slate-200 font-medium"
-                >
-                  Change Email
-                </button>
-              </div>
-            </form>
-          ) : isRegistering ? (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Full Name</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={authName}
-                  onChange={(e) => setAuthName(e.target.value)}
-                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                  placeholder="Your Name"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Email</label>
-                <input 
-                  type="email" 
-                  required 
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                  placeholder="name@email.com"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Password</label>
-                <div className="relative">
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    required
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 pr-10 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                    placeholder="Enter password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    title={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <button 
-                type="submit" 
-                disabled={actionLoading}
-                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
-              >
-                {actionLoading ? 'Creating Workspace...' : 'Register Secure Account'}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-
-              {authError && (
-                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between items-center text-[11px] text-slate-500 mt-2">
-                <span>Already have an account?</span>
-                <button type="button" onClick={() => { setIsRegistering(false); setAuthError(null); }} className="text-cyan-300 hover:underline font-semibold">Sign In</button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Secure Email Address</label>
-                <input 
-                  type="email" 
-                  required 
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                  placeholder="name@email.com"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-300">Password</label>
-                  <button type="button" onClick={() => setIsForgotPassword(true)} className="text-cyan-300 hover:underline text-[11px] font-medium">Forgot Password?</button>
-                </div>
-                <div className="relative">
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    required
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className="bg-[#0f1420] border border-white/10 text-xs text-slate-100 rounded-xl p-3 pr-10 w-full focus:ring-cyan-500 focus:border-cyan-500 placeholder:text-slate-500"
-                    placeholder="Enter password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    title={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              
-              <button 
-                type="submit" 
-                disabled={actionLoading}
-                className="w-full bg-white text-slate-950 hover:bg-slate-100 font-semibold text-xs rounded-xl p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
-              >
-                {actionLoading ? 'Verifying Authorization...' : 'Authenticate & Sign In'}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-
-              {authError && (
-                <div className="bg-red-500/10 text-red-300 text-xs rounded-xl p-3 border border-red-500/20 flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
-              {/* Google Sign In */}
-              <div className="border-t border-white/10 pt-4 flex flex-col gap-2">
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={async () => {
-                    setActionLoading(true);
-                    setAuthError(null);
-                    try {
-                      const { error } = await supabase.auth.signInWithOAuth({
-                        provider: 'google',
-                        options: {
-                          redirectTo: window.location.origin,
-                        },
-                      });
-                      if (error) {
-                        setAuthError(error.message);
-                        setActionLoading(false);
-                      }
-                    } catch (err: any) {
-                      console.error('[AxyFx] Google Sign-In error:', err);
-                      setAuthError(`Google Sign-In error: ${err?.message || err}`);
-                      setActionLoading(false);
-                    }
-                  }}
-                  className="w-full border border-white/10 bg-[#0f1420] hover:bg-[#111827] text-slate-100 rounded-xl p-3 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z" />
-                    <path fill="#34A853" d="M3.67 7.72 6.76 10a6.1 6.1 0 0 1 5.24-3.04c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 8.1 2 4.72 4.21 3.67 7.72z" opacity="0.15" />
-                    <path fill="#FBBC05" d="M12 22c2.68 0 4.94-.88 6.59-2.39l-3.05-2.5c-.84.57-1.94.97-3.54.97-4.09 0-5.24-2.43-5.5-3.72H3.45C4.24 19.12 7.65 22 12 22z" opacity="0.15" />
-                    <path fill="#4285F4" d="M21.55 12.29c0-.65-.07-1.15-.16-1.65H12v3.9h5.5c-.26 1.37-1.1 2.58-2.41 3.46l3.05 2.5C19.96 18.86 21.55 15.92 21.55 12.29z" opacity="0.15" />
-                  </svg>
-                  Sign In with Google Account
-                </button>
-              </div>
-
-              <div className="flex justify-between items-center text-[11px] text-slate-400 mt-2">
-                <span>New to FX Journal Pro?</span>
-                <button type="button" onClick={() => { setIsRegistering(true); setAuthError(null); }} className="text-cyan-300 hover:underline font-semibold">Create free account</button>
-              </div>
-            </form>
-          )}
-          </div>
-        </div>
-      </div>
+      <LoginPage
+        isSupabaseConfigured={isSupabaseConfigured}
+        onLoginSuccess={() => {
+          window.location.href = '/dashboard';
+        }}
+        authFetch={authFetch}
+      />
     );
+  }
+
+  // User is authenticated - redirect to dashboard if on login page
+  if (location.pathname === '/login' || location.pathname === '/') {
+    navigate('/dashboard', { replace: true });
+    return null;
   }
 
   // Onboarding Wizard (if registration completes but not onboarding completed)
@@ -2010,68 +1701,43 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans antialiased text-slate-800">
         <div className="bg-white border border-slate-100 rounded-2xl shadow-xl w-full max-w-lg p-8 space-y-6 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
-
           <div className="flex items-center justify-between">
             <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-1 rounded">Onboarding Wizard</span>
             <span className="text-xs text-slate-400">Step {onboardingStep} of 2</span>
           </div>
-
           {onboardingStep === 1 ? (
             <div className="space-y-5">
               <div className="space-y-1">
                 <h2 className="text-lg font-bold text-slate-900 font-display">Personalize your trading dashboard</h2>
                 <p className="text-xs text-slate-500">Configure your parameters to unlock a custom experience matching your style.</p>
               </div>
-
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1.5">What is your Trading Experience?</label>
                   <div className="grid grid-cols-3 gap-3">
                     {['Beginner', 'Intermediate', 'Professional'].map((exp) => (
-                      <button
-                        key={exp}
-                        type="button"
-                        onClick={() => setObExperience(exp as any)}
-                        className={`p-3 border rounded-lg text-xs font-semibold text-center transition ${
-                          obExperience === exp 
-                            ? 'border-blue-600 bg-blue-50/50 text-blue-700' 
-                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                        }`}
-                      >
+                      <button key={exp} type="button" onClick={() => setObExperience(exp as any)}
+                        className={`p-3 border rounded-lg text-xs font-semibold text-center transition ${obExperience === exp ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}>
                         {exp}
                       </button>
                     ))}
                   </div>
                 </div>
-
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1.5">Primary Trading Style</label>
                   <div className="grid grid-cols-3 gap-3">
                     {['Scalping', 'Day Trading', 'Swing Trading'].map((style) => (
-                      <button
-                        key={style}
-                        type="button"
-                        onClick={() => setObStyle(style as any)}
-                        className={`p-3 border rounded-lg text-xs font-semibold text-center transition ${
-                          obStyle === style 
-                            ? 'border-blue-600 bg-blue-50/50 text-blue-700' 
-                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                        }`}
-                      >
+                      <button key={style} type="button" onClick={() => setObStyle(style as any)}
+                        className={`p-3 border rounded-lg text-xs font-semibold text-center transition ${obStyle === style ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}>
                         {style}
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setOnboardingStep(2)}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5"
-              >
-                Continue Setup
-                <ChevronRight className="h-4 w-4" />
+              <button type="button" onClick={() => setOnboardingStep(2)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5">
+                Continue Setup <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           ) : (
@@ -2080,28 +1746,14 @@ export default function App() {
                 <h2 className="text-lg font-bold text-slate-900 font-display">Select Target Markets</h2>
                 <p className="text-xs text-slate-500">Pick instruments you analyze daily to configure trackers.</p>
               </div>
-
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   {['Forex', 'Gold', 'Crypto', 'Indices'].map((market) => {
                     const active = obMarkets.includes(market);
                     return (
-                      <button
-                        key={market}
-                        type="button"
-                        onClick={() => {
-                          if (active) {
-                            setObMarkets(obMarkets.filter(m => m !== market));
-                          } else {
-                            setObMarkets([...obMarkets, market]);
-                          }
-                        }}
-                        className={`p-4 border rounded-lg text-xs font-semibold text-left transition flex items-center justify-between ${
-                          active 
-                            ? 'border-blue-600 bg-blue-50/50 text-blue-700' 
-                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                        }`}
-                      >
+                      <button key={market} type="button"
+                        onClick={() => { if (active) setObMarkets(obMarkets.filter(m => m !== market)); else setObMarkets([...obMarkets, market]); }}
+                        className={`p-4 border rounded-lg text-xs font-semibold text-left transition flex items-center justify-between ${active ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}>
                         {market}
                         <CheckCircle2 className={`h-4 w-4 ${active ? 'text-blue-600' : 'text-slate-300'}`} />
                       </button>
@@ -2109,23 +1761,12 @@ export default function App() {
                   })}
                 </div>
               </div>
-
               <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setOnboardingStep(1)}
-                  className="w-1/3 border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg p-3 transition"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={submitOnboarding}
-                  className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  {actionLoading ? 'Initializing Platform...' : 'Complete & Launch'}
-                  <Check className="h-4 w-4" />
+                <button type="button" onClick={() => setOnboardingStep(1)}
+                  className="w-1/3 border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg p-3 transition">Back</button>
+                <button type="button" disabled={actionLoading} onClick={submitOnboarding}
+                  className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg p-3 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+                  {actionLoading ? 'Initializing Platform...' : 'Complete & Launch'} <Check className="h-4 w-4" />
                 </button>
               </div>
             </div>
