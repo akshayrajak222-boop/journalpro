@@ -227,6 +227,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
             <thead>
               <tr className="border-b border-slate-700/50 text-slate-400 uppercase tracking-wider font-bold bg-slate-800/80">
                 <th className="py-3 px-4">User details</th>
+                <th className="py-3 px-4">Joined Date</th>
                 <th className="py-3 px-4">Plan tier</th>
                 <th className="py-3 px-4">Experience / Style</th>
                 <th className="py-3 px-4 text-center">Accounts</th>
@@ -237,7 +238,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-500">No users found.</td>
+                  <td colSpan={7} className="py-6 text-center text-slate-500">No users found.</td>
                 </tr>
               ) : (
                 users.map((u) => (
@@ -245,6 +246,9 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
                     <td className="py-3 px-4">
                       <div className="font-semibold text-slate-200">{u.name || 'Unknown'}</div>
                       <div className="text-[10px] text-slate-400">{u.email}</div>
+                    </td>
+                    <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
+                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${

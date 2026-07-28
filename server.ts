@@ -2913,6 +2913,12 @@ RESTRICTIONS:
     if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
     const { id } = req.params;
     const { status } = req.body;
+    
+    if (useSupabase) {
+      const { error } = await supabase.from('support_tickets').update({ status: status || 'Closed' }).eq('id', id);
+      if (error) console.error("Error updating ticket in Supabase:", error);
+      return res.json({ message: 'Ticket status updated' });
+    }
 
     const idx = db.supportTickets.findIndex((t: any) => t.id === id);
     if (idx !== -1) {
