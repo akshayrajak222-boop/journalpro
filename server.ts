@@ -2493,7 +2493,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         const existingIdx = db.trades.findIndex((t: any) => {
           const tAccountId = t.accountId || t.account_id;
           if (tAccountId !== resolvedAccountId) return false;
-          if (eaTicket && (t.id === eaTicket || String(t.id) === eaTicket)) return true;
+          if (eaTicket && (t.id === eaTicket || String(t.id) === eaTicket || t.id === `${resolvedAccountId}_${eaTicket}`)) return true;
           // Composite match
           const isSameSymbol = (t.symbol || '').toUpperCase() === (incomingTrade.symbol || '').toUpperCase();
           const isSameType = t.type === (incomingTrade.type || 'Buy');
@@ -2512,7 +2512,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           t.swap = parseFloat(incomingTrade.swap || 0);
           updatedCount++;
         } else {
-          const newId = eaTicket || `mt5_ea_${Date.now()}_${idx}`;
+          const newId = eaTicket ? `${resolvedAccountId}_${eaTicket}` : `mt5_ea_${Date.now()}_${idx}`;
           console.log(`[MT5 Sync] Trade[${idx}] ticket=${eaTicket} symbol=${incomingTrade.symbol} → NEW (id=${newId})`);
           const newTrade = {
             id: newId,
