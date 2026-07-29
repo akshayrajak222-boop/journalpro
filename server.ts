@@ -2590,7 +2590,9 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       message: 'MT5 Sync completed successfully',
       syncedTradesCount: syncedCount,
       accountBalance: db.accounts[accountIdx].currentBalance,
-      startingBalance: db.accounts[accountIdx].startingBalance
+      startingBalance: db.accounts[accountIdx].startingBalance,
+      debug_upsertUserId: upsertUserId,
+      debug_upsertAccountId: upsertAccountId,
     };
 
     if (useSupabase && upsertUserId) {
@@ -2634,18 +2636,29 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         console.log(`[MT5 Sync] Inserting ${supabaseTradeRows.length} new trades into Supabase...`);
         console.log('[MT5 Sync] Sample Supabase row:', JSON.stringify(supabaseTradeRows[0]));
 
-        // Use upsert (ignore duplicates gracefully)
-        const { data: insertedData, error: tradeErr } = await supabase
-          .from('trades')
-          .upsert(supabaseTradeRows, { onConflict: 'id', ignoreDuplicates: true });
+        // Insert one at a time to catch per-row errors
+        let insertedCount = 0;
+        let firstError: any = null;
+        for (const row of supabaseTradeRows) {
+          const { error: rowErr } = await supabase
+            .from('trades')
+            .upsert(row, { onConflict: 'id', ignoreDuplicates: false });
+          if (rowErr) {
+            if (!firstError) {
+              firstError = rowErr;
+              console.error('[MT5 Sync] ✗ First row insert error:', JSON.stringify(rowErr), '| Row:', JSON.stringify(row));
+            }
+          } else {
+            insertedCount++;
+          }
+        }
 
-        if (tradeErr) {
-          console.error('[MT5 Sync] ✗ Trade insert error:', JSON.stringify(tradeErr));
-          console.error('[MT5 Sync] ✗ Failed row sample:', JSON.stringify(supabaseTradeRows[0]));
-          syncResponse.supabaseError = tradeErr.message;
-          syncResponse.supabaseDetails = tradeErr;
+        if (firstError) {
+          syncResponse.supabaseError = firstError.message;
+          syncResponse.supabaseDetails = firstError;
+          console.error(`[MT5 Sync] ✗ Inserted ${insertedCount}/${supabaseTradeRows.length} trades. First error:`, JSON.stringify(firstError));
         } else {
-          console.log(`[MT5 Sync] ✓ ${supabaseTradeRows.length} trades upserted to Supabase successfully`);
+          console.log(`[MT5 Sync] ✓ ${insertedCount}/${supabaseTradeRows.length} trades inserted successfully`);
         }
       } else {
         console.log('[MT5 Sync] No new trades to insert into Supabase.');
