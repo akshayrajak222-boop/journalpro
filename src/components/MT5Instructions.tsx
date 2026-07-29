@@ -622,13 +622,30 @@ void SendTradesToFXJournalPro() {
         <div className="mb-4 p-3 bg-slate-900/70 border border-slate-800 rounded-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-mono truncate">Token: {localConnection.syncToken}</span>
-            <button
-              onClick={checkSyncStatus}
-              disabled={debugStatus.loading}
-              className="text-xs font-semibold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition"
-            >
-              {debugStatus.loading ? 'Checking...' : 'Check Sync Status'}
-            </button>
+            <div className="flex gap-1.5">
+              <button
+                onClick={checkSyncStatus}
+                disabled={debugStatus.loading}
+                className="text-xs font-semibold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition"
+              >
+                {debugStatus.loading ? 'Checking...' : 'Check Sync Status'}
+              </button>
+              <button
+                onClick={async () => {
+                  setDebugStatus({loading: true});
+                  try {
+                    const res = await fetch(`/api/mt5/diagnose?token=${encodeURIComponent(syncToken)}`);
+                    const data = await res.json();
+                    setDebugStatus({loading: false, data: {...debugStatus.data, diagnoseResult: data}});
+                  } catch (e: any) {
+                    setDebugStatus({loading: false, error: e.message});
+                  }
+                }}
+                className="text-xs font-semibold px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded-lg transition"
+              >
+                Diagnose Sync
+              </button>
+            </div>
           </div>
           {debugStatus.data && (
             <div className="mt-2 text-[10px] font-mono text-slate-300 space-y-0.5">
@@ -664,6 +681,18 @@ void SendTradesToFXJournalPro() {
                     <div className="text-rose-400">Upsert Error: {debugStatus.data.lastSync.supabaseError}</div>
                   )}
                   <div className="text-slate-600">Time: {debugStatus.data.lastSync.timestamp}</div>
+                </div>
+              )}
+              {debugStatus.data.diagnoseResult && (
+                <div className="mt-1 border-t border-slate-700 pt-1 text-[9px]">
+                  <div className={`font-bold ${debugStatus.data.diagnoseResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    Diagnose: {debugStatus.data.diagnoseResult.success ? 'Insert OK ✓' : 'Failed ✗'}
+                  </div>
+                  {debugStatus.data.diagnoseResult.error && (
+                    <div className="text-rose-400">Error: {debugStatus.data.diagnoseResult.error}</div>
+                  )}
+                  <div className="text-slate-500">User ID used: {debugStatus.data.diagnoseResult.connUserId}</div>
+                  <div className="text-slate-500">Account ID used: {debugStatus.data.diagnoseResult.connAccountId}</div>
                 </div>
               )}
               {debugStatus.error && <div className="text-rose-400">Error: {debugStatus.error}</div>}

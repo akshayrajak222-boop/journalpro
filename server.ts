@@ -2786,6 +2786,72 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   });
 
   // ==========================================
+  // MT5 DIAGNOSE ENDPOINT — test exact sync insert path
+  // GET /api/mt5/diagnose?token=YOUR_SYNC_TOKEN
+  // ==========================================
+  app.get('/api/mt5/diagnose', async (req, res) => {
+    const token = (req.query.token as string || '').trim();
+    if (!token) return res.status(400).json({ error: 'Provide ?token=YOUR_SYNC_TOKEN' });
+    if (!useSupabase) return res.status(503).json({ error: 'Supabase not configured' });
+
+    try {
+      const { data: conn, error: connErr } = await supabase
+        .from('mt5_connections')
+        .select('*')
+        .eq('sync_token', token)
+        .maybeSingle();
+      if (connErr) return res.status(500).json({ error: 'Supabase error', details: connErr });
+      if (!conn) return res.status(404).json({ error: 'No connection found for this sync token' });
+
+      const testId = `_diag_sync_${Date.now()}`;
+      const { error: insertErr } = await supabase
+        .from('trades')
+        .upsert({
+          id: testId,
+          account_id: conn.account_id,
+          user_id: conn.user_id,
+          symbol: 'DIAG',
+          type: 'Buy',
+          lot_size: 0.1,
+          entry_price: 1.0,
+          exit_price: 1.0,
+          profit: 0,
+          commission: 0,
+          swap: 0,
+          date: new Date().toISOString(),
+          is_mt5_sync: true,
+          tags: ['MT5 AutoSync'],
+          strategy: 'MT5 Expert EA Sync',
+          emotion: 'Calm',
+          notes: 'Diagnostic insert'
+        }, { onConflict: 'id', ignoreDuplicates: false });
+
+      if (insertErr) {
+        return res.json({ success: false, error: insertErr.message, details: insertErr, connUserId: conn.user_id, connAccountId: conn.account_id });
+      }
+
+      // Verify it was inserted
+      const { count } = await supabase
+        .from('trades')
+        .select('*', { count: 'exact', head: true })
+        .eq('account_id', conn.account_id);
+
+      // Clean up
+      await supabase.from('trades').delete().eq('id', testId);
+
+      return res.json({
+        success: true,
+        insertedCount: count,
+        connUserId: conn.user_id,
+        connAccountId: conn.account_id,
+        message: 'Diagnostic insert succeeded. Check Sync Status should now show trades.'
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Unknown error' });
+    }
+  });
+
+  // ==========================================
   // REAL-TIME AI TRADING INSIGHTS ROUTE (GEMINI)
   // ==========================================
 
