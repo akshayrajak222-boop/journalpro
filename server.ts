@@ -780,6 +780,25 @@ async function removeUserDatabaseAliases(userId?: string, email?: string) {
 const app = express();
 const PORT = 3000;
 
+async function verifyTurnstile(token: string): Promise<boolean> {
+  const secretKey = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
+  if (!token) return false;
+  try {
+    const params = new URLSearchParams();
+    params.append('secret', secretKey);
+    params.append('response', token);
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: params
+    });
+    const data = await res.json();
+    return data.success;
+  } catch (err) {
+    console.error('Turnstile verification failed:', err);
+    return false;
+  }
+}
+
   // Rate limiter for auth endpoints (prevents brute force / OTP spam)
   const authRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -881,7 +900,13 @@ const PORT = 3000;
 
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { email, name, password, isEmailVerified, id, userId } = req.body;
+      const { email, name, password, isEmailVerified, id, userId, turnstileToken } = req.body;
+      
+      const isHuman = await verifyTurnstile(turnstileToken);
+      if (!isHuman) {
+        return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
+      }
+
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }
@@ -984,7 +1009,13 @@ const PORT = 3000;
 
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, password, id, userId } = req.body;
+      const { email, password, id, userId, turnstileToken } = req.body;
+      
+      const isHuman = await verifyTurnstile(turnstileToken);
+      if (!isHuman) {
+        return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
+      }
+
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }

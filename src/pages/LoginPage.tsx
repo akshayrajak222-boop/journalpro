@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import { supabase } from '../supabaseClient';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 interface LoginPageProps {
   isSupabaseConfigured: boolean;
@@ -31,6 +32,8 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
   const [resetEmail, setResetEmail] = useState('');
   const [resetOtpCode, setResetOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
+
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const persistAuthSession = (userId: string, email?: string) => {
     if (typeof window === 'undefined') return;
@@ -87,7 +90,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
+        body: JSON.stringify({ email: authEmail, password: authPassword, turnstileToken })
       });
       if (!res.ok) {
         const errorData = await res.json();
@@ -127,7 +130,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
-        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword })
+        body: JSON.stringify({ email: authEmail, name: authName, password: authPassword, turnstileToken })
       });
       if (!res.ok) {
         const errorData = await res.json();
@@ -438,7 +441,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                   </button>
                 </div>
                 {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
-                <button type="submit" disabled={actionLoading} className={buttonPrimary}>
+                <div className="flex justify-center my-2">
+                  <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+                </div>
+                <button type="submit" disabled={actionLoading || !turnstileToken} className={buttonPrimary}>
                   {actionLoading ? 'Creating account...' : 'Create account'}
                 </button>
                 <p className="text-center text-sm text-slate-400">
@@ -463,7 +469,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                   </div>
                 </div>
                 {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
-                <button type="submit" disabled={actionLoading} className={buttonPrimary}>
+                <div className="flex justify-center my-2">
+                  <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+                </div>
+                <button type="submit" disabled={actionLoading || !turnstileToken} className={buttonPrimary}>
                   {actionLoading ? 'Signing in...' : 'Sign in'}
                 </button>
 
