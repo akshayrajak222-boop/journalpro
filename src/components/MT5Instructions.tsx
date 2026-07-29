@@ -71,6 +71,21 @@ export default function MT5Instructions({
   const [customMonths, setCustomMonths] = useState('5');
   const [savingHistory, setSavingHistory] = useState(false);
 
+  // Sync debug state
+  const [debugStatus, setDebugStatus] = useState<{loading: boolean; data?: any; error?: string}>({loading: false});
+
+  const checkSyncStatus = async () => {
+    if (!syncToken) return;
+    setDebugStatus({loading: true});
+    try {
+      const res = await fetch(`/api/mt5/debug?token=${encodeURIComponent(syncToken)}`);
+      const data = await res.json();
+      setDebugStatus({loading: false, data, error: data.error});
+    } catch (e: any) {
+      setDebugStatus({loading: false, error: e.message});
+    }
+  };
+
   // Fixed WebRequest URL for MT5 automation
   const webRequestUrl = 'https://fxjournalpro.com';
 
@@ -402,19 +417,43 @@ void OnTimer() {
 
 // Web request logic to transmit trades securely
 void SendTradesToFXJournalPro() {
-   datetime to_date = TimeCurrent();
-   datetime from_date = to_date - (${historyDaysVal} * 24 * 60 * 60); // ${historyDaysVal} days history
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   long   accountLogin = AccountInfoInteger(ACCOUNT_LOGIN);
+   string accountServer = AccountInfoString(ACCOUNT_SERVER);
    
-   if(!HistorySelect(from_date, to_date)) {
+   // --- Debug: print account info ---
+   Print("[FX Journal Pro] === EA DIAGNOSTIC ===");
+   Print("[FX Journal Pro] Account Login: ", accountLogin, " | Server: ", accountServer, " | Balance: ", DoubleToString(balance, 2));
+   
+   // --- Step 1: Try the configured date range ---
+   datetime to_date = TimeCurrent();
+   datetime from_date = to_date - (${historyDaysVal} * 24 * 60 * 60);
+   
+   Print("[FX Journal Pro] Query range: from ", (string)from_date, " to ", (string)to_date, " (", ${historyDaysVal}, " days)");
+   
+   int totalDeals = 0;
+   
+   if(HistorySelect(from_date, to_date)) {
+      totalDeals = HistoryDealsTotal();
+      Print("[FX Journal Pro] Deals found in range: ", totalDeals);
+      if(totalDeals == 0) {
+         // --- Step 2: Fallback — try ALL history (from year 2000) ---
+         Print("[FX Journal Pro] No deals in range. Falling back to FULL history (since 2000)...");
+         if(HistorySelect(0, TimeCurrent())) {
+            totalDeals = HistoryDealsTotal();
+            Print("[FX Journal Pro] FULL history deal count: ", totalDeals);
+         } else {
+            Print("[FX Journal Pro] FULL history select FAILED");
+         }
+      }
+   } else {
       Print("[FX Journal Pro] Failed to load history.");
       return;
    }
    
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   
    string payload = "{\\\"syncToken\\\":\\\"" + InpSyncToken + "\\\",\\\"email\\\":\\\"" + InpAuthEmail + "\\\",\\\"balance\\\":" + DoubleToString(balance, 2) + ",\\\"trades\\\":[";
    
-   int total = HistoryDealsTotal();
+   int total = totalDeals;
    bool first = true;
    
    for(int i = 0; i < total; i++) {
@@ -485,6 +524,15 @@ void SendTradesToFXJournalPro() {
    
    payload += "]}";
    
+   // --- Debug: show how many trades were included in the payload ---
+   int includedCount = 0;
+   int tempPos = StringFind(payload, "\\\"symbol\\\"");
+   while(tempPos != -1) {
+      includedCount++;
+      tempPos = StringFind(payload, "\\\"symbol\\\"", tempPos + 1);
+   }
+   Print("[FX Journal Pro] Trades included in payload: ", includedCount);
+   
    char postData[];
    char resultData[];
    string headers = "Content-Type: application/json\\r\\n";
@@ -551,6 +599,48 @@ void SendTradesToFXJournalPro() {
           </div>
         </div>
       </div>
+
+      {/* Sync Debug Status */}
+      {localConnection?.syncToken && (
+        <div className="mb-4 p-3 bg-slate-900/70 border border-slate-800 rounded-lg">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400 font-mono truncate">Token: {localConnection.syncToken}</span>
+            <button
+              onClick={checkSyncStatus}
+              disabled={debugStatus.loading}
+              className="text-xs font-semibold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition"
+            >
+              {debugStatus.loading ? 'Checking...' : 'Check Sync Status'}
+            </button>
+          </div>
+          {debugStatus.data && (
+            <div className="mt-2 text-[10px] font-mono text-slate-300 space-y-0.5">
+              <div>Connection: {debugStatus.data.connection?.status || 'N/A'}</div>
+              <div>Account: {debugStatus.data.account?.name || 'N/A'} (ID: {debugStatus.data.account?.id || 'N/A'})</div>
+              <div>Trades in DB: <span className="text-emerald-400 font-bold">{debugStatus.data.tradeCount}</span></div>
+              {debugStatus.data.recentTrades?.length > 0 && (
+                <div className="text-emerald-400">Trades exist in Supabase ✓</div>
+              )}
+              {debugStatus.data.tradeCount === 0 && (
+                <div className="text-amber-400">No trades found — EA may not have found closed deals in MT5 history</div>
+              )}
+              {debugStatus.data.diagnostic && (
+                <div className="mt-1 border-t border-slate-700 pt-1">
+                  {!debugStatus.data.diagnostic.testInsertSuccess ? (
+                    <div className="text-rose-400">
+                      Supabase DB Error: {debugStatus.data.diagnostic.testInsertError || 'Insert test failed (see console)'}
+                    </div>
+                  ) : (
+                    <div className="text-emerald-400">Supabase insert works ✓</div>
+                  )}
+                  <div className="text-slate-500">Account in trading_accounts: {debugStatus.data.diagnostic.accountFound ? '✓' : '✗'}</div>
+                </div>
+              )}
+              {debugStatus.error && <div className="text-rose-400">Error: {debugStatus.error}</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modern tabbed design to select between Expert Advisor and Investor Password Cloud Sync */}
       <div className="flex border-b border-slate-800 mb-6 gap-2">

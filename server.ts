@@ -1030,8 +1030,12 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       const previousUserId = user?.id;
       const previousEmail = user?.email;
 
-      if (!user || !user.password) {
+      if (!user) {
         return res.status(404).json({ error: 'No account found with this email. Please register first.' });
+      }
+
+      if (!user.password) {
+        return res.status(401).json({ error: 'Incorrect password. Please try again.' });
       }
 
       if (!password) {
@@ -1040,7 +1044,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
-        return res.status(401).json({ error: 'Invalid password. Please check your credentials and try again.' });
+        return res.status(401).json({ error: 'Incorrect password. Please try again.' });
       }
 
       res.json({ message: 'Login successful', user });
@@ -2575,6 +2579,14 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     // ═══════════════════════════════════════════════════
     // STEP 6: PERSIST TO SUPABASE
     // ═══════════════════════════════════════════════════
+    const syncResponse: any = {
+      success: true,
+      message: 'MT5 Sync completed successfully',
+      syncedTradesCount: syncedCount,
+      accountBalance: db.accounts[accountIdx].currentBalance,
+      startingBalance: db.accounts[accountIdx].startingBalance
+    };
+
     if (useSupabase && resolvedUserId) {
       // 6a. Update account balance
       const { error: accErr } = await supabase
@@ -2624,6 +2636,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         if (tradeErr) {
           console.error('[MT5 Sync] ✗ Trade insert error:', JSON.stringify(tradeErr));
           console.error('[MT5 Sync] ✗ Failed row sample:', JSON.stringify(supabaseTradeRows[0]));
+          syncResponse.supabaseError = tradeErr.message;
+          syncResponse.supabaseDetails = tradeErr;
         } else {
           console.log(`[MT5 Sync] ✓ ${supabaseTradeRows.length} trades upserted to Supabase successfully`);
         }
@@ -2649,22 +2663,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         .from('trades')
         .select('*', { count: 'exact', head: true })
         .eq('account_id', resolvedAccountId);
+      syncResponse.supabaseTradeCount = count;
       console.log(`[MT5 Sync] ✓ Supabase trade count for account ${resolvedAccountId}: ${count}`);
 
     } else {
       await saveDatabase(db);
     }
 
-    // ═══════════════════════════════════════════════════
-    // STEP 7: FINAL RESPONSE
-    // ═══════════════════════════════════════════════════
-    const syncResponse = {
-      success: true,
-      message: 'MT5 Sync completed successfully',
-      syncedTradesCount: syncedCount,
-      accountBalance: db.accounts[accountIdx].currentBalance,
-      startingBalance: db.accounts[accountIdx].startingBalance
-    };
     console.log('[MT5 Sync] Sync complete. Response:', JSON.stringify(syncResponse));
     res.status(200).json(syncResponse);
   });
@@ -2701,11 +2706,36 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         .eq('id', conn.account_id)
         .maybeSingle();
 
+      // Test insert to diagnose why trades aren't persisting
+      const testId = `_diag_test_${Date.now()}`;
+      const { error: testErr } = await supabase
+        .from('trades')
+        .upsert({
+          id: testId,
+          account_id: conn.account_id,
+          user_id: conn.user_id,
+          symbol: 'DIAG',
+          type: 'Buy',
+          profit: 0,
+          date: new Date().toISOString(),
+          is_mt5_sync: true
+        }, { onConflict: 'id', ignoreDuplicates: false });
+      if (!testErr) {
+        await supabase.from('trades').delete().eq('id', testId);
+      }
+
       return res.json({
         connection: conn,
         account,
         recentTrades: trades || [],
-        tradeCount: trades?.length || 0
+        tradeCount: trades?.length || 0,
+        diagnostic: {
+          testInsertSuccess: !testErr,
+          testInsertError: testErr?.message || null,
+          testInsertDetails: testErr || null,
+          accountFound: !!account,
+          accountId: conn.account_id,
+        }
       });
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || 'Unknown error' });
