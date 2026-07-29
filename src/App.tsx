@@ -3153,83 +3153,116 @@ export default function App() {
 
               {/* Subscription sub-tab */}
               {settingsTab === 'subscription' && user && (
-                <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs space-y-6">
-                  <div>
-                    <h3 className="font-extrabold text-slate-900 text-base">Subscription Plan</h3>
-                    <p className="text-xs text-slate-400">Control active tiers, review purchase certificates, or modify memberships.</p>
+                <div className="space-y-6">
+
+                  {/* Limited Period Banner */}
+                  <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-5 text-white shadow-lg">
+                    <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/10 rounded-full" />
+                    <div className="absolute -bottom-4 -left-4 w-24 h-24 bg-white/10 rounded-full" />
+                    <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <span className="inline-block bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full mb-2">🎉 Limited Period Offer</span>
+                        <h3 className="text-lg font-black leading-tight">Free Access — For Now!</h3>
+                        <p className="text-sm text-emerald-50 mt-1 max-w-xs">You are currently enjoying <strong>full Pro access at ₹0/month</strong>. This offer won't last forever — the regular price is ₹99/month.</p>
+                      </div>
+                      <div className="text-center bg-white/15 rounded-xl px-5 py-3 backdrop-blur-sm border border-white/20">
+                        <div className="flex items-baseline gap-1 justify-center">
+                          <span className="text-2xl font-black">₹0</span>
+                          <span className="text-sm text-emerald-100">/month</span>
+                        </div>
+                        <div className="text-[11px] text-emerald-100 mt-0.5 line-through">₹99/month</div>
+                        <div className="text-[10px] font-bold text-emerald-200 mt-1">100% OFF</div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-50 pt-6">
-                    {/* Active Plan Widget */}
-                    <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-5 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest block">Current Plan</span>
-                        <h4 className="text-lg font-black text-slate-900">
-                          {user.isPro ? 'FX Journal Pro' : 'Free Sandbox Trial'}
-                        </h4>
-                        <p className="text-xs text-slate-400 leading-relaxed">
-                          {user.isPro 
-                            ? 'Lifetime access is active. Thank you for using FX Journal Pro!' 
-                            : 'Currently enjoying free basic journaling features. Unlock unlimited portfolios and AI tools.'}
-                        </p>
+                  {/* Plan Comparison */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Current Free Plan */}
+                    <div className="bg-white border-2 border-emerald-400 rounded-2xl p-5 relative shadow-sm">
+                      <div className="absolute -top-3 left-4">
+                        <span className="bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">✅ Your Current Plan</span>
                       </div>
-
-                      <div className="pt-6 flex flex-col gap-2">
-                        {!user.isPro ? (
-                          <button
-                            onClick={handleUpgradeToPro}
-                            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 px-3 rounded-lg transition text-center shadow-xs"
-                          >
-                            Upgrade Plan (Lifetime)
-                          </button>
-                        ) : (
-                          <div className="space-y-3">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg w-full justify-center">
-                              <Check className="h-4 w-4" /> Professional Membership Active
-                            </span>
-                            <button
-                              onClick={handleCancelSubscription}
-                              className="w-full text-slate-400 hover:text-red-500 font-bold text-[11px] py-1 transition text-center underline"
-                            >
-                              Cancel Subscription
-                            </button>
-                          </div>
-                        )}
+                      <div className="mt-2 space-y-1">
+                        <h4 className="text-base font-black text-slate-900">FX Journal Pro</h4>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-black text-emerald-600">₹0</span>
+                          <span className="text-sm text-slate-400">/month</span>
+                          <span className="text-xs text-slate-400 ml-1 line-through">₹99</span>
+                        </div>
+                        <p className="text-[11px] text-emerald-600 font-semibold">Free during limited launch period</p>
+                      </div>
+                      <ul className="mt-4 space-y-2">
+                        {[
+                          'Unlimited trade journaling',
+                          'MT5 auto-sync (EA)',
+                          'AI Mentor coaching',
+                          'Performance analytics',
+                          'Risk Guard alerts',
+                          'Trading calendar',
+                          'Multi-account portfolios',
+                        ].map(f => (
+                          <li key={f} className="flex items-center gap-2 text-xs text-slate-700">
+                            <span className="text-emerald-500 font-bold">✓</span> {f}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-5">
+                        <span className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 font-bold text-xs py-2.5 px-3 rounded-xl border border-emerald-200">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Active — Free Access
+                        </span>
                       </div>
                     </div>
 
-                    {/* Billing History */}
-                    <div className="space-y-3">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Billing History</span>
-                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                        {user.isPro ? (
-                          <div className="p-3 border border-slate-100 rounded-lg flex justify-between items-center bg-slate-50/50">
-                            <div className="text-xs">
-                              <strong className="text-slate-800 block">FX Journal Pro Lifetime</strong>
-                              <span className="text-[10px] text-slate-400 block mt-0.5">Payment ID: #FX-8102</span>
-                            </div>
-                            <div className="text-right text-xs">
-                              <span className="font-bold text-slate-800 block">$499.00</span>
-                              <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">Paid</span>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="p-3 border border-slate-100 rounded-lg flex justify-between items-center bg-slate-50/50">
-                          <div className="text-xs">
-                            <strong className="text-slate-800 block">Free Trial Onboarding</strong>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">Registration</span>
-                          </div>
-                          <div className="text-right text-xs">
-                            <span className="font-bold text-slate-800 block">$0.00</span>
-                            <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">Activated</span>
-                          </div>
+                    {/* Regular Plan */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">After Limited Period</span>
+                        <h4 className="text-base font-black text-slate-900">FX Journal Pro</h4>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-black text-slate-800">₹99</span>
+                          <span className="text-sm text-slate-400">/month</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">Regular pricing after the launch offer ends</p>
+                      </div>
+                      <ul className="mt-4 space-y-2">
+                        {[
+                          'Everything in current plan',
+                          'Priority support',
+                          'New features first',
+                        ].map(f => (
+                          <li key={f} className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="text-slate-400 font-bold">✓</span> {f}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-5">
+                        <div className="w-full text-center text-slate-400 font-bold text-xs py-2.5 px-3 rounded-xl border border-slate-200 bg-white">
+                          Starts after offer ends
                         </div>
                       </div>
                     </div>
                   </div>
+
+                  {/* Current Status */}
+                  <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Account Status</p>
+                        <p className="text-sm font-black text-slate-900 mt-0.5">{user.name || user.email}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{user.email}</p>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                        Active — Free Access
+                      </span>
+                    </div>
+                  </div>
+
                 </div>
               )}
+
 
               {/* About sub-tab */}
               {settingsTab === 'about' && (
