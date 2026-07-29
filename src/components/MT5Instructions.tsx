@@ -551,23 +551,43 @@ void SendTradesToFXJournalPro() {
    }
    
    if(res == 200) {
-      Print("[FX Journal Pro] Sync completed successfully. Balance: ", DoubleToString(balance, 2));
       // Print response body for diagnostics
       string respText = "";
       for(int i = 0; i < ArraySize(resultData); i++) {
          respText += CharToString(resultData[i]);
       }
-      if(StringLen(respText) > 0 && StringFind(respText, "\\\"success\\\":true") >= 0) {
-         int errPos = StringFind(respText, "\\\"supabaseError\\\"");
-         if(errPos >= 0) {
-            string errSnippet = StringSubstr(respText, errPos, 200);
-            Print("[FX Journal Pro] Server warning: ", errSnippet);
-         }
-         int countPos = StringFind(respText, "\\\"supabaseTradeCount\\\"");
-         if(countPos >= 0) {
-            string countSnippet = StringSubstr(respText, countPos, 50);
-            Print("[FX Journal Pro] Supabase trade count: ", countSnippet);
-         }
+      
+      // Parse syncedTradesCount from response
+      string syncedCount = "?";
+      int scPos = StringFind(respText, "\"syncedTradesCount\":");
+      if(scPos >= 0) {
+         int scStart = scPos + 20;
+         int scEnd = StringFind(respText, ",", scStart);
+         if(scEnd < 0) scEnd = StringFind(respText, "}", scStart);
+         if(scEnd > scStart) syncedCount = StringSubstr(respText, scStart, scEnd - scStart);
+      }
+      
+      // Parse supabaseTradeCount from response
+      string dbCount = "?";
+      int dbPos = StringFind(respText, "\"supabaseTradeCount\":");
+      if(dbPos >= 0) {
+         int dbStart = dbPos + 21;
+         int dbEnd = StringFind(respText, ",", dbStart);
+         if(dbEnd < 0) dbEnd = StringFind(respText, "}", dbStart);
+         if(dbEnd > dbStart) dbCount = StringSubstr(respText, dbStart, dbEnd - dbStart);
+      }
+      
+      if(includedCount == 0) {
+         Print("[FX Journal Pro] Sync OK. Balance: ", DoubleToString(balance, 2), " | WARNING: 0 trades in payload — check MT5 History tab is loaded (Ctrl+Shift+H)");
+      } else {
+         Print("[FX Journal Pro] Sync completed. Balance: ", DoubleToString(balance, 2), " | Sent: ", includedCount, " | New saved: ", syncedCount, " | Total in DB: ", dbCount);
+      }
+      
+      // Check for Supabase error
+      int errPos = StringFind(respText, "\"supabaseError\":");
+      if(errPos >= 0) {
+         string errSnippet = StringSubstr(respText, errPos, 150);
+         Print("[FX Journal Pro] *** Server DB error: ", errSnippet);
       }
    } else {
       Print("[FX Journal Pro] Sync failed. Result Code: ", res, " | LastError: ", lastError);
