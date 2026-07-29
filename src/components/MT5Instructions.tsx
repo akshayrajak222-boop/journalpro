@@ -559,7 +559,7 @@ void SendTradesToFXJournalPro() {
       
       // Parse syncedTradesCount from response
       string syncedCount = "?";
-      int scPos = StringFind(respText, "\"syncedTradesCount\":");
+      int scPos = StringFind(respText, "\\\"syncedTradesCount\\\":");
       if(scPos >= 0) {
          int scStart = scPos + 20;
          int scEnd = StringFind(respText, ",", scStart);
@@ -569,7 +569,7 @@ void SendTradesToFXJournalPro() {
       
       // Parse supabaseTradeCount from response
       string dbCount = "?";
-      int dbPos = StringFind(respText, "\"supabaseTradeCount\":");
+      int dbPos = StringFind(respText, "\\\"supabaseTradeCount\\\":");
       if(dbPos >= 0) {
          int dbStart = dbPos + 21;
          int dbEnd = StringFind(respText, ",", dbStart);
@@ -584,7 +584,7 @@ void SendTradesToFXJournalPro() {
       }
       
       // Check for Supabase error
-      int errPos = StringFind(respText, "\"supabaseError\":");
+      int errPos = StringFind(respText, "\\\"supabaseError\\\":");
       if(errPos >= 0) {
          string errSnippet = StringSubstr(respText, errPos, 150);
          Print("[FX Journal Pro] *** Server DB error: ", errSnippet);
