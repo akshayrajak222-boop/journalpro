@@ -2763,105 +2763,193 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       const totalTrades = trades.length;
 
       if (totalTrades === 0) {
-        return `Hello! I noticed you don't have any logged trades yet in "${accName}". To get personalized AI feedback on your discipline, win rate, and risk management, start logging your trades in the Trading Journal or connect your MT5 account!`;
+        return `Hello! I noticed you don't have any logged trades yet in "${accName}".\n\nTo get personalized AI feedback on your discipline, win rate, and risk management, start logging your trades in the **Trading Journal** or connect your MT5 account via the **MT5 Automation** tab!\n\nOnce you have some trades logged, I can give you deep insights on your performance, risk, and mindset.`;
       }
 
       const wins = trades.filter((t: any) => (t.profit || 0) > 0);
       const losses = trades.filter((t: any) => (t.profit || 0) < 0);
       const totalProfit = trades.reduce((acc: number, t: any) => acc + (t.profit || 0), 0);
       const winRate = totalTrades > 0 ? ((wins.length / totalTrades) * 100).toFixed(1) : '0';
-      
       const totalWinAmount = wins.reduce((acc: number, t: any) => acc + (t.profit || 0), 0);
       const totalLossAmount = Math.abs(losses.reduce((acc: number, t: any) => acc + (t.profit || 0), 0));
       const avgWin = wins.length > 0 ? (totalWinAmount / wins.length).toFixed(2) : '0.00';
       const avgLoss = losses.length > 0 ? (totalLossAmount / losses.length).toFixed(2) : '0.00';
       const profitFactor = totalLossAmount > 0 ? (totalWinAmount / totalLossAmount).toFixed(2) : (totalWinAmount > 0 ? 'Inf' : '1.0');
+      const avgRisk = (trades.reduce((acc: number, t: any) => acc + (t.riskPercentage || 1), 0) / totalTrades).toFixed(1);
 
       const symbolsCount: Record<string, number> = {};
-      trades.forEach((t: any) => {
-        if (t.symbol) symbolsCount[t.symbol] = (symbolsCount[t.symbol] || 0) + 1;
-      });
+      trades.forEach((t: any) => { if (t.symbol) symbolsCount[t.symbol] = (symbolsCount[t.symbol] || 0) + 1; });
       const topSymbol = Object.entries(symbolsCount).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A';
 
       const emotionCount: Record<string, number> = {};
-      trades.forEach((t: any) => {
-        if (t.emotion) emotionCount[t.emotion] = (emotionCount[t.emotion] || 0) + 1;
-      });
+      trades.forEach((t: any) => { if (t.emotion) emotionCount[t.emotion] = (emotionCount[t.emotion] || 0) + 1; });
       const topEmotion = Object.entries(emotionCount).sort((a,b) => b[1] - a[1])[0]?.[0] || 'Neutral';
 
-      if (/^(hy|hi|hello|hey|greetings|hola|sup|good morning|good afternoon)/.test(msg)) {
-        return `Hello! I am your AI Trading Mentor analyzing your **"${accName}"** portfolio.\n\n` +
-          `Here is a snapshot of your account performance across **${totalTrades} logged trade${totalTrades > 1 ? 's' : ''}**:\n` +
+      const revengeCount = trades.filter((t: any) => (t.emotion || '').toLowerCase().includes('revenge') || (t.tags || []).some((tag: string) => tag.toLowerCase().includes('revenge'))).length;
+      const fomoCount = trades.filter((t: any) => (t.emotion || '').toLowerCase().includes('fomo') || (t.tags || []).some((tag: string) => tag.toLowerCase().includes('fomo'))).length;
+
+      // ── Greeting ──
+      if (/^(hy|hi|hello|hey|greetings|hola|sup|good morning|good afternoon|good evening)/.test(msg)) {
+        return `Hello! 👋 I am your AI Trading Mentor analyzing your **"${accName}"** portfolio.\n\n` +
+          `Here is a quick snapshot of your trading:\n` +
           `• **Total P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
           `• **Win Rate**: ${winRate}% (${wins.length} Wins / ${losses.length} Losses)\n` +
-          `• **Most Traded Symbol**: ${topSymbol}\n` +
+          `• **Most Traded Pair**: ${topSymbol}\n` +
           `• **Dominant Emotion**: ${topEmotion}\n\n` +
-          `How can I help you improve today? Feel free to ask me about your win rate, risk management, trade execution, or psychology strategies!`;
+          `How can I help you today? You can ask me about your stats, risk management, psychology, motivation, or any trading question you have!`;
       }
 
-      if (msg.includes('risk') || msg.includes('lot') || msg.includes('money management') || msg.includes('drawdown')) {
-        const avgRisk = (trades.reduce((acc: number, t: any) => acc + (t.riskPercentage || 1), 0) / totalTrades).toFixed(1);
+      // ── Can I become profitable / success mindset ──
+      if (/can i (be|become)|profitable trader|will i succeed|am i good|am i ready|is trading for me/.test(msg)) {
+        const isCurrentlyProfitable = totalProfit > 0;
+        return `### 🌟 Can You Become a Profitable Trader?\n\n` +
+          `**Absolutely — yes, you can.** But it takes the right mindset and approach.\n\n` +
+          (isCurrentlyProfitable
+            ? `Looking at your data, you are **currently profitable** with a **+$${totalProfit.toFixed(2)} net P/L** across ${totalTrades} trades — that already puts you ahead of most retail traders!\n\n`
+            : `Right now your account shows a **-$${Math.abs(totalProfit).toFixed(2)} net P/L** across ${totalTrades} trades. That's normal in the learning phase — most traders are unprofitable before they become consistently profitable.\n\n`) +
+          `**What makes a profitable trader:**\n` +
+          `1. **Consistency over perfection** — Aim to execute the same process every trade, not just win every trade.\n` +
+          `2. **Risk management first** — Traders who blow accounts focus on profits. Profitable traders focus on survival.\n` +
+          `3. **Journal everything** — You are already doing this! Reviewing your journal is your biggest edge.\n` +
+          `4. **Patience** — Most traders become profitable after 12–24 months of intentional practice.\n\n` +
+          `You have the tools. Keep building the habits. I believe in you. 💪`;
+      }
+
+      // ── Mental support / Losing streak ──
+      if (/loss|losing streak|consecutive loss|bad day|bad week|not profitable|struggling|giving up|quit trading|sad|depressed|frustrated|angry|fail|failing/.test(msg)) {
+        const recentLosses = trades.slice(-5).filter((t: any) => (t.profit || 0) < 0).length;
+        return `### 💙 I'm Here For You — Mental Support\n\n` +
+          `I hear you, and I want you to know that **every great trader has been exactly where you are right now.** Drawdowns and losing streaks are not a sign of failure — they are a part of the journey.\n\n` +
+          (recentLosses >= 3 ? `Looking at your recent trades, you have had **${recentLosses} losses in your last 5 trades**. That's a real losing streak, and it's important to respond to it with discipline, not emotion.\n\n` : '') +
+          `**What to do right now:**\n` +
+          `1. **Stop trading today.** Seriously. Close the charts and step away. Continuing while emotional almost always makes it worse.\n` +
+          `2. **Reduce your lot size by 50%** when you return. Rebuilding confidence with smaller risk is far more effective than trying to "win it back".\n` +
+          `3. **Review your last 5 trades in your journal.** Were you following your rules? If not, the market is giving you feedback — listen to it.\n` +
+          `4. **Remember why you started.** The goal is long-term consistency, not perfection this week.\n\n` +
+          `You have not failed. You are in the training phase that every profitable trader goes through. Take a breath, rest today, and come back stronger tomorrow. 🙏`;
+      }
+
+      // ── Motivation / Inspiration ──
+      if (/motivat|inspire|confidence|believe|encourage|keep going|don.t give up|not sure|doubt/.test(msg)) {
+        return `### 🔥 You've Got This!\n\n` +
+          `Trading is one of the hardest mental skills in the world, but you are taking it seriously by journaling and reviewing your trades — that alone puts you in the **top 5% of traders**.\n\n` +
+          `Here are your personal stats to remind you of your progress:\n` +
+          `• You have logged **${totalTrades} trades** — each one is a lesson.\n` +
+          `• Your win rate is **${winRate}%** — ${parseFloat(winRate) >= 50 ? 'above average! Keep it up.' : 'there is room to grow, and that is exciting.'}\n` +
+          `• Your most traded pair is **${topSymbol}** — you are specializing, which is smart.\n\n` +
+          `**Daily Affirmations for Traders:**\n` +
+          `• "I follow my rules, every single trade."\n` +
+          `• "My job is to execute well, not to predict the market."\n` +
+          `• "I am building a skill that will last a lifetime."\n\n` +
+          `The traders who succeed are not the smartest — they are the most consistent. Keep showing up. 💪`;
+      }
+
+      // ── Strategy advice ──
+      if (/strategy|setup|entry|confluence|timeframe|ema|sma|indicator|signal|trend|support|resistance|order block|supply|demand|breakout|scalp|swing|position/.test(msg)) {
+        return `### 📈 Strategy & Trade Execution\n\n` +
+          `Based on your journal, your most traded pair is **${topSymbol}** and your win rate is **${winRate}%**.\n\n` +
+          `**General Strategy Principles:**\n` +
+          `1. **Trade with the higher timeframe trend.** Identify the trend on H4/Daily, then drop to H1/M15 for entry.\n` +
+          `2. **Wait for confluence.** The best setups have 2–3 reasons to enter: structure, key level, and a trigger candle.\n` +
+          `3. **Only trade your A+ setups.** If you are unsure, do not enter. The market will give you another opportunity.\n` +
+          `4. **Pre-plan your trades.** Before the session, mark your levels and write down what you are looking for.\n\n` +
+          `**For your ${topSymbol} trades specifically:**\n` +
+          `Focus on the London (07:00–10:00 GMT) and New York (13:00–16:00 GMT) sessions for the highest probability moves on currency and gold pairs.\n\n` +
+          `Would you like me to analyze a specific strategy or review your recent trades in more detail?`;
+      }
+
+      // ── FOMO / Revenge trading ──
+      if (/fomo|revenge|overtrad|impulsiv|chasing|miss|missed|regret/.test(msg)) {
+        return `### 🧠 FOMO & Revenge Trading Control\n\n` +
+          (fomoCount > 0 || revengeCount > 0
+            ? `I can see from your journal that you have had **${fomoCount} FOMO trade${fomoCount !== 1 ? 's' : ''}** and **${revengeCount} revenge trade${revengeCount !== 1 ? 's' : ''}** logged. This is incredibly honest of you — recognizing these patterns is the first step.\n\n`
+            : '') +
+          `**The truth about FOMO and Revenge:**\n` +
+          `These are the #1 account killers in retail trading. They feel urgent and justified in the moment but are almost always losers.\n\n` +
+          `**How to break the cycle:**\n` +
+          `1. **Set a "loss limit" rule.** If you lose 2 trades in a session, close the platform. Period.\n` +
+          `2. **Use a pre-trade checklist.** Before every entry, ask: "Is this in my plan? Is this my setup?" If not, close the chart.\n` +
+          `3. **Accept missed trades.** Remind yourself: "There will always be another setup tomorrow."\n` +
+          `4. **Journal your emotions in real-time.** Even a one-word note — "FOMO" or "Calm" — creates awareness that rewires your behavior over time.\n\n` +
+          `The market rewards patience. The impulse to chase is a signal to wait, not act.`;
+      }
+
+      // ── Risk management ──
+      if (/risk|lot size|position size|drawdown|money management|capital|leverage|margin/.test(msg)) {
         return `### 🛡️ Risk Management Analysis for "${accName}"\n\n` +
-          `• **Average Risk Per Trade**: ${avgRisk}%\n` +
+          `• **Your Average Risk Per Trade**: ${avgRisk}%\n` +
           `• **Average Win vs Average Loss**: $${avgWin} vs $${avgLoss}\n` +
           `• **Profit Factor**: ${profitFactor}\n\n` +
-          `**Mentor Recommendations**:\n` +
-          `1. Maintain strict risk per trade under **1.0% - 2.0%** of your total capital.\n` +
-          `2. Target a Minimum Reward-to-Risk ratio of **1:1.5** or higher.\n` +
-          `3. Avoid increasing lot sizes after a losing trade (revenge trading).`;
+          `**Risk Rules Every Profitable Trader Follows:**\n` +
+          `1. **Risk 1% or less per trade.** At 1%, you can lose 20 trades in a row and still have 80% of your capital.\n` +
+          `2. **Never move your stop loss against yourself.** If it gets hit, accept it and move on.\n` +
+          `3. **Target a minimum 1:2 Risk-to-Reward.** Even with a 40% win rate, a 1:2 RR is profitable over time.\n` +
+          `4. **Stop trading at your daily max loss** (e.g., 3%). Protect your capital above all else.\n\n` +
+          (parseFloat(avgRisk) > 2 ? `⚠️ **Your average risk of ${avgRisk}% per trade is above the recommended 1–2%.** Consider reducing your lot sizes to protect your account during losing streaks.` : `✅ Your risk per trade looks controlled. Keep maintaining this discipline!`);
       }
 
-      if (msg.includes('help') || msg.includes('what can you do') || msg.includes('support') || msg.includes('how can you')) {
-        return `I am your AI Trading Mentor! I can help you with:\n\n` +
-          `• **Performance Analysis**: Ask me to "analyze my stats" or "check my win rate".\n` +
-          `• **Risk Management**: Ask "how is my risk?" or "give me money management tips".\n` +
-          `• **Trading Psychology**: Ask for "psychology help", "discipline tips", or "FOMO control".\n\n` +
-          `What area would you like to focus on right now?`;
-      }
-
-      if (/loss|losing|lose|bad day|not profitable|struggling|quit|give up|sad|depressed/.test(msg)) {
-        return `### 💙 Mental Support & Psychology\n\n` +
-          `I hear you, and I want you to know that **every single profitable trader** has been exactly where you are right now.\n\n` +
-          `Losing streaks and drawdowns are not a reflection of your worth, they are simply the cost of doing business in the markets. \n\n` +
-          `**What you should do right now:**\n` +
-          `1. **Step away from the charts.** Do not try to win it back today. Revenge trading is the enemy.\n` +
-          `2. **Lower your risk.** When you return, cut your lot size in half until you get your confidence back.\n` +
-          `3. **Focus on execution, not money.** Your goal right now isn't to make money; it's to execute your plan perfectly, even if it results in a small loss.\n\n` +
-          `Take a deep breath. You are building the mental resilience required for long-term success. Take a break for the rest of the day, and let's review your journal tomorrow.`;
-      }
-
-      if (msg.includes('psychology') || msg.includes('fomo') || msg.includes('emotion') || msg.includes('discipline') || msg.includes('mindset')) {
+      // ── Psychology / mindset / emotions / discipline ──
+      if (/psychology|emotion|discipline|mindset|mental|patience|control|calm|anxiety|fear|greed/.test(msg)) {
         return `### 🧠 Trading Psychology & Emotional Control\n\n` +
           `Across your ${totalTrades} trades, your most recorded emotional state is **${topEmotion}**.\n\n` +
-          `**Key Guidelines**:\n` +
-          `• **FOMO Control**: Never enter a trade after momentum has already extended; wait for price to retest structural support or resistance.\n` +
-          `• **Session Cutoff**: Stop trading after 2 consecutive losses in a session to prevent emotional spiraling.\n` +
-          `• **Process Focus**: Evaluate trade quality on plan execution rather than immediate financial outcome.`;
+          `**The 5 Pillars of Trading Psychology:**\n` +
+          `1. **Acceptance** — Accept that losses are inevitable and part of the process. Your goal is to control risk, not eliminate losses.\n` +
+          `2. **Patience** — Wait for your setups. Most profitable traders only take 1–3 trades per day.\n` +
+          `3. **Discipline** — Follow your rules even when you don't want to. That is where the edge lives.\n` +
+          `4. **Detachment** — Detach your identity from individual trade outcomes. A loss does not make you a bad trader.\n` +
+          `5. **Process Focus** — Judge yourself on execution quality, not just P&L.\n\n` +
+          `**Daily Practices:**\n` +
+          `• Before trading: Write your plan and set your max loss for the day.\n` +
+          `• After trading: Journal every trade, including your emotion.\n` +
+          `• Weekly: Review your journal. What patterns do you see?`;
       }
 
-      if (msg.includes('win') || msg.includes('loss') || msg.includes('stat') || msg.includes('performance') || msg.includes('analyze') || msg.includes('summary')) {
+      // ── Performance / stats / analysis ──
+      if (/win rate|stat|performance|analyz|summary|how am i doing|result|profit|my trades|my account|my journal/.test(msg)) {
         return `### 📊 Performance Analysis for "${accName}"\n\n` +
           `• **Total Trades Analyzed**: ${totalTrades}\n` +
-          `• **Win Rate**: ${winRate}%\n` +
+          `• **Win Rate**: ${winRate}% (${wins.length} Wins, ${losses.length} Losses)\n` +
           `• **Net P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
-          `• **Average Win**: $${avgWin}\n` +
-          `• **Average Loss**: $${avgLoss}\n` +
-          `• **Top Pair**: ${topSymbol}\n\n` +
-          `**Insight**: ${parseFloat(winRate) >= 50 ? 'Your win rate is strong! Focus on letting winners run to your predefined Take-Profit zones.' : 'Work on filtering trade entries at higher-timeframe confluence zones to boost your win percentage.'}`;
+          `• **Average Win**: $${avgWin} | **Average Loss**: $${avgLoss}\n` +
+          `• **Profit Factor**: ${profitFactor}\n` +
+          `• **Top Traded Pair**: ${topSymbol}\n` +
+          `• **Dominant Emotion**: ${topEmotion}\n\n` +
+          `**Mentor Insight**: ${parseFloat(winRate) >= 55 ? '🟢 Strong win rate! Your edge is working. Focus on maximizing your winners by not closing trades early.' : parseFloat(winRate) >= 45 ? '🟡 Your win rate is near breakeven. Focus on improving your entry quality and targeting higher reward-to-risk setups.' : '🔴 Your win rate needs attention. Review your entry rules — are you entering at high-probability zones, or chasing price?'}`;
       }
 
+      // ── How to use the journal ──
+      if (/how to use|how do i|journal|log|track|tag|note/.test(msg)) {
+        return `### 📓 How to Get the Most Out of Your Journal\n\n` +
+          `Your journal is your most powerful tool. Here is how to use it effectively:\n\n` +
+          `1. **Log every trade** — Use the "Add New Trade" button after every position you take.\n` +
+          `2. **Tag your emotion** — Choose how you felt (Calm, FOMO, Revenge, Excited). This data builds over time and reveals patterns.\n` +
+          `3. **Add your strategy** — Note which setup triggered the entry (e.g., Order Block, EMA Cross, Breakout).\n` +
+          `4. **Write a note** — Even one sentence like "entered too early" or "good execution" is valuable for review.\n` +
+          `5. **Review weekly** — Ask me "analyze my stats" every week to track your progress.\n\n` +
+          `The more data you log, the smarter and more personalized my coaching becomes for you!`;
+      }
+
+      // ── General catch-all fallback with variety ──
       const motivations = [
-        "Remember, trading is a marathon, not a sprint. Protect your capital first, and the profits will follow.",
-        "The market will always be there tomorrow. Don't force a trade if your setup isn't there.",
-        "Discipline is doing what you need to do, even when you don't want to do it. Stick to your trading plan.",
-        "Losses are just the cost of doing business. Focus on your execution, not just the outcome of a single trade.",
-        "Patience is your biggest edge. Wait for the high-probability setups and let the market come to you.",
-        "A good trader manages risk; a great trader manages their emotions. Stay calm and trade your plan."
+        "Trading is not about being right — it's about managing risk when you're wrong. Keep your losses small and let your winners breathe.",
+        "Every expert was once a beginner. Every profitable trader has a journal full of mistakes. Your losses are not failures — they are lessons you paid for.",
+        "The market does not owe you a profit. But if you respect your risk, follow your plan, and stay consistent, the edge will show up over time.",
+        "Discipline is the bridge between where you are and where you want to be. Execute your plan one trade at a time.",
+        "Patience is not waiting — it's knowing when the right opportunity appears. The best trades almost take themselves.",
+        "Your emotional state is part of your trading edge. A calm mind sees setups clearly; an emotional mind sees what it wants to see.",
+        "Focus on what you can control: your entries, your risk, your exits, and your attitude. The rest is up to the market."
       ];
       const randomMotivation = motivations[Math.floor(Math.random() * motivations.length)];
 
       return `**💡 Mentor Insight**: ${randomMotivation}\n\n` +
-        `I'm here to support your trading journey. You can ask me to analyze your stats, review your risk management, or give you specific psychology tips! What's on your mind today?`;
+        `I'm here to support your full trading journey! You can ask me things like:\n` +
+        `• *"Can I become a profitable trader?"*\n` +
+        `• *"I'm in a losing streak, help me"*\n` +
+        `• *"How is my risk management?"*\n` +
+        `• *"Analyze my performance"*\n` +
+        `• *"Give me psychology tips"*\n` +
+        `• *"How do I control FOMO?"*\n\n` +
+        `What's on your mind today?`;
     };
 
     if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
