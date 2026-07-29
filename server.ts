@@ -359,6 +359,7 @@ function loadDatabaseFromFile() {
 }
 
 const userDatabases = new Map();
+const lastSyncResults = new Map(); // syncToken -> {syncedCount, supabaseError, supabaseTradeCount, timestamp}
 let isLoaded = false;
 let currentUser: any = null;
 let isGlobalLoaded = false;
@@ -2670,6 +2671,18 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       await saveDatabase(db);
     }
 
+    lastSyncResults.set(syncToken, {
+      syncedCount, supabaseError: syncResponse.supabaseError,
+      supabaseTradeCount: syncResponse.supabaseTradeCount,
+      newTradeRowsLength: newTradeRows.length,
+      timestamp: new Date().toISOString()
+    });
+    // Keep only last 5 per token
+    if (lastSyncResults.size > 100) {
+      const keys = [...lastSyncResults.keys()];
+      for (let i = 0; i < keys.length - 50; i++) lastSyncResults.delete(keys[i]);
+    }
+
     console.log('[MT5 Sync] Sync complete. Response:', JSON.stringify(syncResponse));
     res.status(200).json(syncResponse);
   });
@@ -2724,6 +2737,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         await supabase.from('trades').delete().eq('id', testId);
       }
 
+      const lastSync = lastSyncResults.get(token);
+
       return res.json({
         connection: conn,
         account,
@@ -2735,7 +2750,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           testInsertDetails: testErr || null,
           accountFound: !!account,
           accountId: conn.account_id,
-        }
+        },
+        lastSync: lastSync || null
       });
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || 'Unknown error' });

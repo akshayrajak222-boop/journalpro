@@ -636,6 +636,16 @@ void SendTradesToFXJournalPro() {
                   <div className="text-slate-500">Account in trading_accounts: {debugStatus.data.diagnostic.accountFound ? '✓' : '✗'}</div>
                 </div>
               )}
+              {debugStatus.data.lastSync && (
+                <div className="mt-1 border-t border-slate-700 pt-1 text-[9px]">
+                  <div className="text-slate-400">Last Sync: {debugStatus.data.lastSync.syncedCount} new trades</div>
+                  <div className="text-slate-500">Supabase insert count after sync: {debugStatus.data.lastSync.supabaseTradeCount ?? 'N/A'}</div>
+                  {debugStatus.data.lastSync.supabaseError && (
+                    <div className="text-rose-400">Upsert Error: {debugStatus.data.lastSync.supabaseError}</div>
+                  )}
+                  <div className="text-slate-600">Time: {debugStatus.data.lastSync.timestamp}</div>
+                </div>
+              )}
               {debugStatus.error && <div className="text-rose-400">Error: {debugStatus.error}</div>}
             </div>
           )}
