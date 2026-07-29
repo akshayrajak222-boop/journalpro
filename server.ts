@@ -2811,6 +2811,25 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           `3. Avoid increasing lot sizes after a losing trade (revenge trading).`;
       }
 
+      if (msg.includes('help') || msg.includes('what can you do') || msg.includes('support') || msg.includes('how can you')) {
+        return `I am your AI Trading Mentor! I can help you with:\n\n` +
+          `• **Performance Analysis**: Ask me to "analyze my stats" or "check my win rate".\n` +
+          `• **Risk Management**: Ask "how is my risk?" or "give me money management tips".\n` +
+          `• **Trading Psychology**: Ask for "psychology help", "discipline tips", or "FOMO control".\n\n` +
+          `What area would you like to focus on right now?`;
+      }
+
+      if (/loss|losing|lose|bad day|not profitable|struggling|quit|give up|sad|depressed/.test(msg)) {
+        return `### 💙 Mental Support & Psychology\n\n` +
+          `I hear you, and I want you to know that **every single profitable trader** has been exactly where you are right now.\n\n` +
+          `Losing streaks and drawdowns are not a reflection of your worth, they are simply the cost of doing business in the markets. \n\n` +
+          `**What you should do right now:**\n` +
+          `1. **Step away from the charts.** Do not try to win it back today. Revenge trading is the enemy.\n` +
+          `2. **Lower your risk.** When you return, cut your lot size in half until you get your confidence back.\n` +
+          `3. **Focus on execution, not money.** Your goal right now isn't to make money; it's to execute your plan perfectly, even if it results in a small loss.\n\n` +
+          `Take a deep breath. You are building the mental resilience required for long-term success. Take a break for the rest of the day, and let's review your journal tomorrow.`;
+      }
+
       if (msg.includes('psychology') || msg.includes('fomo') || msg.includes('emotion') || msg.includes('discipline') || msg.includes('mindset')) {
         return `### 🧠 Trading Psychology & Emotional Control\n\n` +
           `Across your ${totalTrades} trades, your most recorded emotional state is **${topEmotion}**.\n\n` +
@@ -2829,14 +2848,6 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           `• **Average Loss**: $${avgLoss}\n` +
           `• **Top Pair**: ${topSymbol}\n\n` +
           `**Insight**: ${parseFloat(winRate) >= 50 ? 'Your win rate is strong! Focus on letting winners run to your predefined Take-Profit zones.' : 'Work on filtering trade entries at higher-timeframe confluence zones to boost your win percentage.'}`;
-      }
-
-      if (msg.includes('help') || msg.includes('what can you do') || msg.includes('support') || msg.includes('how can you')) {
-        return `I am your AI Trading Mentor! I can help you with:\n\n` +
-          `• **Performance Analysis**: Ask me to "analyze my stats" or "check my win rate".\n` +
-          `• **Risk Management**: Ask "how is my risk?" or "give me money management tips".\n` +
-          `• **Trading Psychology**: Ask for "psychology help", "discipline tips", or "FOMO control".\n\n` +
-          `What area would you like to focus on right now?`;
       }
 
       const motivations = [
