@@ -2831,12 +2831,26 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           `**Insight**: ${parseFloat(winRate) >= 50 ? 'Your win rate is strong! Focus on letting winners run to your predefined Take-Profit zones.' : 'Work on filtering trade entries at higher-timeframe confluence zones to boost your win percentage.'}`;
       }
 
-      return `I have analyzed your **${totalTrades} trade${totalTrades > 1 ? 's' : ''}** logged in **"${accName}"**:\n\n` +
-        `• **Net P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
-        `• **Win Rate**: ${winRate}% (${wins.length} Wins, ${losses.length} Losses)\n` +
-        `• **Average Win / Loss**: $${avgWin} / $${avgLoss}\n` +
-        `• **Top Traded Pair**: ${topSymbol}\n\n` +
-        `Based on your trading history, focus on executing trades with consistent risk, sticking to your core strategy, and tagging your trading emotions for every trade. What specific area would you like to discuss next?`;
+      if (msg.includes('help') || msg.includes('what can you do') || msg.includes('support') || msg.includes('how can you')) {
+        return `I am your AI Trading Mentor! I can help you with:\n\n` +
+          `• **Performance Analysis**: Ask me to "analyze my stats" or "check my win rate".\n` +
+          `• **Risk Management**: Ask "how is my risk?" or "give me money management tips".\n` +
+          `• **Trading Psychology**: Ask for "psychology help", "discipline tips", or "FOMO control".\n\n` +
+          `What area would you like to focus on right now?`;
+      }
+
+      const motivations = [
+        "Remember, trading is a marathon, not a sprint. Protect your capital first, and the profits will follow.",
+        "The market will always be there tomorrow. Don't force a trade if your setup isn't there.",
+        "Discipline is doing what you need to do, even when you don't want to do it. Stick to your trading plan.",
+        "Losses are just the cost of doing business. Focus on your execution, not just the outcome of a single trade.",
+        "Patience is your biggest edge. Wait for the high-probability setups and let the market come to you.",
+        "A good trader manages risk; a great trader manages their emotions. Stay calm and trade your plan."
+      ];
+      const randomMotivation = motivations[Math.floor(Math.random() * motivations.length)];
+
+      return `**💡 Mentor Insight**: ${randomMotivation}\n\n` +
+        `I'm here to support your trading journey. You can ask me to analyze your stats, review your risk management, or give you specific psychology tips! What's on your mind today?`;
     };
 
     if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
