@@ -2718,6 +2718,12 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         .order('date', { ascending: false })
         .limit(20);
 
+      const { data: userTrades } = conn.user_id ? await supabase
+        .from('trades')
+        .select('id, account_id', { count: 'exact', head: true })
+        .eq('user_id', conn.user_id)
+        .limit(1) : { data: null };
+
       const { data: account } = await supabase
         .from('trading_accounts')
         .select('id, name, current_balance, user_id')
@@ -2749,12 +2755,15 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         account,
         recentTrades: trades || [],
         tradeCount: trades?.length || 0,
+        totalUserTrades: userTrades?.length || 0,
         diagnostic: {
           testInsertSuccess: !testErr,
           testInsertError: testErr?.message || null,
           testInsertDetails: testErr || null,
           accountFound: !!account,
           accountId: conn.account_id,
+          connUserId: conn.user_id || '(empty/null)',
+          accountUserId: account?.user_id || '(empty/null)',
         },
         lastSync: lastSync || null
       });

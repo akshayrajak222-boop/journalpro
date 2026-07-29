@@ -651,6 +651,9 @@ void SendTradesToFXJournalPro() {
                     <div className="text-emerald-400">Supabase insert works ✓</div>
                   )}
                   <div className="text-slate-500">Account in trading_accounts: {debugStatus.data.diagnostic.accountFound ? '✓' : '✗'}</div>
+                  <div className="text-slate-500">User ID in connection: {debugStatus.data.diagnostic.connUserId}</div>
+                  <div className="text-slate-500">User ID in account: {debugStatus.data.diagnostic.accountUserId}</div>
+                  <div className="text-slate-500">Total user trades in Supabase: {debugStatus.data.totalUserTrades}</div>
                 </div>
               )}
               {debugStatus.data.lastSync && (
