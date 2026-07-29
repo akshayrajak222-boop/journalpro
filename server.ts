@@ -2442,8 +2442,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     const resolvedAccountId = connection.accountId || connection.account_id || connRow?.account_id;
     const resolvedUserId = db.users[0]?.id || connection.userId || connection.user_id || connRow?.user_id;
 
-    console.log('[MT5 Sync] Resolved accountId:', resolvedAccountId);
-    console.log('[MT5 Sync] Resolved userId:', resolvedUserId);
+    // HARD FALLBACK: always use connRow values if resolved values are missing
+    const upsertAccountId = resolvedAccountId || connRow?.account_id || '';
+    const upsertUserId = resolvedUserId || connRow?.user_id || '';
+
+    console.log('[MT5 Sync] Resolved accountId:', resolvedAccountId, '| upsertAccountId:', upsertAccountId);
+    console.log('[MT5 Sync] Resolved userId:', resolvedUserId, '| upsertUserId:', upsertUserId);
+    console.log('[MT5 Sync] connRow userId:', connRow?.user_id, '| connRow accountId:', connRow?.account_id);
     console.log('[MT5 Sync] All db account IDs:', db.accounts?.map((a: any) => a.id).join(', ') || 'none');
 
     const accountIdx = db.accounts.findIndex((acc: any) =>
@@ -2588,7 +2593,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       startingBalance: db.accounts[accountIdx].startingBalance
     };
 
-    if (useSupabase && resolvedUserId) {
+    if (useSupabase && upsertUserId) {
       // 6a. Update account balance
       const { error: accErr } = await supabase
         .from('trading_accounts')
@@ -2597,7 +2602,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           equity: liveBalance,
           starting_balance: db.accounts[finalAccountIdx].startingBalance || liveBalance
         })
-        .eq('id', resolvedAccountId);
+        .eq('id', upsertAccountId);
       if (accErr) console.error('[MT5 Sync] ✗ Account balance update error:', JSON.stringify(accErr));
       else console.log('[MT5 Sync] ✓ Account balance updated in Supabase');
 
@@ -2605,8 +2610,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       if (newTradeRows.length > 0) {
         const supabaseTradeRows = newTradeRows.map((t: any) => ({
           id: t.id,
-          account_id: resolvedAccountId,
-          user_id: resolvedUserId,
+          account_id: upsertAccountId,
+          user_id: upsertUserId,
           date: t.date,
           symbol: t.symbol,
           type: t.type,
@@ -2663,9 +2668,9 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       const { count } = await supabase
         .from('trades')
         .select('*', { count: 'exact', head: true })
-        .eq('account_id', resolvedAccountId);
+        .eq('account_id', upsertAccountId);
       syncResponse.supabaseTradeCount = count;
-      console.log(`[MT5 Sync] ✓ Supabase trade count for account ${resolvedAccountId}: ${count}`);
+      console.log(`[MT5 Sync] ✓ Supabase trade count for account ${upsertAccountId}: ${count}`);
 
     } else {
       await saveDatabase(db);

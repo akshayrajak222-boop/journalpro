@@ -552,6 +552,23 @@ void SendTradesToFXJournalPro() {
    
    if(res == 200) {
       Print("[FX Journal Pro] Sync completed successfully. Balance: ", DoubleToString(balance, 2));
+      // Print response body for diagnostics
+      string respText = "";
+      for(int i = 0; i < ArraySize(resultData); i++) {
+         respText += CharToString(resultData[i]);
+      }
+      if(StringLen(respText) > 0 && StringFind(respText, "\\\"success\\\":true") >= 0) {
+         int errPos = StringFind(respText, "\\\"supabaseError\\\"");
+         if(errPos >= 0) {
+            string errSnippet = StringSubstr(respText, errPos, 200);
+            Print("[FX Journal Pro] Server warning: ", errSnippet);
+         }
+         int countPos = StringFind(respText, "\\\"supabaseTradeCount\\\"");
+         if(countPos >= 0) {
+            string countSnippet = StringSubstr(respText, countPos, 50);
+            Print("[FX Journal Pro] Supabase trade count: ", countSnippet);
+         }
+      }
    } else {
       Print("[FX Journal Pro] Sync failed. Result Code: ", res, " | LastError: ", lastError);
       if(lastError == 4014) {
