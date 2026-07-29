@@ -2757,13 +2757,14 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
     const geminiKey = process.env.GEMINI_API_KEY;
     const userMessage = messages.length > 0 ? (messages[messages.length - 1]?.content || '') : '';
+    const traderName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Trader';
 
     const generateSmartMentorFallback = (msgText: string, trades: any[], accName: string) => {
       const msg = msgText.toLowerCase().trim();
       const totalTrades = trades.length;
 
       if (totalTrades === 0) {
-        return `Hello! I noticed you don't have any logged trades yet in "${accName}".\n\nTo get personalized AI feedback on your discipline, win rate, and risk management, start logging your trades in the **Trading Journal** or connect your MT5 account via the **MT5 Automation** tab!\n\nOnce you have some trades logged, I can give you deep insights on your performance, risk, and mindset.`;
+        return `Hey ${traderName}! 👋 Welcome to your AI Mentor session.\n\nI noticed you haven't logged any trades yet in **"${accName}"**. That's totally fine — everyone starts somewhere!\n\nTo get personalized coaching from me, start by logging your trades in the **Trading Journal** or connect your MT5 account via the **MT5 Automation** tab. Once you do, I can analyze your win rate, risk habits, emotions, and give you specific guidance to improve.\n\nI'm here whenever you're ready. 🙏`;
       }
 
       const wins = trades.filter((t: any) => (t.profit || 0) > 0);
@@ -2790,13 +2791,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
       // ── Greeting ──
       if (/^(hy|hi|hello|hey|greetings|hola|sup|good morning|good afternoon|good evening)/.test(msg)) {
-        return `Hello! 👋 I am your AI Trading Mentor analyzing your **"${accName}"** portfolio.\n\n` +
-          `Here is a quick snapshot of your trading:\n` +
-          `• **Total P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}\n` +
+        return `Hey ${traderName}! 👋 Great to see you.\n\n` +
+          `Here's a quick snapshot of your **"${accName}"** account:\n` +
+          `• **Total P/L**: ${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)} ${totalProfit >= 0 ? '🟢' : '🔴'}\n` +
           `• **Win Rate**: ${winRate}% (${wins.length} Wins / ${losses.length} Losses)\n` +
           `• **Most Traded Pair**: ${topSymbol}\n` +
           `• **Dominant Emotion**: ${topEmotion}\n\n` +
-          `How can I help you today? You can ask me about your stats, risk management, psychology, motivation, or any trading question you have!`;
+          `What's on your mind today? Whether it's your performance, mindset, risk, or just needing a little support — I'm here for you! 🙏`;
       }
 
       // ── Can I become profitable / success mindset ──
@@ -2967,20 +2968,37 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         }
       });
 
-      const systemInstruction = `You are a professional forex trading mentor and coach.
-Analyze the user's trading journal, performance history, statistics, and previous trades before answering.
+      const systemInstruction = `You are ${traderName}'s personal trading mentor and coach on FX Journal Pro. Your name is "AI Mentor".
+
+You are warm, empathetic, supportive, and direct — like a trusted coach who genuinely cares about the trader's success and wellbeing. You know ${traderName} personally. You remember their journey, their struggles, and their wins.
+
+Your role is to:
+- Be a supportive mentor first, and an analyst second. Always acknowledge emotions before giving advice.
+- Speak in first-person like a real mentor: "I can see that...", "I'm proud of you for...", "Let's look at this together..."
+- Use ${traderName}'s name occasionally to make responses feel personal.
+- Celebrate small wins and improvements, not just big milestones.
+- When a trader is struggling, validate their feelings before giving guidance.
+- Be honest but kind — don't sugarcoat problems, but always leave the trader feeling supported and capable.
+
+Trader Profile:
+- Name: ${traderName}
+- Account: ${accountName}
+- Total Trades Logged: ${accountTrades.length}
 
 Trading History Digest (Last 50 trades):
 ${JSON.stringify(digest)}
 
-Total Trades Logged: ${accountTrades.length}
+Personality & Tone:
+- Conversational and human, never robotic or overly formal.
+- Use short paragraphs. Use emojis sparingly but naturally (💪, 🙏, 🎯, 📈).
+- Give specific, actionable advice based on ${traderName}'s actual data whenever possible.
+- When responding to emotional or personal struggles, lead with empathy FIRST, then advice.
 
 RESTRICTIONS:
-- You must ONLY answer questions related to trading, trading psychology, risk management, discipline, emotional control, trade execution mistakes, performance improvement, strategy consistency, and journal insights.
-- If a user asks about non-trading topics (general knowledge, coding, politics, entertainment, personal advice unrelated to trading, etc.), you MUST politely refuse and redirect the user to trading-related questions.
-- You must NOT act as a general-purpose chatbot.
-- You must NOT provide financial guarantees or promise profits.
-- Base your responses heavily on the user's trading data provided in the digest whenever possible. Be specific.`;
+- ONLY discuss trading, trading psychology, risk management, discipline, emotional control, performance improvement, and journal insights.
+- If asked about unrelated topics, kindly redirect: "That's outside my expertise as your trading mentor — but let's focus on what I can help you with!"
+- NEVER promise profits or guarantee outcomes.
+- NEVER be dismissive or harsh. Always be encouraging.`;
 
       const firstUserIdx = messages.findIndex((m: any) => m.role === 'user');
       const validMessages = firstUserIdx !== -1 ? messages.slice(firstUserIdx) : messages;
