@@ -3,6 +3,7 @@ import {
   Users, CreditCard, Radio, AlertCircle, FileText, Plus, CheckCircle, Ban, RefreshCw, Star, BarChart3, Shield, Bug, Lightbulb
 } from 'lucide-react';
 import { User, SupportTicket, Announcement } from '../types';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface AdminPanelProps {
   onPublishAnnouncement: () => void;
@@ -215,8 +216,24 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
               <span className="text-2xl font-extrabold text-red-400">{dashboardStats?.pendingTickets || 0}</span>
             </div>
           </div>
-          <div className="p-6 bg-slate-800/30 border border-slate-800 rounded-xl flex items-center justify-center min-h-[300px]">
-            <span className="text-slate-500">More charts coming soon...</span>
+          <div className="p-6 bg-slate-800/30 border border-slate-800 rounded-xl">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">User Growth (Cumulative)</h3>
+            {dashboardStats?.userGrowth?.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={dashboardStats.userGrowth} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} stroke="#475569" />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} stroke="#475569" allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: '#e2e8f0' }}
+                  />
+                  <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center min-h-[300px] text-slate-500">No user data available yet.</div>
+            )}
           </div>
         </div>
       )}

@@ -3428,7 +3428,7 @@ RESTRICTIONS:
     }
     if (useSupabase) {
       const [{ data: allUsers }, { data: allAccounts }, { data: allTrades }, { data: allTickets }] = await Promise.all([
-        supabase.from('users').select('id, status'),
+        supabase.from('users').select('id, status, created_at'),
         supabase.from('trading_accounts').select('id'),
         supabase.from('trades').select('id'),
         supabase.from('support_tickets').select('id, status')
@@ -3438,7 +3438,29 @@ RESTRICTIONS:
       const totalMt5 = allAccounts?.length || 0;
       const totalTrades = allTrades?.length || 0;
       const pendingTickets = (allTickets || []).filter((t: any) => t.status === 'Open' || t.status === 'In Progress').length;
-      return res.json({ totalUsers, activeUsers, totalMt5, totalTrades, totalRevenue: 0, pendingTickets });
+
+      // Build user growth by day
+      const dayBuckets: Record<string, number> = {};
+      const sorted = (allUsers || []).filter((u: any) => u.created_at).sort((a: any, b: any) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      let running = 0;
+      for (const u of sorted) {
+        const day = new Date(u.created_at).toISOString().slice(0, 10);
+        dayBuckets[day] = (dayBuckets[day] || 0) + 1;
+      }
+      const userGrowth = Object.entries(dayBuckets)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count }));
+
+      // Compute running cumulative total
+      let cum = 0;
+      for (const entry of userGrowth) {
+        cum += entry.count;
+        entry.count = cum;
+      }
+
+      return res.json({ totalUsers, activeUsers, totalMt5, totalTrades, totalRevenue: 0, pendingTickets, userGrowth });
     }
     // fallback to per-user db
     const db = (req as any).userDb;
