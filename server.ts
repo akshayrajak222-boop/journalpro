@@ -3357,10 +3357,19 @@ RESTRICTIONS:
       return res.status(403).json({ error: 'Admin access required' });
     }
     if (useSupabase) {
-      const { data: allUsers } = await supabase
+      let allUsers: any[] | null = null;
+      // Try ordering by last_login first (requires the column to exist)
+      const ordered = await supabase
         .from('users')
         .select('*')
         .order('last_login', { ascending: false, nullsFirst: false });
+      if (ordered.error) {
+        // Column may not exist yet — fall back to created_at
+        const fallback = await supabase.from('users').select('*').order('created_at', { ascending: false });
+        allUsers = fallback.data;
+      } else {
+        allUsers = ordered.data;
+      }
       const { data: allAccounts } = await supabase.from('trading_accounts').select('*');
       const usersWithStats = (allUsers || []).map((u: any) => {
         const uAccounts = (allAccounts || []).filter((acc: any) => acc.user_id === u.id);
