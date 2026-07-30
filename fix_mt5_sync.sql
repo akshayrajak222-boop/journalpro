@@ -96,6 +96,31 @@ BEGIN
   END IF;
 END $$;
 
+-- Add lot_size if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'lot_size') THEN ALTER TABLE trades ADD COLUMN lot_size FLOAT; END IF; END $$;
+-- Add entry_price if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'entry_price') THEN ALTER TABLE trades ADD COLUMN entry_price FLOAT; END IF; END $$;
+-- Add exit_price if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'exit_price') THEN ALTER TABLE trades ADD COLUMN exit_price FLOAT; END IF; END $$;
+-- Add stop_loss if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'stop_loss') THEN ALTER TABLE trades ADD COLUMN stop_loss FLOAT; END IF; END $$;
+-- Add take_profit if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'take_profit') THEN ALTER TABLE trades ADD COLUMN take_profit FLOAT; END IF; END $$;
+-- Add commission if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'commission') THEN ALTER TABLE trades ADD COLUMN commission FLOAT; END IF; END $$;
+-- Add swap if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'swap') THEN ALTER TABLE trades ADD COLUMN swap FLOAT; END IF; END $$;
+-- Add risk_percentage if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'risk_percentage') THEN ALTER TABLE trades ADD COLUMN risk_percentage FLOAT; END IF; END $$;
+-- Add strategy if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'strategy') THEN ALTER TABLE trades ADD COLUMN strategy TEXT; END IF; END $$;
+-- Add emotion if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'emotion') THEN ALTER TABLE trades ADD COLUMN emotion TEXT; END IF; END $$;
+-- Add notes if missing
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'notes') THEN ALTER TABLE trades ADD COLUMN notes TEXT; END IF; END $$;
+-- Add user_id if missing (foreign key to users)
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'trades' AND column_name = 'user_id') THEN ALTER TABLE trades ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE; END IF; END $$;
+
 -- Add tags column if it doesn't exist
 DO $$
 BEGIN
