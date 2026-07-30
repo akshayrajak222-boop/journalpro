@@ -901,7 +901,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { email, name, password, isEmailVerified, id, userId, turnstileToken } = req.body;
+      const { email, name, password, isEmailVerified, id, userId, turnstileToken, provider } = req.body;
       
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
@@ -940,12 +940,14 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           email: normalizedEmail,
           name: name || normalizedEmail.split('@')[0],
           password: password ? await bcrypt.hash(password, 10) : (existingUserRow?.password || ''),
-          experience: 'Intermediate',
-          trading_style: 'Day Trading',
-          main_markets: ['Forex', 'Gold'],
+          experience: existingUserRow?.experience || 'Intermediate',
+          trading_style: existingUserRow?.trading_style || 'Day Trading',
+          main_markets: existingUserRow?.main_markets || ['Forex', 'Gold'],
           onboarding_completed: existingUserRow?.onboarding_completed || false,
           is_pro: existingUserRow?.is_pro || false,
-          is_email_verified: true
+          is_email_verified: true,
+          auth_provider: provider || 'google',
+          last_login: new Date().toISOString()
         };
         if (useSupabase) {
           await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
@@ -969,6 +971,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         onboarding_completed: existingUserRow?.onboarding_completed || false,
         is_pro: existingUserRow?.is_pro || false,
         is_email_verified: false,
+        auth_provider: 'email',
         email_otp: otp,
         otp_expires_at: otpExpiresAt,
         otp_attempts: 0,
@@ -1049,6 +1052,11 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+      }
+
+      // Update last_login timestamp
+      if (useSupabase) {
+        await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
       }
 
       res.json({ message: 'Login successful', user });
@@ -3349,7 +3357,10 @@ RESTRICTIONS:
       return res.status(403).json({ error: 'Admin access required' });
     }
     if (useSupabase) {
-      const { data: allUsers } = await supabase.from('users').select('*');
+      const { data: allUsers } = await supabase
+        .from('users')
+        .select('*')
+        .order('last_login', { ascending: false, nullsFirst: false });
       const { data: allAccounts } = await supabase.from('trading_accounts').select('*');
       const usersWithStats = (allUsers || []).map((u: any) => {
         const uAccounts = (allAccounts || []).filter((acc: any) => acc.user_id === u.id);

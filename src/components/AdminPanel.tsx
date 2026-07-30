@@ -227,6 +227,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
             <thead>
               <tr className="border-b border-slate-700/50 text-slate-400 uppercase tracking-wider font-bold bg-slate-800/80">
                 <th className="py-3 px-4">User details</th>
+                <th className="py-3 px-4">Last Login</th>
                 <th className="py-3 px-4">Joined Date</th>
                 <th className="py-3 px-4">Plan tier</th>
                 <th className="py-3 px-4">Experience / Style</th>
@@ -238,14 +239,27 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate-500">No users found.</td>
+                  <td colSpan={8} className="py-6 text-center text-slate-500">No users found.</td>
                 </tr>
               ) : (
                 users.map((u) => (
                   <tr key={u.id} className="border-b border-slate-800 hover:bg-slate-800/70 transition">
                     <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-200">{u.name || 'Unknown'}</div>
+                      <div className="font-semibold text-slate-200 flex items-center gap-1.5">
+                        {u.name || 'Unknown'}
+                        {u.authProvider === 'google' && (
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
+                            <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.27-1.38 3.72-5.5 3.72-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10c5.74 0 9.55-4.03 9.55-9.71 0-.65-.07-1.15-.16-1.65H12z"/>
+                            <path fill="#34A853" d="M3.67 7.72 6.76 10a6.1 6.1 0 0 1 5.24-3.04c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.92 2.96 14.74 2 12 2 8.1 2 4.72 4.21 3.67 7.72z" opacity="0.15"/>
+                            <path fill="#FBBC05" d="M12 22c2.68 0 4.94-.88 6.59-2.39l-3.05-2.5c-.84.57-1.94.97-3.54.97-4.09 0-5.24-2.43-5.5-3.72H3.45C4.24 19.12 7.65 22 12 22z" opacity="0.15"/>
+                            <path fill="#4285F4" d="M21.55 12.29c0-.65-.07-1.15-.16-1.65H12v3.9h5.5c-.26 1.37-1.1 2.58-2.41 3.46l3.05 2.5C19.96 18.86 21.55 15.92 21.55 12.29z" opacity="0.15"/>
+                          </svg>
+                        )}
+                      </div>
                       <div className="text-[10px] text-slate-400">{u.email}</div>
+                    </td>
+                    <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
+                      {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never'}
                     </td>
                     <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
                       {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}

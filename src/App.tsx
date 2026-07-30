@@ -224,6 +224,8 @@ export default function App() {
       sessionUser?.user_metadata?.name ||
       (email ? email.split('@')[0] : 'Trader');
 
+    const authProvider = sessionUser?.app_metadata?.provider || 'email';
+
     persistAuthSession(userId, email);
 
     try {
@@ -234,7 +236,7 @@ export default function App() {
           'x-auth-user-id': userId,
           'x-auth-email': email 
         },
-        body: JSON.stringify({ id: userId, email, name, isEmailVerified: true })
+        body: JSON.stringify({ id: userId, email, name, isEmailVerified: true, provider: authProvider })
       });
       if (res.ok) {
         const data = await res.json();
