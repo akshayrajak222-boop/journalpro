@@ -447,9 +447,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                   <div className="relative">
                     <input type={showPassword ? "text" : "password"} required value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)} className={inputClass + ' pr-11'} placeholder="Password" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3 text-slate-400 hover:text-white transition-colors">
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3 text-slate-400 hover:text-white transition-colors">
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
                 <div className="flex justify-center my-2">
