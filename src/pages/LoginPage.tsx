@@ -404,8 +404,11 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 </form>
               ) : (
                 <form onSubmit={handleForgotPassword} className="space-y-3">
-                  <input type="email" required value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
-                    className={inputClass} placeholder="Email address" />
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Email address</label>
+                    <input type="email" required value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
+                      className={inputClass} placeholder="Email address" />
+                  </div>
                   {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
                   <button type="submit" disabled={actionLoading} className={buttonPrimary}>
                     {actionLoading ? 'Sending...' : 'Send reset code'}
@@ -431,11 +434,19 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
               </form>
             ) : isRegistering ? (
               <form onSubmit={handleRegister} className="space-y-3">
-                <input type="text" required value={authName} onChange={(e) => setAuthName(e.target.value)} className={inputClass} placeholder="Full name" />
-                <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={inputClass} placeholder="Email address" />
-                <div className="relative">
-                  <input type={showPassword ? "text" : "password"} required value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)} className={inputClass + ' pr-11'} placeholder="Password" />
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Full name</label>
+                  <input type="text" required value={authName} onChange={(e) => setAuthName(e.target.value)} className={inputClass} placeholder="Full name" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Email address</label>
+                  <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={inputClass} placeholder="Email address" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+                  <div className="relative">
+                    <input type={showPassword ? "text" : "password"} required value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)} className={inputClass + ' pr-11'} placeholder="Password" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3 text-slate-400 hover:text-white transition-colors">
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -454,7 +465,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
               </form>
             ) : (
               <form onSubmit={handleLogin} className="space-y-3">
-                <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={inputClass} placeholder="Email address" />
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Email address</label>
+                  <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={inputClass} placeholder="Email address" />
+                </div>
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-sm font-medium text-slate-300">Password</label>
