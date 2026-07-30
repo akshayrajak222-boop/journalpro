@@ -567,28 +567,48 @@ void SendTradesToFXJournalPro() {
          if(scEnd > scStart) syncedCount = StringSubstr(respText, scStart, scEnd - scStart);
       }
       
-      // Parse supabaseTradeCount from response
-      string dbCount = "?";
-      int dbPos = StringFind(respText, "\\\"supabaseTradeCount\\\":");
-      if(dbPos >= 0) {
-         int dbStart = dbPos + 21;
-         int dbEnd = StringFind(respText, ",", dbStart);
-         if(dbEnd < 0) dbEnd = StringFind(respText, "}", dbStart);
-         if(dbEnd > dbStart) dbCount = StringSubstr(respText, dbStart, dbEnd - dbStart);
-      }
-      
-      if(includedCount == 0) {
-         Print("[FX Journal Pro] Sync OK. Balance: ", DoubleToString(balance, 2), " | WARNING: 0 trades in payload — check MT5 History tab is loaded (Ctrl+Shift+H)");
-      } else {
-         Print("[FX Journal Pro] Sync completed. Balance: ", DoubleToString(balance, 2), " | Sent: ", includedCount, " | New saved: ", syncedCount, " | Total in DB: ", dbCount);
-      }
-      
-      // Check for Supabase error
-      int errPos = StringFind(respText, "\\\"supabaseError\\\":");
-      if(errPos >= 0) {
-         string errSnippet = StringSubstr(respText, errPos, 150);
-         Print("[FX Journal Pro] *** Server DB error: ", errSnippet);
-      }
+       // Parse supabaseTradeCount from response
+       string dbCount = "?";
+       int dbPos = StringFind(respText, "\\\"supabaseTradeCount\\\":");
+       if(dbPos >= 0) {
+          int dbStart = dbPos + 21;
+          int dbEnd = StringFind(respText, ",", dbStart);
+          if(dbEnd < 0) dbEnd = StringFind(respText, "}", dbStart);
+          if(dbEnd > dbStart) dbCount = StringSubstr(respText, dbStart, dbEnd - dbStart);
+       }
+       
+       // Parse insertedCount
+       string inserted = "?";
+       int insPos = StringFind(respText, "\\\"insertedCount\\\":");
+       if(insPos >= 0) {
+          int insStart = insPos + 15;
+          int insEnd = StringFind(respText, ",", insStart);
+          if(insEnd < 0) insEnd = StringFind(respText, "}", insStart);
+          if(insEnd > insStart) inserted = StringSubstr(respText, insStart, insEnd - insStart);
+       }
+       
+       // Parse newTradeRowsLength
+       string payloadCount = "?";
+       int plPos = StringFind(respText, "\\\"newTradeRowsLength\\\":");
+       if(plPos >= 0) {
+          int plStart = plPos + 19;
+          int plEnd = StringFind(respText, ",", plStart);
+          if(plEnd < 0) plEnd = StringFind(respText, "}", plStart);
+          if(plEnd > plStart) payloadCount = StringSubstr(respText, plStart, plEnd - plStart);
+       }
+       
+       if(includedCount == 0) {
+          Print("[FX Journal Pro] Sync OK. Balance: ", DoubleToString(balance, 2), " | WARNING: 0 trades in payload — check MT5 History tab is loaded (Ctrl+Shift+H)");
+       } else {
+          Print("[FX Journal Pro] Sync completed. Balance: ", DoubleToString(balance, 2), " | Sent: ", includedCount, " | New saved: ", syncedCount, " | Total in DB: ", dbCount, " | Inserted: ", inserted, " | In payload: ", payloadCount);
+       }
+       
+       // Check for Supabase error
+       int errPos = StringFind(respText, "\\\"supabaseError\\\":");
+       if(errPos >= 0) {
+          string errSnippet = StringSubstr(respText, errPos, 200);
+          Print("[FX Journal Pro] *** Server DB error: ", errSnippet);
+       }
    } else {
       Print("[FX Journal Pro] Sync failed. Result Code: ", res, " | LastError: ", lastError);
       if(lastError == 4014) {
@@ -693,12 +713,13 @@ void SendTradesToFXJournalPro() {
                   <div className="text-slate-500">Total user trades in Supabase: {debugStatus.data.totalUserTrades}</div>
                 </div>
               )}
-              {debugStatus.data.lastSync && (
+               {debugStatus.data.lastSync && (
                 <div className="mt-1 border-t border-slate-700 pt-1 text-[9px]">
-                  <div className="text-slate-400">Last Sync: {debugStatus.data.lastSync.syncedCount} new trades</div>
-                  <div className="text-slate-500">Supabase insert count after sync: {debugStatus.data.lastSync.supabaseTradeCount ?? 'N/A'}</div>
+                  <div className="text-slate-400">Last Sync: {debugStatus.data.lastSync.syncedCount} new trades | Inserted: {debugStatus.data.lastSync.insertedCount ?? '?'}</div>
+                  <div className="text-slate-500">Supabase trade count after sync: {debugStatus.data.lastSync.supabaseTradeCount ?? 'N/A'}</div>
+                  <div className="text-slate-500">New trade rows length: {debugStatus.data.lastSync.newTradeRowsLength ?? '?'}</div>
                   {debugStatus.data.lastSync.supabaseError && (
-                    <div className="text-rose-400">Upsert Error: {debugStatus.data.lastSync.supabaseError}</div>
+                    <div className="text-rose-400">DB Error: {debugStatus.data.lastSync.supabaseError}</div>
                   )}
                   <div className="text-slate-600">Time: {debugStatus.data.lastSync.timestamp}</div>
                 </div>

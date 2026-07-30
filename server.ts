@@ -903,17 +903,20 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     try {
       const { email, name, password, isEmailVerified, id, userId, turnstileToken } = req.body;
       
-      const isHuman = await verifyTurnstile(turnstileToken);
-      if (!isHuman) {
-        return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
-      }
-
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
       const authUserId = (req.headers['x-auth-user-id'] as string) || id || userId || '';
+
+      // Skip Turnstile for SSO/Google OAuth path — user already verified externally
+      if (isEmailVerified !== true) {
+        const isHuman = await verifyTurnstile(turnstileToken);
+        if (!isHuman) {
+          return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
+        }
+      }
 
       // Check Supabase first for existing user
       let existingUserRow: any = null;
@@ -2588,19 +2591,20 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     const syncResponse: any = {
       success: true,
       message: 'MT5 Sync completed successfully',
+      newTradeRowsLength: newTradeRows.length,
       syncedTradesCount: syncedCount,
-      accountBalance: db.accounts[finalAccountIdx]?.currentBalance,
-      startingBalance: db.accounts[finalAccountIdx]?.startingBalance,
-      debug_upsertUserId: upsertUserId || '⚠ EMPTY — trades will NOT be saved to Supabase!',
+      accountBalance: db.accounts[finalAccountIdx]?.currentBalance ?? null,
+      startingBalance: db.accounts[finalAccountIdx]?.startingBalance ?? null,
+      debug_upsertUserId: upsertUserId || 'EMPTY_USER_ID',
       debug_upsertAccountId: upsertAccountId,
     };
 
     if (!upsertUserId) {
-      console.error('[MT5 Sync] ✗ CRITICAL: upsertUserId is empty! Cannot save trades to Supabase.');
+      console.error('[MT5 Sync] CRITICAL: upsertUserId is empty! Cannot save trades to Supabase.');
       console.error('[MT5 Sync]   connRow.user_id:', connRow?.user_id);
       console.error('[MT5 Sync]   connection.userId:', connection?.userId);
       console.error('[MT5 Sync]   db.users[0].id:', db.users?.[0]?.id);
-      syncResponse.warning = 'userId could not be resolved — trades were NOT saved to Supabase. Check connRow.user_id in mt5_connections table.';
+      syncResponse.warning = 'userId could not be resolved - trades were NOT saved to Supabase';
     }
 
     if (useSupabase && upsertUserId) {
@@ -2664,11 +2668,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         if (firstError) {
           syncResponse.supabaseError = firstError.message;
           syncResponse.supabaseDetails = firstError;
-          console.error(`[MT5 Sync] ✗ Inserted ${insertedCount}/${supabaseTradeRows.length} trades. First error:`, JSON.stringify(firstError));
+          console.error(`[MT5 Sync] Inserted ${insertedCount}/${supabaseTradeRows.length} trades. First error:`, JSON.stringify(firstError));
         } else {
-          console.log(`[MT5 Sync] ✓ ${insertedCount}/${supabaseTradeRows.length} trades inserted successfully`);
+          console.log(`[MT5 Sync] ${insertedCount}/${supabaseTradeRows.length} trades inserted successfully`);
         }
+        syncResponse.insertedCount = insertedCount;
       } else {
+        syncResponse.insertedCount = 0;
         console.log('[MT5 Sync] No new trades to insert into Supabase.');
       }
 
@@ -2682,16 +2688,20 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           initial_sync_done: true
         })
         .eq('id', connection.id);
-      if (connUpdErr) console.error('[MT5 Sync] ✗ Connection update error:', JSON.stringify(connUpdErr));
-      else console.log('[MT5 Sync] ✓ MT5 connection record updated');
+      if (connUpdErr) console.error('[MT5 Sync] Connection update error:', JSON.stringify(connUpdErr));
+      else console.log('[MT5 Sync] MT5 connection record updated');
 
       // 6d. Verify: count trades now in Supabase for this account
-      const { count } = await supabase
+      const { count, error: countErr } = await supabase
         .from('trades')
         .select('*', { count: 'exact', head: true })
         .eq('account_id', upsertAccountId);
-      syncResponse.supabaseTradeCount = count;
-      console.log(`[MT5 Sync] ✓ Supabase trade count for account ${upsertAccountId}: ${count}`);
+      if (countErr) {
+        syncResponse.countError = countErr.message;
+        console.error('[MT5 Sync] Count query error:', JSON.stringify(countErr));
+      }
+      syncResponse.supabaseTradeCount = count ?? 0;
+      console.log(`[MT5 Sync] Supabase trade count for account ${upsertAccountId}: ${count}`);
 
     } else {
       await saveDatabase(db);
@@ -2701,6 +2711,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       syncedCount, supabaseError: syncResponse.supabaseError,
       supabaseTradeCount: syncResponse.supabaseTradeCount,
       newTradeRowsLength: newTradeRows.length,
+      insertedCount: syncResponse.insertedCount,
       timestamp: new Date().toISOString()
     });
     // Keep only last 5 per token
@@ -2710,6 +2721,10 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     }
 
     console.log('[MT5 Sync] Sync complete. Response:', JSON.stringify(syncResponse));
+
+    // Prevent Vercel edge compression which corrupts raw MQL5 byte parsing
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Content-Encoding', 'identity');
     res.status(200).json(syncResponse);
   });
 
