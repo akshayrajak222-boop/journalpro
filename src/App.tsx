@@ -791,6 +791,11 @@ export default function App() {
 
 
   const handleLogout = async () => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalhost && !window.confirm('Are you sure you want to sign out?')) {
+      return;
+    }
+
     try {
       if (isSupabaseConfigured) {
         await supabase.auth.signOut();
