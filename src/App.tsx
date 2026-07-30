@@ -172,6 +172,9 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk'>('general');
   const [activeAboutForm, setActiveAboutForm] = useState<'none' | 'support' | 'bug' | 'feature'>('none');
 
+  // Sign-out confirmation modal
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+
   // Theme state with local persistence
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
@@ -792,10 +795,15 @@ export default function App() {
 
   const handleLogout = async () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (isLocalhost && !window.confirm('Are you sure you want to sign out?')) {
+    if (isLocalhost) {
+      setShowSignOutModal(true);
       return;
     }
 
+    await performLogout();
+  };
+
+  const performLogout = async () => {
     try {
       if (isSupabaseConfigured) {
         await supabase.auth.signOut();
@@ -4447,6 +4455,52 @@ export default function App() {
         </div>
       )}
 
+      {/* Sign-out confirmation modal (localhost only) */}
+      {showSignOutModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200"
+            style={{ animation: 'modalIn 0.2s ease-out' }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                <LogOut className="h-5 w-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Sign Out</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Are you sure you want to sign out?</p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-6">
+              <button
+                onClick={() => setShowSignOutModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setShowSignOutModal(false);
+                  await performLogout();
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.95) translateY(8px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
