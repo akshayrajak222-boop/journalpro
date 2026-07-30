@@ -1018,9 +1018,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     try {
       const { email, password, id, userId, turnstileToken } = req.body;
       
-      const isHuman = await verifyTurnstile(turnstileToken);
-      if (!isHuman) {
-        return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
+      // Skip Turnstile in development mode (NODE_ENV not set or 'development')
+      const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+      if (!isDev) {
+        const isHuman = await verifyTurnstile(turnstileToken);
+        if (!isHuman) {
+          return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
+        }
       }
 
       if (!email) {
@@ -1034,8 +1038,31 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         (authUserId && u.id === authUserId) || 
         u.email.toLowerCase() === normalizedEmail
       );
-      const previousUserId = user?.id;
-      const previousEmail = user?.email;
+
+      // In development, auto-create user if missing
+      if (!user && isDev) {
+        const uid = authUserId || `user_dev_${Date.now()}`;
+        const hashedPassword = password ? await bcrypt.hash(password, 10) : '';
+        const devUser = {
+          id: uid,
+          email: normalizedEmail,
+          name: normalizedEmail.split('@')[0],
+          password: hashedPassword,
+          experience: 'Intermediate',
+          trading_style: 'Day Trading',
+          main_markets: ['Forex', 'Gold'],
+          onboarding_completed: false,
+          is_pro: false,
+          is_email_verified: false,
+          auth_provider: 'email',
+          created_at: new Date().toISOString(),
+          last_login: new Date().toISOString()
+        };
+        db.users.push(devUser);
+        await saveDatabase(db);
+        console.log(`[Dev] Auto-created user: ${normalizedEmail}`);
+        return res.json({ message: 'Login successful', user: devUser });
+      }
 
       if (!user) {
         return res.status(404).json({ error: 'No account found with this email. Please register first.' });
@@ -1055,9 +1082,11 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       }
 
       // Update last_login timestamp
+      user.last_login = new Date().toISOString();
       if (useSupabase) {
         await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
       }
+      await saveDatabase(db);
 
       res.json({ message: 'Login successful', user });
     } catch (err: any) {

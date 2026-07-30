@@ -457,8 +457,8 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 <div className="flex justify-center my-2">
                   <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
                 </div>
-                <button type="submit" disabled={actionLoading || !turnstileToken} className={buttonPrimary}>
-                  {actionLoading ? 'Creating account...' : 'Create account'}
+                <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured)} className={buttonPrimary}>
+                  {actionLoading ? 'Creating Account...' : 'Create Account'}
                 </button>
                 <p className="text-center text-sm text-slate-400">
                   Already have an account?{' '}
@@ -488,7 +488,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 <div className="flex justify-center my-2">
                   <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
                 </div>
-                <button type="submit" disabled={actionLoading || !turnstileToken} className={buttonPrimary}>
+                <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured)} className={buttonPrimary}>
                   {actionLoading ? 'Signing in...' : 'Sign in'}
                 </button>
 
