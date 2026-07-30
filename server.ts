@@ -2589,11 +2589,19 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       success: true,
       message: 'MT5 Sync completed successfully',
       syncedTradesCount: syncedCount,
-      accountBalance: db.accounts[accountIdx].currentBalance,
-      startingBalance: db.accounts[accountIdx].startingBalance,
-      debug_upsertUserId: upsertUserId,
+      accountBalance: db.accounts[finalAccountIdx]?.currentBalance,
+      startingBalance: db.accounts[finalAccountIdx]?.startingBalance,
+      debug_upsertUserId: upsertUserId || '⚠ EMPTY — trades will NOT be saved to Supabase!',
       debug_upsertAccountId: upsertAccountId,
     };
+
+    if (!upsertUserId) {
+      console.error('[MT5 Sync] ✗ CRITICAL: upsertUserId is empty! Cannot save trades to Supabase.');
+      console.error('[MT5 Sync]   connRow.user_id:', connRow?.user_id);
+      console.error('[MT5 Sync]   connection.userId:', connection?.userId);
+      console.error('[MT5 Sync]   db.users[0].id:', db.users?.[0]?.id);
+      syncResponse.warning = 'userId could not be resolved — trades were NOT saved to Supabase. Check connRow.user_id in mt5_connections table.';
+    }
 
     if (useSupabase && upsertUserId) {
       // 6a. Update account balance
