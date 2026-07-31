@@ -6,7 +6,7 @@ import {
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
-  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain
+  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -155,6 +155,12 @@ export default function App() {
   const [tradeScreenshot, setTradeScreenshot] = useState('');
   const [tradeTags, setTradeTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
+
+  // Paste-from-MT5 modal state
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteRawText, setPasteRawText] = useState('');
+  const [parsedTrades, setParsedTrades] = useState<any[]>([]);
+  const [pasteImporting, setPasteImporting] = useState(false);
 
   // Support ticket form
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -1154,6 +1160,273 @@ export default function App() {
     }
   };
 
+  // ── Paste-from-MT5 handlers ──
+  const handleParsePaste = () => {
+    const parsed = parseMt5PastedText(pasteRawText);
+    setParsedTrades(parsed);
+  };
+
+  const handleImportParsedTrades = async () => {
+    if (!selectedAccountId || parsedTrades.length === 0) return;
+    setPasteImporting(true);
+    try {
+      const res = await authFetch('/api/trades/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: selectedAccountId, trades: parsedTrades })
+      });
+      if (res.ok) {
+        await fetchTradesAndParams(selectedAccountId);
+        const accsRes = await authFetch('/api/accounts');
+        const accsData = await accsRes.json();
+        setAccounts(accsData.accounts);
+        setShowPasteModal(false);
+        setPasteRawText('');
+        setParsedTrades([]);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to import trades');
+      }
+    } catch (e: any) {
+      alert('Import error: ' + (e?.message || e));
+    } finally {
+      setPasteImporting(false);
+    }
+  };
+
+  // ── MT5 HTML/XML report parsers ──
+  const parseMt5HtmlReport = (html: string): any[] => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const tables = doc.querySelectorAll('table');
+    if (tables.length === 0) return [];
+
+    // Score each table: pick the one with the most deal-like rows
+    let bestTable: Element | null = null;
+    let bestScore = -1;
+    let bestHeaders: string[] = [];
+
+    const dealKeywords = ['ticket', 'type', 'buy', 'sell', 'volume', 'symbol', 'profit', 'commission', 'swap'];
+    const headerAliases: [string, string[]][] = [
+      ['type', ['type', 'direction']],
+      ['symbol', ['symbol', 'item', 'instrument', 'pair']],
+      ['lots', ['lots', 'size', 'volume']],
+      ['time', ['time', 'opentime', 'open_time', 'date']],
+      ['entry', ['price', 'openprice', 'open_price']],
+      ['exit', ['closeprice', 'close_price', 'exitprice', 'exit_price']],
+      ['profit', ['profit', 'pnl']],
+    ];
+
+    const findHeaderIdx = (headers: string[], names: string[]): number => {
+      for (const name of names) {
+        const idx = headers.indexOf(name);
+        if (idx !== -1) return idx;
+        const pIdx = headers.findIndex(h => h.includes(name));
+        if (pIdx !== -1) return pIdx;
+      }
+      return -1;
+    };
+
+    for (const tbl of tables) {
+      const rows = tbl.querySelectorAll('tr');
+      if (rows.length < 2) continue;
+
+      // Normalize first row as headers
+      const hCells = rows[0].querySelectorAll('th, td');
+      const headers: string[] = [];
+      hCells.forEach(c => headers.push((c.textContent || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')));
+
+      // Score: +1 for each detected deal column
+      let score = 0;
+      for (const [, aliases] of headerAliases) {
+        if (findHeaderIdx(headers, aliases) !== -1) score++;
+      }
+      // Bonus if type+buy/sell keywords found in data rows
+      let dealCount = 0;
+      for (let i = 1; i < Math.min(rows.length, 20); i++) {
+        const text = rows[i].textContent?.toLowerCase() || '';
+        if ((text.includes('buy') || text.includes('sell')) && /[0-9.]+/.test(text)) dealCount++;
+      }
+      if (dealCount >= 3) score += 5;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTable = tbl;
+        bestHeaders = headers;
+      }
+    }
+
+    if (!bestTable || bestScore < 3) return [];
+
+    const rows = bestTable.querySelectorAll('tr');
+    if (rows.length < 2) return [];
+
+    const findCol = (names: string[]): number => findHeaderIdx(bestHeaders, names);
+    const typeCol = findCol(['type', 'direction']);
+    const symbolCol = findCol(['symbol', 'item', 'instrument', 'pair']);
+    const lotsCol = findCol(['lots', 'size', 'volume']);
+    const timeCol = findCol(['time', 'opentime', 'open_time', 'date']);
+    const entryCol = findCol(['price', 'openprice', 'open_price']);
+    const exitCol = findCol(['closeprice', 'close_price', 'exitprice', 'exit_price']);
+    const profitCol = findCol(['profit', 'pnl']);
+    const commCol = findCol(['commission', 'comm']);
+    const swapCol = findCol(['swap', 'taxes', 'swaps']);
+
+    // Price columns: first = entry, last = exit
+    let entryIdx = entryCol;
+    let exitIdx = exitCol;
+    if (entryCol === exitCol && entryCol !== -1) {
+      const allPrice: number[] = [];
+      bestHeaders.forEach((h, i) => { if (h.includes('price') || h.includes('rate')) allPrice.push(i); });
+      entryIdx = allPrice.length > 0 ? allPrice[0] : entryCol;
+      exitIdx = allPrice.length > 1 ? allPrice[allPrice.length - 1] : entryIdx;
+    }
+
+    const parseNum = (s: string): number => {
+      const cleaned = (s || '').replace(/[^0-9.\-]/g, '');
+      return cleaned ? parseFloat(cleaned) : 0;
+    };
+
+    const results: any[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const cells = rows[i].querySelectorAll('th, td');
+      if (cells.length < 3) continue;
+
+      const getVal = (idx: number): string => (idx !== -1 && idx < cells.length ? (cells[idx].textContent || '').trim() : '');
+
+      const rawType = getVal(typeCol).toLowerCase();
+      const tradeType = rawType === 'buy' ? 'Buy' as const : rawType === 'sell' ? 'Sell' as const : null;
+      if (!tradeType) continue;
+
+      const symbol = getVal(symbolCol).toUpperCase();
+      if (!symbol) continue;
+
+      const rawDate = getVal(timeCol);
+      let parsedDate: string;
+      if (rawDate) {
+        const d = new Date(rawDate.replace(/\./g, '-').replace(/\s+/g, 'T'));
+        parsedDate = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+      } else {
+        parsedDate = new Date().toISOString();
+      }
+
+      results.push({
+        date: parsedDate,
+        symbol,
+        type: tradeType,
+        lotSize: parseNum(getVal(lotsCol)) || 0.01,
+        entryPrice: entryIdx !== -1 ? parseNum(getVal(entryIdx)) : 0,
+        exitPrice: exitIdx !== -1 ? parseNum(getVal(exitIdx)) : 0,
+        profit: parseNum(getVal(profitCol)),
+        commission: getVal(commCol) ? parseNum(getVal(commCol)) : 0,
+        swap: getVal(swapCol) ? parseNum(getVal(swapCol)) : 0,
+        strategy: 'Pasted from MT5',
+        emotion: 'Calm',
+        tags: ['MT5 Paste'],
+        isMt5Sync: true
+      });
+    }
+    return results;
+  };
+
+  const parseMt5XmlReport = (xml: string): any[] => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'text/xml');
+
+    // Try common MT5 export formats
+    const dealNodes = doc.querySelectorAll('Deal, deal, Trade, trade, Order, order, Position, position');
+    if (dealNodes.length === 0) return [];
+
+    const parseNum = (s: string | null): number => {
+      const cleaned = (s || '').replace(/[^0-9.\-]/g, '');
+      return cleaned ? parseFloat(cleaned) : 0;
+    };
+
+    const results: any[] = [];
+    for (const node of dealNodes) {
+      const getTag = (names: string[]): string | null => {
+        for (const name of names) {
+          const el = node.querySelector(name);
+          if (el?.textContent) return el.textContent.trim();
+        }
+        return null;
+      };
+
+      // Type: 0=Buy, 1=Sell or "buy"/"sell"
+      const rawType = (getTag(['Type', 'type', 'DIRECTION']) || '').toLowerCase();
+      const tradeType = rawType === 'buy' || rawType === '0' ? 'Buy' as const : rawType === 'sell' || rawType === '1' ? 'Sell' as const : null;
+      if (!tradeType) continue;
+
+      const symbol = (getTag(['Symbol', 'symbol', 'SYMBOL']) || '').toUpperCase();
+      if (!symbol) continue;
+
+      const rawDate = getTag(['OpenTime', 'Open_Time', 'opentime', 'Time', 'time', 'Date', 'date']);
+      let parsedDate: string;
+      if (rawDate) {
+        const d = new Date(rawDate.replace(/\./g, '-').replace(/\s+/g, 'T'));
+        parsedDate = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+      } else {
+        parsedDate = new Date().toISOString();
+      }
+
+      const lotSize = parseNum(getTag(['Volume', 'volume', 'Lots', 'lots', 'Size', 'size']));
+      const entryPrice = parseNum(getTag(['Price', 'price', 'OpenPrice', 'Open_Price', 'openprice']));
+      const exitPrice = parseNum(getTag(['ClosePrice', 'Close_Price', 'closeprice', 'exitprice', 'ExitPrice', 'exit_price']));
+      const profit = parseNum(getTag(['Profit', 'profit', 'PROFIT']));
+      const commission = parseNum(getTag(['Commission', 'commission', 'COMMISSION']));
+      const swap = parseNum(getTag(['Swap', 'swap', 'SWAP', 'Taxes', 'taxes']));
+
+      results.push({
+        date: parsedDate,
+        symbol,
+        type: tradeType,
+        lotSize: lotSize || 0.01,
+        entryPrice: entryPrice || 0,
+        exitPrice: exitPrice || 0,
+        profit: profit || 0,
+        commission: commission || 0,
+        swap: swap || 0,
+        strategy: 'Pasted from MT5',
+        emotion: 'Calm',
+        tags: ['MT5 Paste'],
+        isMt5Sync: true
+      });
+    }
+    return results;
+  };
+
+  // ── File upload handler for MT5 reports ──
+  const handleReportFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      if (!content) return;
+
+      // Show raw content in textarea so user can see what was read
+      setPasteRawText(content);
+
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      let parsed: any[] = [];
+
+      if (ext === 'html' || ext === 'htm') {
+        parsed = parseMt5HtmlReport(content);
+      } else if (ext === 'xml') {
+        parsed = parseMt5XmlReport(content);
+      }
+
+      if (parsed.length > 0) {
+        setParsedTrades(parsed);
+      } else {
+        setParsedTrades([]);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // Simulated MT5 integration call
   const handleTriggerSimulatedSync = async (symbol: string) => {
     if (!selectedAccountId) return;
@@ -1556,6 +1829,22 @@ export default function App() {
   const averageLoss = losses.length > 0 ? sumLosses / losses.length : 0;
   const avgRR = averageLoss > 0 ? parseFloat((averageWin / averageLoss).toFixed(2)) : 0;
 
+  // Winning / Losing streaks
+  const sortedByDate = [...trades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  let currentWinStreak = 0, maxWinStreak = 0;
+  let currentLossStreak = 0, maxLossStreak = 0;
+  for (const t of sortedByDate) {
+    if (t.profit > 0) {
+      currentWinStreak++;
+      currentLossStreak = 0;
+      if (currentWinStreak > maxWinStreak) maxWinStreak = currentWinStreak;
+    } else {
+      currentLossStreak++;
+      currentWinStreak = 0;
+      if (currentLossStreak > maxLossStreak) maxLossStreak = currentLossStreak;
+    }
+  }
+
   // Drawdown math
   const startingBal = activeAccount?.startingBalance || 10000;
   const currentBal = activeAccount?.currentBalance || 10000;
@@ -1659,6 +1948,126 @@ export default function App() {
     a.setAttribute('href', url);
     a.setAttribute('download', `fx_journal_pro_${activeAccount?.name || 'export'}.csv`);
     a.click();
+  };
+
+  // ── MT5 paste parser ──
+  const parseMt5PastedText = (text: string): any[] => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length < 2) return [];
+
+    // Detect delimiter (tab vs comma)
+    const tabCount = (lines[0].match(/\t/g) || []).length;
+    const commaCount = (lines[0].match(/,/g) || []).length;
+    const delim = tabCount >= commaCount ? '\t' : ',';
+
+    const rows = lines.map(l => l.split(delim).map(c => c.trim()));
+    const rawHeaders = rows[0];
+    const headerRow = rows[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+    // Find column indices by matching header aliases
+    const findIdx = (aliases: string[]): number => {
+      for (const alias of aliases) {
+        const idx = headerRow.indexOf(alias);
+        if (idx !== -1) return idx;
+      }
+      // Try partial matches (e.g. "price" in "closeprice")
+      for (const alias of aliases) {
+        const idx = headerRow.findIndex(h => h.includes(alias));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    // For columns that may appear twice (Price), get all matching indices
+    const findAllIdx = (aliases: string[]): number[] => {
+      const indices: number[] = [];
+      for (const alias of aliases) {
+        headerRow.forEach((h, i) => {
+          if (h === alias && !indices.includes(i)) indices.push(i);
+        });
+      }
+      // fallback: partial match for any not yet found
+      for (const alias of aliases) {
+        headerRow.forEach((h, i) => {
+          if (h.includes(alias) && !indices.includes(i)) indices.push(i);
+        });
+      }
+      return indices;
+    };
+
+    const timeIdx = findIdx(['time', 'opentime', 'open_time', 'openingtime', 'date']);
+    const typeIdx = findIdx(['type', 'direction', 'kind']);
+    const lotsIdx = findIdx(['lots', 'size', 'volume', 'lotes']);
+    const symbolIdx = findIdx(['symbol', 'item', 'instrument', 'pair', 'symbols']);
+    const slIdx = findIdx(['stoploss', 'stop_loss', 'sl']);
+    const tpIdx = findIdx(['takeprofit', 'take_profit', 'tp']);
+    const closeTimeIdx = findIdx(['closetime', 'close_time', 'closingtime']);
+    const commissionIdx = findIdx(['commission', 'comm']);
+    const swapIdx = findIdx(['swap', 'taxes', 'tax', 'swaps']);
+    const profitIdx = findIdx(['profit', 'pnl', 'grosspnl', 'netpnl']);
+
+    // Price columns: first match is entry, last match is exit
+    const priceIndices = findAllIdx(['price', 'rate', 'openprice', 'open_price', 'closeprice', 'close_price', 'exitprice', 'exit_price']);
+    const entryIdx = priceIndices.length > 0 ? priceIndices[0] : -1;
+    const exitIdx = priceIndices.length > 1 ? priceIndices[priceIndices.length - 1] : (priceIndices.length === 1 ? priceIndices[0] : -1);
+
+    const getVal = (idx: number, row: string[]): string => idx !== -1 && idx < row.length ? row[idx] : '';
+
+    const results: any[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length < 3) continue;
+
+      const rawType = getVal(typeIdx, row).toLowerCase();
+      const tradeType = rawType === 'buy' ? 'Buy' as const : rawType === 'sell' ? 'Sell' as const : null;
+      if (!tradeType) continue;
+
+      const symbol = getVal(symbolIdx, row).toUpperCase();
+      if (!symbol) continue;
+
+      const parseNum = (s: string): number => {
+        const cleaned = s.replace(/[^0-9.\-]/g, '');
+        return cleaned ? parseFloat(cleaned) : 0;
+      };
+
+      const rawDate = getVal(timeIdx, row) || getVal(closeTimeIdx, row);
+      let parsedDate: string;
+      if (rawDate) {
+        const d = new Date(rawDate.replace(/\./g, '-').replace(/\s+/g, 'T'));
+        parsedDate = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+      } else {
+        parsedDate = new Date().toISOString();
+      }
+
+      const lotSize = parseNum(getVal(lotsIdx, row));
+      const entryPrice = parseNum(getVal(entryIdx, row));
+      const exitPrice = parseNum(getVal(exitIdx, row));
+      const profit = parseNum(getVal(profitIdx, row));
+      const commission = parseNum(getVal(commissionIdx, row));
+      const swap = parseNum(getVal(swapIdx, row));
+      const sl = getVal(slIdx, row) ? parseNum(getVal(slIdx, row)) : undefined;
+      const tp = getVal(tpIdx, row) ? parseNum(getVal(tpIdx, row)) : undefined;
+
+      results.push({
+        date: parsedDate,
+        symbol: symbol || 'UNKNOWN',
+        type: tradeType,
+        lotSize: lotSize || 0.01,
+        entryPrice: entryPrice || 0,
+        exitPrice: exitPrice || 0,
+        stopLoss: sl && sl !== 0 ? sl : undefined,
+        takeProfit: tp && tp !== 0 ? tp : undefined,
+        profit: profit || 0,
+        commission: commission || 0,
+        swap: swap || 0,
+        strategy: 'Pasted from MT5',
+        emotion: 'Calm',
+        tags: ['MT5 Paste'],
+        isMt5Sync: true
+      });
+    }
+
+    return results;
   };
 
   // UI Currency formatting
@@ -2131,6 +2540,16 @@ export default function App() {
               <Plus className="h-4 w-4" />
               Add New Trade
             </button>
+            {activeTab === 'journal' && (
+              <button
+                onClick={() => { setShowPasteModal(true); setPasteRawText(''); setParsedTrades([]); }}
+                disabled={accounts.length === 0}
+                className="border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg py-2 px-4 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              >
+                <Terminal className="h-4 w-4" />
+                Paste from MT5
+              </button>
+            )}
           </div>
         </div>
 
@@ -2695,6 +3114,14 @@ export default function App() {
                     <div className="flex justify-between items-center border-b border-slate-50 pb-2 text-xs">
                       <span className="text-slate-400 font-medium">Active Drawdown</span>
                       <span className={`font-extrabold ${maxDrawdownPercentage > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{maxDrawdownPercentage}%</span>
+                    </div>
+                    <div className="flex justify-between items-center border-b border-slate-50 pb-2 text-xs">
+                      <span className="text-slate-400 font-medium">Winning Streak</span>
+                      <span className="font-extrabold text-emerald-600">{maxWinStreak}{maxWinStreak > 0 && currentWinStreak > 0 ? ` (${currentWinStreak} active)` : ''}</span>
+                    </div>
+                    <div className="flex justify-between items-center border-b border-slate-50 pb-2 text-xs">
+                      <span className="text-slate-400 font-medium">Losing Streak</span>
+                      <span className="font-extrabold text-rose-600">{maxLossStreak}{maxLossStreak > 0 && currentLossStreak > 0 ? ` (${currentLossStreak} active)` : ''}</span>
                     </div>
                   </div>
                 </div>
@@ -4384,6 +4811,126 @@ export default function App() {
                 {actionLoading ? 'Logging trade record...' : editingTradeId ? 'Update Trade Record' : 'Log Trade to Journal'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Paste-from-MT5 Modal */}
+      {showPasteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-4 z-50 overflow-y-auto pt-16 md:pt-24 pb-16">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-100 max-w-2xl w-full p-6 relative">
+            <button
+              onClick={() => setShowPasteModal(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition duration-150"
+            >
+              ✖
+            </button>
+
+            <h3 className="font-bold text-slate-900 text-base mb-1">Import MT5 Trades</h3>
+            <p className="text-[11px] text-slate-400 mb-4">
+              Paste copied trade data, or upload an HTML/XML report exported from MT5.
+            </p>
+
+            {/* File upload row */}
+            <div className="flex items-center gap-3 mb-4 p-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+              <label className="cursor-pointer flex items-center gap-2 text-xs font-semibold text-blue-600 hover:text-blue-700">
+                <Upload className="h-4 w-4" />
+                Upload HTML / XML Report
+                <input
+                  type="file"
+                  accept=".html,.htm,.xml"
+                  onChange={handleReportFileUpload}
+                  className="hidden"
+                />
+              </label>
+              <span className="text-[11px] text-slate-400">
+                From MT5: <strong>File → Save as Report</strong> (HTML) or export XML
+              </span>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 border-t border-slate-100"></div>
+              <span className="text-[11px] text-slate-400 font-medium">or paste tabular data</span>
+              <div className="flex-1 border-t border-slate-100"></div>
+            </div>
+
+            <textarea
+              value={pasteRawText}
+              onChange={e => setPasteRawText(e.target.value)}
+              rows={6}
+              className="w-full border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-700 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
+              placeholder={`Paste MT5 trade data here...\n\nExample (tab-separated):\n#\tTime\tType\tSize\tItem\tPrice\tS/L\tT/P\tClose Time\tPrice\tCommission\tSwap\tProfit\n12345\t2024.01.15 10:30\tbuy\t0.10\tEURUSD\t1.08500\t1.08000\t1.09000\t2024.01.15 12:45\t1.09200\t-3.50\t-1.20\t50.00`}
+            />
+
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={handleParsePaste}
+                disabled={!pasteRawText.trim() || pasteRawText.startsWith('[Parsed')}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg py-2 px-4 transition flex items-center gap-1.5"
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                Parse Trades
+              </button>
+              {parsedTrades.length > 0 && (
+                <span className="text-xs text-slate-500 self-center ml-1">
+                  {parsedTrades.length} trade{parsedTrades.length > 1 ? 's' : ''} detected
+                </span>
+              )}
+            </div>
+
+            {parsedTrades.length > 0 && (
+              <div className="mt-4 border border-slate-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-left text-slate-500 font-semibold">
+                      <th className="px-3 py-2 whitespace-nowrap">Date</th>
+                      <th className="px-3 py-2 whitespace-nowrap">Symbol</th>
+                      <th className="px-3 py-2 whitespace-nowrap">Type</th>
+                      <th className="px-3 py-2 whitespace-nowrap">Lots</th>
+                      <th className="px-3 py-2 whitespace-nowrap">Entry</th>
+                      <th className="px-3 py-2 whitespace-nowrap">Exit</th>
+                      <th className="px-3 py-2 whitespace-nowrap">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedTrades.map((t, idx) => (
+                      <tr key={idx} className="border-t border-slate-100 text-slate-700">
+                        <td className="px-3 py-1.5 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap font-medium">{t.symbol}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          <span className={`${t.type === 'Buy' ? 'text-emerald-600' : 'text-rose-600'} font-semibold`}>{t.type}</span>
+                        </td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{t.lotSize}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap font-mono">{t.entryPrice}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap font-mono">{t.exitPrice}</td>
+                        <td className={`px-3 py-1.5 whitespace-nowrap font-semibold font-mono ${t.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {parsedTrades.length > 0 && (
+              <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setShowPasteModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportParsedTrades}
+                  disabled={pasteImporting}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg py-2 px-4 transition disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {pasteImporting ? 'Importing...' : `Save All ${parsedTrades.length} Trades`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

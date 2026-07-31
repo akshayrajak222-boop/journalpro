@@ -1778,6 +1778,62 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     res.json({ message: 'Trade logged successfully', trade: newTrade, updatedAccount: db.accounts[accountIdx] });
   });
 
+  app.post('/api/trades/batch', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const { accountId, trades: incomingTrades } = req.body;
+    if (!accountId || !Array.isArray(incomingTrades) || incomingTrades.length === 0) {
+      return res.status(400).json({ error: 'accountId and trades[] are required' });
+    }
+
+    const account = db.accounts.find((a: any) => a.id === accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    const saved: Trade[] = [];
+    let balanceAdjustment = 0;
+
+    for (const t of incomingTrades) {
+      if (!t.symbol || !t.type || t.profit === undefined) continue;
+      const newTrade: Trade = {
+        id: `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        accountId,
+        date: t.date || new Date().toISOString(),
+        symbol: t.symbol.toUpperCase(),
+        type: t.type,
+        lotSize: parseFloat(t.lotSize) || 0.01,
+        entryPrice: parseFloat(t.entryPrice) || 0,
+        exitPrice: parseFloat(t.exitPrice) || 0,
+        stopLoss: t.stopLoss ? parseFloat(t.stopLoss) : undefined,
+        takeProfit: t.takeProfit ? parseFloat(t.takeProfit) : undefined,
+        profit: parseFloat(t.profit) || 0,
+        commission: t.commission ? parseFloat(t.commission) : 0,
+        swap: t.swap ? parseFloat(t.swap) : 0,
+        riskPercentage: t.riskPercentage ? parseFloat(t.riskPercentage) : 1.0,
+        strategy: t.strategy || 'Pasted from MT5',
+        emotion: t.emotion || 'Calm',
+        notes: t.notes || '',
+        screenshot: '',
+        tags: t.tags || ['MT5 Paste'],
+        isMt5Sync: true
+      };
+      db.trades.push(newTrade);
+      saved.push(newTrade);
+      balanceAdjustment += newTrade.profit + newTrade.commission + newTrade.swap;
+    }
+
+    if (saved.length > 0) {
+      account.currentBalance = parseFloat((account.currentBalance + balanceAdjustment).toFixed(2));
+      account.equity = account.currentBalance;
+      await saveDatabase(db, authEmail);
+    }
+
+    res.json({ message: `${saved.length} trades imported successfully`, trades: saved, totalSaved: saved.length });
+  });
+
   app.put('/api/trades/:id', async (req, res) => {
     
 
