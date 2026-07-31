@@ -250,13 +250,15 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
+          // Keep sessionStorage in sync with the server's canonical user id
+          persistAuthSession(data.user.id || userId, data.user.email || email);
           setUser(data.user);
           setShowOnboardingWizard(false);
           await fetchAccountData();
           // Check admin status directly after login
           try {
             const adminRes = await fetch('/api/admin/check', {
-              headers: { 'x-auth-user-id': userId, 'x-auth-email': email }
+              headers: { 'x-auth-user-id': data.user.id || userId, 'x-auth-email': data.user.email || email }
             });
             if (adminRes.ok) {
               const adminData = await adminRes.json();

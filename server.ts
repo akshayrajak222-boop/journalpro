@@ -554,6 +554,33 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
   // Load from SQL tables if Supabase is enabled
   if (useSupabase && (cleanUserId || cleanEmail)) {
     try {
+      const loadUserData = async (uid: string) => {
+        const [
+          { data: users },
+          { data: accounts },
+          { data: trades },
+          { data: riskSettings },
+          { data: supportTickets },
+          { data: mt5Connections }
+        ] = await Promise.all([
+          supabase.from('users').select('*').eq('id', uid),
+          supabase.from('trading_accounts').select('*').eq('user_id', uid),
+          supabase.from('trades').select('*').eq('user_id', uid),
+          supabase.from('risk_settings').select('*').eq('user_id', uid),
+          supabase.from('support_tickets').select('*').eq('user_id', uid),
+          supabase.from('mt5_connections').select('*').eq('user_id', uid)
+        ]);
+        return {
+          users: toCamel(users || []),
+          accounts: toCamel(accounts || []),
+          trades: toCamel(trades || []),
+          riskSettings: toCamel(riskSettings || []),
+          supportTickets: toCamel(supportTickets || []),
+          mt5Connections: toCamel(mt5Connections || []),
+          payments: []
+        };
+      };
+
       // If we only have email (e.g. from MT5 EA sync), look up the user first
       if (!cleanUserId && cleanEmail) {
         const { data: userByEmail } = await supabase.from('users').select('id').eq('email', cleanEmail).maybeSingle();
@@ -567,31 +594,17 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
         return createEmptyUserDb('', cleanEmail, false);
       }
 
-      const [
-        { data: users },
-        { data: accounts },
-        { data: trades },
-        { data: riskSettings },
-        { data: supportTickets },
-        { data: mt5Connections }
-      ] = await Promise.all([
-        supabase.from('users').select('*').eq('id', cleanUserId),
-        supabase.from('trading_accounts').select('*').eq('user_id', cleanUserId),
-        supabase.from('trades').select('*').eq('user_id', cleanUserId),
-        supabase.from('risk_settings').select('*').eq('user_id', cleanUserId),
-        supabase.from('support_tickets').select('*').eq('user_id', cleanUserId),
-        supabase.from('mt5_connections').select('*').eq('user_id', cleanUserId)
-      ]);
+      let loadedDb = await loadUserData(cleanUserId);
 
-      const loadedDb = {
-        users: toCamel(users || []),
-        accounts: toCamel(accounts || []),
-        trades: toCamel(trades || []),
-        riskSettings: toCamel(riskSettings || []),
-        supportTickets: toCamel(supportTickets || []),
-        mt5Connections: toCamel(mt5Connections || []),
-        payments: []
-      };
+      // Fallback: the provided id may not match the stored row (e.g. OAuth UUID vs
+      // server-generated id). Re-resolve the canonical id by email and reload.
+      if (loadedDb.users.length === 0 && cleanEmail) {
+        const { data: userByEmail } = await supabase.from('users').select('id').eq('email', cleanEmail).maybeSingle();
+        if (userByEmail?.id && userByEmail.id !== cleanUserId) {
+          cleanUserId = userByEmail.id;
+          loadedDb = await loadUserData(cleanUserId);
+        }
+      }
 
       // Check in-memory userDatabases cache if Supabase returned 0 accounts/trades
       const cached = userDatabases.get(cleanUserId) || (cleanEmail ? userDatabases.get(cleanEmail) : null);
@@ -950,7 +963,23 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           last_login: new Date().toISOString()
         };
         if (useSupabase) {
-          await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
+          const { error: upsertErr } = await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
+          if (upsertErr) {
+            console.error('[Register SSO] Supabase upsert error:', upsertErr);
+            return res.status(500).json({ error: 'Failed to sync account. Please try again.' });
+          }
+        } else {
+          // Fallback: persist the SSO user in-memory so later requests resolve it
+          let db = await ensureUserDbLoaded(uid, normalizedEmail);
+          let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+          if (!user) {
+            user = { ...toCamel(userRecord) };
+            db.users.push(user);
+          } else {
+            Object.assign(user, toCamel(userRecord));
+          }
+          userDatabases.set(normalizedEmail, db);
+          userDatabases.set(uid, db);
         }
         const camelUser = toCamel(userRecord);
         return res.json({ message: 'Registration successful.', user: camelUser, requiresOtp: false });

@@ -59,7 +59,12 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.user) { onLoginSuccess(); return; }
+        if (data.user) {
+          // Keep sessionStorage in sync with the server's canonical user id
+          persistAuthSession(data.user.id || userId, data.user.email || email);
+          onLoginSuccess();
+          return;
+        }
       }
     } catch (e) {
       console.error('Error syncing user with backend:', e);
