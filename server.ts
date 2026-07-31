@@ -965,8 +965,26 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         if (useSupabase) {
           const { error: upsertErr } = await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
           if (upsertErr) {
-            console.error('[Register SSO] Supabase upsert error:', upsertErr);
-            return res.status(500).json({ error: 'Failed to sync account. Please try again.' });
+            // Column may not exist (e.g. auth_provider/last_login migration not applied).
+            // Retry with only the base columns guaranteed by supabase_schema.sql.
+            console.warn('[Register SSO] Full upsert failed, retrying with base columns:', upsertErr.message);
+            const baseRecord = {
+              id: uid,
+              email: normalizedEmail,
+              name: name || normalizedEmail.split('@')[0],
+              password: password ? await bcrypt.hash(password, 10) : (existingUserRow?.password || ''),
+              experience: existingUserRow?.experience || 'Intermediate',
+              trading_style: existingUserRow?.trading_style || 'Day Trading',
+              main_markets: existingUserRow?.main_markets || ['Forex', 'Gold'],
+              onboarding_completed: existingUserRow?.onboarding_completed || false,
+              is_pro: existingUserRow?.is_pro || false,
+              is_email_verified: true
+            };
+            const { error: baseErr } = await supabase.from('users').upsert(baseRecord, { onConflict: 'id' });
+            if (baseErr) {
+              console.error('[Register SSO] Base upsert failed:', baseErr);
+              return res.status(500).json({ error: 'Failed to sync account. Please try again.' });
+            }
           }
         } else {
           // Fallback: persist the SSO user in-memory so later requests resolve it
