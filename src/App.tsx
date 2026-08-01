@@ -28,6 +28,7 @@ import MT5Instructions from './components/MT5Instructions';
 import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
+import GuidedTour from './components/GuidedTour';
 import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
 import LoginPage from './pages/LoginPage';
@@ -175,11 +176,15 @@ export default function App() {
   const [journalFilterEmotion, setJournalFilterEmotion] = useState('');
 
   // Unified settings tab state
-  const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk'>('general');
+  const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('general');
   const [activeAboutForm, setActiveAboutForm] = useState<'none' | 'support' | 'bug' | 'feature'>('none');
 
   // Sign-out confirmation modal
   const [showSignOutModal, setShowSignOutModal] = useState(false);
+
+  // First-time guided onboarding tour
+  const [showGuidedTour, setShowGuidedTour] = useState(false);
+  const [guidedTourStep, setGuidedTourStep] = useState(1);
 
   // Theme state with local persistence
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -326,6 +331,52 @@ export default function App() {
       navigate('/dashboard', { replace: true });
     }
   }, [user, location.pathname]);
+
+  // Guided tour: show for first-time users who have not created a portfolio
+  useEffect(() => {
+    if (!user || loading) return;
+    if (localStorage.getItem('journal_tutorial_done') === '1') return;
+    if (accounts.length === 0) {
+      setGuidedTourStep(1);
+      setShowGuidedTour(true);
+    }
+  }, [user, loading, accounts]);
+
+  // Auto-advance from "Create Portfolio" to "Add First Trade" once a portfolio exists
+  useEffect(() => {
+    if (showGuidedTour && guidedTourStep === 2 && accounts.length > 0) {
+      setGuidedTourStep(3);
+    }
+  }, [showGuidedTour, guidedTourStep, accounts]);
+
+  const startGuidedTour = () => {
+    setGuidedTourStep(1);
+    setShowGuidedTour(true);
+  };
+
+  const completeGuidedTour = () => {
+    localStorage.setItem('journal_tutorial_done', '1');
+    setShowGuidedTour(false);
+  };
+
+  const nextGuidedTourStep = () => {
+    setGuidedTourStep(prev => {
+      const next = prev + 1;
+      if (next === 2) setActiveTab('accounts');
+      if (next === 3) setActiveTab('dashboard');
+      return Math.min(next, 4);
+    });
+  };
+
+  const backGuidedTourStep = () => {
+    setGuidedTourStep(prev => {
+      const back = prev - 1;
+      if (back === 2) setActiveTab('accounts');
+      if (back === 1) setActiveTab('dashboard');
+      return Math.max(back, 1);
+    });
+  };
+
 
   // Sync selected currency when activeAccount loads
   useEffect(() => {
@@ -2536,6 +2587,7 @@ export default function App() {
             <button
               onClick={() => handleOpenTradeModal()}
               disabled={accounts.length === 0}
+              data-tour="add-trade"
               className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg py-2 px-4 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
             >
               <Plus className="h-4 w-4" />
@@ -3048,6 +3100,7 @@ export default function App() {
                   setShowAccountModal(true); 
                   setAccountCreationMethod('select'); 
                 }}
+                data-tour="create-portfolio"
                 className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition h-56 text-xs font-bold bg-white"
               >
                 <Plus className="h-6 w-6 text-slate-400" />
@@ -3381,6 +3434,16 @@ export default function App() {
               >
                 <Info className="h-4 w-4" />
                 About
+              </button>
+
+              <button
+                onClick={() => setSettingsTab('help')}
+                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                  settingsTab === 'help' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <HelpCircle className="h-4 w-4" />
+                Help
               </button>
 
               <button
@@ -4009,6 +4072,61 @@ export default function App() {
                       </div>
                     </div>
 
+                  </div>
+                </div>
+              )}
+
+              {/* Help Sub-tab */}
+              {settingsTab === 'help' && (
+                <div className="space-y-6">
+                  <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+                      <div>
+                        <h3 className="font-extrabold text-slate-900 text-base">Help &amp; Getting Started</h3>
+                        <p className="text-xs text-slate-400">Guides, tips, and onboarding tools.</p>
+                      </div>
+                      <span className="bg-slate-100 text-slate-800 font-mono text-xs font-bold px-3 py-1 rounded-full">
+                        Support Center
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-500/10 dark:to-blue-500/5 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-5 space-y-3">
+                        <div className="h-10 w-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center">
+                          <Compass className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <strong className="text-sm font-black text-slate-900 dark:text-white block">Restart Onboarding</strong>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            Replay the guided tour that walks you through creating a portfolio and logging your first trade.
+                          </p>
+                        </div>
+                        <button
+                          onClick={startGuidedTour}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg transition flex items-center justify-center gap-1.5"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" /> Restart Onboarding
+                        </button>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/10 dark:to-teal-500/5 border border-emerald-100 dark:border-emerald-500/20 rounded-xl p-5 space-y-3">
+                        <div className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center">
+                          <BookOpen className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <strong className="text-sm font-black text-slate-900 dark:text-white block">Getting Started Tips</strong>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            Create a portfolio first, then log trades manually or sync your MT5 account from the MT5 Automation tab.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab('mt5')}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg transition flex items-center justify-center gap-1.5"
+                        >
+                          <Radio className="h-3.5 w-3.5" /> Explore MT5 Sync
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -5013,7 +5131,19 @@ export default function App() {
         </div>
       )}
 
-      {/* Sign-out confirmation modal (localhost only) */}
+      {/* First-time onboarding guided tour */}
+      {showGuidedTour && user && (
+        <GuidedTour
+          step={guidedTourStep}
+          accountCreated={accounts.length > 0}
+          onNext={nextGuidedTourStep}
+          onBack={backGuidedTourStep}
+          onSkip={completeGuidedTour}
+          onFinish={completeGuidedTour}
+        />
+      )}
+
+      {/* Sign-out confirmation modal */}
       {showSignOutModal && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4"

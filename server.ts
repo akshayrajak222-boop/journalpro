@@ -1018,7 +1018,6 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         onboarding_completed: existingUserRow?.onboarding_completed || false,
         is_pro: existingUserRow?.is_pro || false,
         is_email_verified: false,
-        auth_provider: 'email',
         email_otp: otp,
         otp_expires_at: otpExpiresAt,
         otp_attempts: 0,
@@ -1028,8 +1027,37 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       if (useSupabase) {
         const { error: upsertErr } = await supabase.from('users').upsert(userRecord, { onConflict: 'id' });
         if (upsertErr) {
-          console.error('[Register] Supabase upsert error:', upsertErr);
-          return res.status(500).json({ error: 'Failed to create account. Please try again.' });
+          // Column may not exist (e.g. auth_provider/last_login migration not applied).
+          // Retry with only the base columns guaranteed by the users table.
+          console.warn('[Register] Full upsert failed, retrying with base columns:', upsertErr.message);
+          const baseRecord = {
+            id: uid,
+            email: normalizedEmail,
+            name: name || existingUserRow?.name || normalizedEmail.split('@')[0],
+            password: hashedPassword,
+            experience: existingUserRow?.experience || 'Intermediate',
+            trading_style: existingUserRow?.trading_style || 'Day Trading',
+            main_markets: existingUserRow?.main_markets || ['Forex', 'Gold'],
+            onboarding_completed: existingUserRow?.onboarding_completed || false,
+            is_pro: existingUserRow?.is_pro || false,
+            is_email_verified: false
+          };
+          const { error: baseErr } = await supabase.from('users').upsert(baseRecord, { onConflict: 'id' });
+          if (baseErr) {
+            console.error('[Register] Base upsert failed:', baseErr);
+            return res.status(500).json({ error: 'Failed to create account. Please try again.' });
+          }
+          // Persist OTP fields via a targeted update (only columns that exist)
+          try {
+            await supabase.from('users').update({
+              email_otp: otp,
+              otp_expires_at: otpExpiresAt,
+              otp_attempts: 0,
+              otp_sent_at: new Date().toISOString()
+            }).eq('id', uid);
+          } catch (otpErr) {
+            console.warn('[Register] OTP field update failed (non-fatal):', otpErr);
+          }
         }
       } else {
         // Fallback: in-memory
