@@ -318,6 +318,15 @@ export default function App() {
     }
   }, [user]);
 
+  // Auth-based route redirection (avoid navigate() during render)
+  useEffect(() => {
+    if (!user) {
+      if (location.pathname !== '/login') navigate('/login', { replace: true });
+    } else if (location.pathname === '/login' || location.pathname === '/') {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, location.pathname]);
+
   // Sync selected currency when activeAccount loads
   useEffect(() => {
     if (activeAccount) {
@@ -802,13 +811,7 @@ export default function App() {
 
 
   const handleLogout = async () => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (isLocalhost) {
-      setShowSignOutModal(true);
-      return;
-    }
-
-    await performLogout();
+    setShowSignOutModal(true);
   };
 
   const performLogout = async () => {
@@ -1455,29 +1458,35 @@ export default function App() {
     }
   };
 
-  // Pro Upgrade Trigger via mock Razorpay checkout
-  const handleUpgradeToPro = async () => {
+  // Pro Upgrade Trigger: redirect to Settings > Subscription for plan selection
+  const handleUpgradeToPro = () => {
+    setActiveTab('settings');
+    setSettingsTab('subscription');
+    setMobileMenuOpen(false);
+    window.scrollTo(0, 0);
+  };
+
+  // Free Plan activation grants full Pro access
+  const handleActivateFreePlan = async () => {
+    setActionLoading(true);
     try {
-      const response = await authFetch('/api/payments/checkout', { method: 'POST' });
-      const checkoutData = await response.json();
-      
-      // Simulate Razorpay popup and direct verification call
-      const verifyRes = await authFetch('/api/payments/verify', {
+      const res = await authFetch('/api/auth/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          razorpay_payment_id: `pay_rzp_${Date.now()}_akshay`,
-          status: 'Success'
-        })
+        body: JSON.stringify({ isPro: true })
       });
-      const verifyData = await verifyRes.json();
-      if (verifyData.success) {
-        alert('Payment Verified! Congratulations, you have unlocked FX Journal Pro features.');
-        setUser(verifyData.user);
+      const data = await res.json();
+      if (res.ok) {
+        setUser(data.user);
+        alert('Free Plan activated! You now have full FX Journal Pro access.');
         fetchAccountData();
+      } else {
+        alert(data.error || 'Failed to activate Free Plan.');
       }
     } catch (e) {
-      alert('Subscription processing error. Please try again.');
+      alert('Error activating Free Plan.');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -2100,10 +2109,6 @@ export default function App() {
 
   // No user - show login page
   if (!user) {
-    if (location.pathname !== '/login') {
-      navigate('/login', { replace: true });
-      return null;
-    }
     return (
       <LoginPage
         isSupabaseConfigured={isSupabaseConfigured}
@@ -2113,12 +2118,6 @@ export default function App() {
         authFetch={authFetch}
       />
     );
-  }
-
-  // User is authenticated - redirect to dashboard if on login page
-  if (location.pathname === '/login' || location.pathname === '/') {
-    navigate('/dashboard', { replace: true });
-    return null;
   }
 
   // Onboarding Wizard (if registration completes but not onboarding completed)
@@ -3652,10 +3651,20 @@ export default function App() {
                         ))}
                       </ul>
                       <div className="mt-5">
-                        <span className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 font-bold text-xs py-2.5 px-3 rounded-xl border border-emerald-200">
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                          Active — Free Access
-                        </span>
+                        {user.isPro ? (
+                          <span className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 font-bold text-xs py-2.5 px-3 rounded-xl border border-emerald-200">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            Active — Free Access
+                          </span>
+                        ) : (
+                          <button
+                            onClick={handleActivateFreePlan}
+                            disabled={actionLoading}
+                            className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition disabled:opacity-50"
+                          >
+                            {actionLoading ? 'Activating...' : 'Select Free Plan & Activate Pro'}
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -3699,7 +3708,7 @@ export default function App() {
                       </div>
                       <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                        Active — Free Access
+                        {user.isPro ? 'Pro Member — Free Access' : 'Free Sandbox Trial'}
                       </span>
                     </div>
                   </div>
