@@ -2089,6 +2089,23 @@ export default function App() {
     window.URL.revokeObjectURL(url);
   };
 
+  const BRAND_WEBSITE = 'https://fxjournalpro.com';
+  const loadBrandLogoDataUrl = async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/fxjournalpro-logo.png');
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
   const handleExportExcel = async () => {
     const XLSX = await import('xlsx');
     const range = getExportRange();
@@ -2096,7 +2113,9 @@ export default function App() {
     const stats = computeExportStats(inRange);
 
     const data: any[][] = [];
-    data.push(['FX Journal Pro - Trading Journal Export']);
+    data.push(['FXJournalPro']);
+    data.push(['Trading Journal Export']);
+    data.push([`Website: ${BRAND_WEBSITE}`]);
     data.push([`Account: ${activeAccount?.name || 'N/A'}`]);
     data.push([`Period: ${getPeriodLabel(range)}`]);
     data.push([`Exported: ${new Date().toLocaleDateString()}`]);
@@ -2115,20 +2134,24 @@ export default function App() {
     inRange.forEach(t => {
       data.push([t.date, t.symbol, t.type, t.lotSize, t.entryPrice, t.exitPrice, t.profit, t.commission, t.swap, t.strategy || '', t.emotion || '', t.notes || '']);
     });
+    data.push([]);
+    data.push([`FXJournalPro | ${BRAND_WEBSITE}`]);
 
     const ws = XLSX.utils.aoa_to_sheet(data);
     const rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    const navy = { fgColor: { rgb: '1E3A5F' } };
+    const navy = { fgColor: { rgb: '0F1E36' } };
     const blue = { fgColor: { rgb: '2F5B8E' } };
     const light = { fgColor: { rgb: 'F2F5F9' } };
+    const footerFill = { fgColor: { rgb: 'E9EEF4' } };
     const white = { rgb: 'FFFFFF' };
     const borderThin = { style: 'thin', color: { rgb: 'D9E2EC' } };
     const borderHair = { style: 'hair', color: { rgb: 'E3E8EE' } };
 
-    const summaryHeaderRow = 5;
-    const summaryStartRow = 6;
-    const summaryEndRow = 13;
-    const tableHeaderRow = 15;
+    const summaryHeaderRow = 7;
+    const summaryStartRow = 8;
+    const summaryEndRow = 15;
+    const tableHeaderRow = 17;
+    const footerRow = data.length - 1;
 
     for (let R = 0; R <= rng.e.r; R++) {
       for (let C = 0; C <= rng.e.c; C++) {
@@ -2137,10 +2160,14 @@ export default function App() {
         if (!cell) continue;
         const s = (cell.s = cell.s || {});
         if (R === 0) {
-          s.font = { bold: true, sz: 16, color: white };
+          s.font = { bold: true, sz: 18, color: white };
           s.fill = navy;
           s.alignment = { horizontal: 'center', vertical: 'center' };
-        } else if (R >= 1 && R <= 3) {
+        } else if (R === 1) {
+          s.font = { bold: true, sz: 12, color: white };
+          s.fill = navy;
+          s.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (R >= 2 && R <= 5) {
           s.font = { sz: 10, color: white };
           s.fill = navy;
           s.alignment = { horizontal: 'center', vertical: 'center' };
@@ -2158,16 +2185,21 @@ export default function App() {
           s.fill = blue;
           s.alignment = { horizontal: 'center', vertical: 'center' };
           s.border = { top: borderThin, bottom: borderThin };
-        } else if (R > tableHeaderRow) {
+        } else if (R > tableHeaderRow && R < footerRow) {
           s.font = { sz: 9 };
           s.alignment = { horizontal: [3, 4, 5, 6, 7, 8].includes(C) ? 'right' : 'left', vertical: 'center' };
           s.border = { top: borderHair, bottom: borderHair };
           if (R % 2 === 0) s.fill = { fgColor: { rgb: 'FAFBFD' } };
+        } else if (R === footerRow) {
+          s.font = { bold: true, sz: 10, color: { rgb: '1E3A5F' } };
+          s.fill = footerFill;
+          s.alignment = { horizontal: 'center', vertical: 'center' };
+          s.border = { top: borderThin };
         }
-        if (R === 10) s.numFmt = '0.00';
-        if (R >= 11 && R <= 13) s.numFmt = '#,##0.00';
-        if (R === 14) s.numFmt = '0.00';
-        if (R > tableHeaderRow) {
+        if (R === 11) s.numFmt = '0.00';
+        if (R >= 12 && R <= 14) s.numFmt = '#,##0.00';
+        if (R === 15) s.numFmt = '0.00';
+        if (R > tableHeaderRow && R < footerRow) {
           if (C === 3) s.numFmt = '0.00';
           if (C === 4 || C === 5) s.numFmt = '0.00000';
           if (C === 6 || C === 7 || C === 8) s.numFmt = '#,##0.00';
@@ -2180,15 +2212,21 @@ export default function App() {
       { s: { r: 1, c: 0 }, e: { r: 1, c: rng.e.c } },
       { s: { r: 2, c: 0 }, e: { r: 2, c: rng.e.c } },
       { s: { r: 3, c: 0 }, e: { r: 3, c: rng.e.c } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: rng.e.c } },
+      { s: { r: 5, c: 0 }, e: { r: 5, c: rng.e.c } },
       { s: { r: summaryHeaderRow, c: 0 }, e: { r: summaryHeaderRow, c: rng.e.c } },
+      { s: { r: footerRow, c: 0 }, e: { r: footerRow, c: rng.e.c } },
     ];
     ws['!cols'] = [
       { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
       { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 14 }, { wch: 40 },
     ];
     ws['!rows'] = [
-      { hpt: 32 }, { hpt: 20 }, { hpt: 20 }, { hpt: 20 }, { hpt: 8 }, { hpt: 24 },
+      { hpt: 30 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 },
+      { hpt: 8 }, { hpt: 24 },
       ...Array.from({ length: 8 }, () => ({ hpt: 20 })),
+      { hpt: 8 }, { hpt: 22 },
+      ...Array.from({ length: inRange.length }, () => ({ hpt: 18 })),
       { hpt: 8 }, { hpt: 22 },
     ];
 
@@ -2201,6 +2239,7 @@ export default function App() {
 
   const handleExportPdf = async () => {
     const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+    const logoDataUrl = await loadBrandLogoDataUrl();
     const range = getExportRange();
     const inRange = filterTradesByRange(range);
     const stats = computeExportStats(inRange);
@@ -2209,16 +2248,38 @@ export default function App() {
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
 
-    doc.setFillColor(30, 58, 95);
-    doc.rect(0, 0, pageW, 30, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text('FX Journal Pro - Trading Journal Export', 12, 13);
-    doc.setFontSize(9);
+    // Brand header band
+    doc.setFillColor(15, 30, 54);
+    doc.rect(0, 0, pageW, 28, 'F');
+    doc.setFillColor(16, 185, 129);
+    doc.rect(0, 28, pageW, 1.6, 'F');
+
+    if (logoDataUrl) {
+      doc.addImage(logoDataUrl, 'PNG', 12, 5, 18, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(255, 255, 255);
+      doc.text('FXJournalPro', 34, 16);
+    } else {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(17);
+      doc.setTextColor(255, 255, 255);
+      doc.text('FXJournalPro', 12, 17);
+    }
     doc.setFont('helvetica', 'normal');
-    doc.text(`Account: ${activeAccount?.name || 'N/A'}`, 12, 21);
-    doc.text(`Period: ${getPeriodLabel(range)}`, 12, 26);
+    doc.setFontSize(9.5);
+    doc.setTextColor(255, 255, 255);
+    doc.textWithLink(BRAND_WEBSITE, pageW - 12, 12, { url: BRAND_WEBSITE });
+
+    // Report title block
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(17);
+    doc.setTextColor(15, 30, 54);
+    doc.text('Trading Journal Export', 12, 44);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(100, 110, 125);
+    doc.text(`Account: ${activeAccount?.name || 'N/A'}   |   Period: ${getPeriodLabel(range)}   |   Exported: ${new Date().toLocaleDateString()}`, 12, 50.5);
 
     autoTable(doc, {
       head: [['Performance Summary', '']],
@@ -2232,7 +2293,7 @@ export default function App() {
         ['Net Profit', `${stats.netProfit >= 0 ? '+' : ''}$${stats.netProfit.toFixed(2)}`],
         ['Profit Factor', stats.profitFactor.toFixed(2)],
       ],
-      startY: 36,
+      startY: 56,
       theme: 'grid',
       headStyles: { fillColor: [30, 58, 95], textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
       bodyStyles: { fontSize: 8.5, cellPadding: 2 },
@@ -2278,9 +2339,10 @@ export default function App() {
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFontSize(8);
-      doc.setTextColor(130, 140, 150);
+      doc.setTextColor(120, 130, 145);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Generated ${new Date().toLocaleDateString()} - Page ${i} of ${pageCount}`, pageW - 12, pageH - 8, { align: 'right' });
+      doc.text(`FXJournalPro | ${BRAND_WEBSITE}`, 12, pageH - 7);
+      doc.text(`Page ${i} of ${pageCount}`, pageW - 12, pageH - 7, { align: 'right' });
     }
 
     const blob = doc.output('blob');
