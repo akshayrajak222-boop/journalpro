@@ -6,7 +6,8 @@ import {
   DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
-  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload
+  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
+  FileSpreadsheet, FileText
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -174,6 +175,13 @@ export default function App() {
   const [journalFilterSymbol, setJournalFilterSymbol] = useState('');
   const [journalFilterStrategy, setJournalFilterStrategy] = useState('');
   const [journalFilterEmotion, setJournalFilterEmotion] = useState('');
+
+  // Export Journal modal
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportPreset, setExportPreset] = useState('this-month');
+  const [exportCustomStart, setExportCustomStart] = useState('');
+  const [exportCustomEnd, setExportCustomEnd] = useState('');
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf'>('xlsx');
 
   // Unified settings tab state
   const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('general');
@@ -1998,18 +2006,291 @@ export default function App() {
   });
 
   // Export report to CSV helper
-  const handleExportCSV = () => {
-    let headers = 'ID,Date,Symbol,Type,Lots,Entry,Exit,Profit,Commission,Swap,Strategy,Emotion,Notes\n';
-    const rows = trades.map(t => 
-      `"${t.id}","${t.date}","${t.symbol}","${t.type}",${t.lotSize},${t.entryPrice},${t.exitPrice},${t.profit},${t.commission},${t.swap},"${t.strategy || ''}","${t.emotion || ''}","${(t.notes || '').replace(/"/g, '""')}"`
-    ).join('\n');
-    
-    const blob = new Blob([headers + rows], { type: 'text/csv' });
+  const getExportRange = (): { start?: Date; end?: Date } => {
+    if (exportPreset === 'custom') {
+      const start = exportCustomStart ? new Date(exportCustomStart + 'T00:00:00') : undefined;
+      const end = exportCustomEnd ? new Date(exportCustomEnd + 'T23:59:59.999') : undefined;
+      return { start, end };
+    }
+    if (exportPreset === 'all') return {};
+    const now = new Date();
+    switch (exportPreset) {
+      case 'this-month': {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+      }
+      case 'last-month': {
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        return { start, end };
+      }
+      case 'last-3-months': {
+        const start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+      }
+      case 'last-6-months': {
+        const start = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+      }
+      case 'this-year': {
+        const start = new Date(now.getFullYear(), 0, 1);
+        const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        return { start, end };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const filterTradesByRange = (range: { start?: Date; end?: Date }) => {
+    return trades.filter(t => {
+      const d = new Date(t.date);
+      if (isNaN(d.getTime())) return !range.start && !range.end;
+      if (range.start && d < range.start) return false;
+      if (range.end && d > range.end) return false;
+      return true;
+    });
+  };
+
+  const getPeriodLabel = (range: { start?: Date; end?: Date }): string => {
+    if (!range.start && !range.end) return 'All Time';
+    const fmt = (d?: Date) => d ? d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '...';
+    return `${fmt(range.start)} - ${fmt(range.end)}`;
+  };
+
+  const computeExportStats = (inRange: Trade[]) => {
+    const wins = inRange.filter(t => t.profit > 0);
+    const losses = inRange.filter(t => t.profit <= 0);
+    const totalProfit = inRange.reduce((s, t) => s + Math.max(t.profit, 0), 0);
+    const totalLoss = Math.abs(inRange.reduce((s, t) => s + Math.min(t.profit, 0), 0));
+    const winRate = inRange.length > 0 ? (wins.length / inRange.length) * 100 : 0;
+    const netProfit = totalProfit - totalLoss;
+    const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : (totalProfit > 0 ? totalProfit : 0);
+    return { wins, losses, totalProfit, totalLoss, winRate, netProfit, profitFactor };
+  };
+
+  const getExportFilename = (ext: string): string => {
+    const safeName = (activeAccount?.name || 'export').replace(/[^a-zA-Z0-9]+/g, '_');
+    const periodPart = exportPreset === 'custom'
+      ? `${exportCustomStart || 'from'}_${exportCustomEnd || 'to'}`
+      : exportPreset;
+    return `fx_journal_pro_${safeName}_${periodPart}.${ext}`;
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.setAttribute('href', url);
-    a.setAttribute('download', `fx_journal_pro_${activeAccount?.name || 'export'}.csv`);
+    a.setAttribute('download', filename);
     a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleExportExcel = async () => {
+    const XLSX = await import('xlsx');
+    const range = getExportRange();
+    const inRange = filterTradesByRange(range);
+    const stats = computeExportStats(inRange);
+
+    const data: any[][] = [];
+    data.push(['FX Journal Pro - Trading Journal Export']);
+    data.push([`Account: ${activeAccount?.name || 'N/A'}`]);
+    data.push([`Period: ${getPeriodLabel(range)}`]);
+    data.push([`Exported: ${new Date().toLocaleDateString()}`]);
+    data.push([]);
+    data.push(['PERFORMANCE SUMMARY']);
+    data.push(['Total Number of Trades', inRange.length]);
+    data.push(['Number of Winning Trades', stats.wins.length]);
+    data.push(['Number of Losing Trades', stats.losses.length]);
+    data.push(['Win Rate (%)', stats.winRate]);
+    data.push(['Total Profit', stats.totalProfit]);
+    data.push(['Total Loss', stats.totalLoss]);
+    data.push(['Net Profit', stats.netProfit]);
+    data.push(['Profit Factor', stats.profitFactor]);
+    data.push([]);
+    data.push(['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion', 'Notes']);
+    inRange.forEach(t => {
+      data.push([t.date, t.symbol, t.type, t.lotSize, t.entryPrice, t.exitPrice, t.profit, t.commission, t.swap, t.strategy || '', t.emotion || '', t.notes || '']);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    const navy = { fgColor: { rgb: '1E3A5F' } };
+    const blue = { fgColor: { rgb: '2F5B8E' } };
+    const light = { fgColor: { rgb: 'F2F5F9' } };
+    const white = { rgb: 'FFFFFF' };
+    const borderThin = { style: 'thin', color: { rgb: 'D9E2EC' } };
+    const borderHair = { style: 'hair', color: { rgb: 'E3E8EE' } };
+
+    const summaryHeaderRow = 5;
+    const summaryStartRow = 6;
+    const summaryEndRow = 13;
+    const tableHeaderRow = 15;
+
+    for (let R = 0; R <= rng.e.r; R++) {
+      for (let C = 0; C <= rng.e.c; C++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[addr];
+        if (!cell) continue;
+        const s = (cell.s = cell.s || {});
+        if (R === 0) {
+          s.font = { bold: true, sz: 16, color: white };
+          s.fill = navy;
+          s.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (R >= 1 && R <= 3) {
+          s.font = { sz: 10, color: white };
+          s.fill = navy;
+          s.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (R === summaryHeaderRow) {
+          s.font = { bold: true, sz: 12, color: white };
+          s.fill = navy;
+          s.alignment = { horizontal: 'left', vertical: 'center' };
+        } else if (R >= summaryStartRow && R <= summaryEndRow) {
+          s.font = { bold: C === 0, sz: 10 };
+          s.fill = C === 0 ? light : { fgColor: { rgb: 'FFFFFF' } };
+          s.border = { top: borderThin, bottom: borderThin };
+          s.alignment = { horizontal: C === 0 ? 'left' : 'right', vertical: 'center' };
+        } else if (R === tableHeaderRow) {
+          s.font = { bold: true, sz: 10, color: white };
+          s.fill = blue;
+          s.alignment = { horizontal: 'center', vertical: 'center' };
+          s.border = { top: borderThin, bottom: borderThin };
+        } else if (R > tableHeaderRow) {
+          s.font = { sz: 9 };
+          s.alignment = { horizontal: [3, 4, 5, 6, 7, 8].includes(C) ? 'right' : 'left', vertical: 'center' };
+          s.border = { top: borderHair, bottom: borderHair };
+          if (R % 2 === 0) s.fill = { fgColor: { rgb: 'FAFBFD' } };
+        }
+        if (R === 10) s.numFmt = '0.00';
+        if (R >= 11 && R <= 13) s.numFmt = '#,##0.00';
+        if (R === 14) s.numFmt = '0.00';
+        if (R > tableHeaderRow) {
+          if (C === 3) s.numFmt = '0.00';
+          if (C === 4 || C === 5) s.numFmt = '0.00000';
+          if (C === 6 || C === 7 || C === 8) s.numFmt = '#,##0.00';
+        }
+      }
+    }
+
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: rng.e.c } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: rng.e.c } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: rng.e.c } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: rng.e.c } },
+      { s: { r: summaryHeaderRow, c: 0 }, e: { r: summaryHeaderRow, c: rng.e.c } },
+    ];
+    ws['!cols'] = [
+      { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 14 }, { wch: 40 },
+    ];
+    ws['!rows'] = [
+      { hpt: 32 }, { hpt: 20 }, { hpt: 20 }, { hpt: 20 }, { hpt: 8 }, { hpt: 24 },
+      ...Array.from({ length: 8 }, () => ({ hpt: 20 })),
+      { hpt: 8 }, { hpt: 22 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Journal');
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    downloadBlob(blob, getExportFilename('xlsx'));
+  };
+
+  const handleExportPdf = async () => {
+    const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+    const range = getExportRange();
+    const inRange = filterTradesByRange(range);
+    const stats = computeExportStats(inRange);
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+
+    doc.setFillColor(30, 58, 95);
+    doc.rect(0, 0, pageW, 30, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('FX Journal Pro - Trading Journal Export', 12, 13);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Account: ${activeAccount?.name || 'N/A'}`, 12, 21);
+    doc.text(`Period: ${getPeriodLabel(range)}`, 12, 26);
+
+    autoTable(doc, {
+      head: [['Performance Summary', '']],
+      body: [
+        ['Total Number of Trades', String(inRange.length)],
+        ['Number of Winning Trades', String(stats.wins.length)],
+        ['Number of Losing Trades', String(stats.losses.length)],
+        ['Win Rate (%)', `${stats.winRate.toFixed(2)}%`],
+        ['Total Profit', `${stats.totalProfit >= 0 ? '+' : ''}$${stats.totalProfit.toFixed(2)}`],
+        ['Total Loss', `-$${stats.totalLoss.toFixed(2)}`],
+        ['Net Profit', `${stats.netProfit >= 0 ? '+' : ''}$${stats.netProfit.toFixed(2)}`],
+        ['Profit Factor', stats.profitFactor.toFixed(2)],
+      ],
+      startY: 36,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 58, 95], textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { fontSize: 8.5, cellPadding: 2 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 70 }, 1: { halign: 'right' } },
+      styles: { cellPadding: 2, valign: 'middle' },
+      margin: { left: 12, right: 12 },
+    });
+
+    const lastY = (doc as any).lastAutoTable?.finalY || 45;
+    autoTable(doc, {
+      head: [['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion']],
+      body: inRange.map(t => [
+        new Date(t.date).toLocaleDateString(),
+        t.symbol,
+        t.type,
+        String(t.lotSize),
+        String(t.entryPrice),
+        String(t.exitPrice),
+        `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`,
+        String(t.commission),
+        String(t.swap),
+        t.strategy || '',
+        t.emotion || '',
+      ]),
+      startY: lastY + 8,
+      theme: 'striped',
+      headStyles: { fillColor: [47, 91, 142], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7 },
+      alternateRowStyles: { fillColor: [242, 245, 249] },
+      styles: { cellPadding: 1.8, valign: 'middle', overflow: 'linebreak' },
+      columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 6) {
+          const val = parseFloat(String(data.cell.raw));
+          if (val > 0) data.cell.styles.textColor = [16, 122, 87];
+          else if (val < 0) data.cell.styles.textColor = [180, 35, 50];
+        }
+      },
+      margin: { left: 12, right: 12 },
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(130, 140, 150);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated ${new Date().toLocaleDateString()} - Page ${i} of ${pageCount}`, pageW - 12, pageH - 8, { align: 'right' });
+    }
+
+    const blob = doc.output('blob');
+    downloadBlob(blob, getExportFilename('pdf'));
+  };
+
+  const handleExportJournal = async () => {
+    if (exportFormat === 'xlsx') await handleExportExcel();
+    else await handleExportPdf();
+    setShowExportModal(false);
   };
 
   // ── MT5 paste parser ──
@@ -2909,7 +3190,7 @@ export default function App() {
                     {tradesRefreshing ? 'Syncing...' : 'Sync Trades'}
                   </button>
                   <button
-                    onClick={handleExportCSV}
+                    onClick={() => setShowExportModal(true)}
                     className="border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg px-3 py-2 transition flex items-center gap-1 bg-white"
                   >
                     <Download className="h-3.5 w-3.5" />
@@ -5060,6 +5341,129 @@ export default function App() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* B2. Export Journal Modal (Excel / PDF) */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-100 max-w-md w-full p-6 relative">
+            <button
+              onClick={() => setShowExportModal(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition duration-150"
+            >
+              ✖
+            </button>
+
+            <h3 className="font-bold text-slate-900 text-base mb-1">Export Journal</h3>
+            <p className="text-[11px] text-slate-400 mb-4">
+              Choose the trading period and format for your export.
+            </p>
+
+            {/* Format selector */}
+            <div className="mb-4">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1.5">Format</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setExportFormat('xlsx')}
+                  className={`text-xs font-semibold rounded-lg px-3 py-2.5 border transition flex items-center justify-center gap-1.5 ${
+                    exportFormat === 'xlsx'
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Excel (.xlsx)
+                </button>
+                <button
+                  onClick={() => setExportFormat('pdf')}
+                  className={`text-xs font-semibold rounded-lg px-3 py-2.5 border transition flex items-center justify-center gap-1.5 ${
+                    exportFormat === 'pdf'
+                      ? 'bg-rose-600 text-white border-rose-600'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  PDF (.pdf)
+                </button>
+              </div>
+            </div>
+
+            {/* Preset periods */}
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {[
+                { key: 'this-month', label: 'This Month' },
+                { key: 'last-month', label: 'Last Month' },
+                { key: 'last-3-months', label: 'Last 3 Months' },
+                { key: 'last-6-months', label: 'Last 6 Months' },
+                { key: 'this-year', label: 'This Year' },
+                { key: 'all', label: 'All Time' },
+                { key: 'custom', label: 'Custom Range' },
+              ].map(p => (
+                <button
+                  key={p.key}
+                  onClick={() => setExportPreset(p.key)}
+                  className={`text-xs font-semibold rounded-lg px-3 py-2.5 border transition ${
+                    exportPreset === p.key
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom date range */}
+            {exportPreset === 'custom' && (
+              <div className="flex items-end gap-2 mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={exportCustomStart}
+                    onChange={e => setExportCustomStart(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                  />
+                </div>
+                <div className="text-slate-400 pb-2">to</div>
+                <div className="flex-1">
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={exportCustomEnd}
+                    onChange={e => setExportCustomEnd(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Trade count preview */}
+            <div className="text-[11px] text-slate-500 mb-4 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+              {(() => {
+                const count = filterTradesByRange(getExportRange()).length;
+                return <>{count} trade{count === 1 ? '' : 's'} will be exported</>;
+              })()}
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4 border-t border-slate-100">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleExportJournal()}
+                disabled={exportPreset === 'custom' && (!exportCustomStart || !exportCustomEnd)}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg py-2 px-4 transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download {exportFormat === 'xlsx' ? 'Excel' : 'PDF'}
+              </button>
+            </div>
           </div>
         </div>
       )}
