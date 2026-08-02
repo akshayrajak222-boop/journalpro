@@ -34,6 +34,22 @@ import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
 import LoginPage from './pages/LoginPage';
 
+async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
+  const fflate = await import('fflate');
+  const files = fflate.unzipSync(xlsxArray);
+  const key = 'xl/worksheets/sheet1.xml';
+  if (!files[key]) return xlsxArray;
+  let xml = fflate.strFromU8(files[key]);
+  const pane = `<pane xSplit="0" ySplit="${ySplit}" topLeftCell="A${ySplit + 1}" activePane="bottomLeft" state="frozen"/>`;
+  if (/<sheetView[^>]*?\/>/.test(xml)) {
+    xml = xml.replace(/<sheetView([^>]*?)\/>/, `<sheetView$1>${pane}</sheetView>`);
+  } else {
+    xml = xml.replace(/<sheetView([^>]*?)>/, `<sheetView$1>${pane}`);
+  }
+  files[key] = fflate.strToU8(xml);
+  return fflate.zipSync(files, { level: 6 });
+}
+
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -2107,133 +2123,263 @@ export default function App() {
   };
 
   const handleExportExcel = async () => {
-    const XLSX = await import('xlsx');
+    const mod: any = await import('exceljs');
+    const ExcelJS = mod.default || mod;
     const range = getExportRange();
     const inRange = filterTradesByRange(range);
     const stats = computeExportStats(inRange);
 
-    const data: any[][] = [];
-    data.push(['FXJournalPro']);
-    data.push(['Trading Journal Export']);
-    data.push([`Website: ${BRAND_WEBSITE}`]);
-    data.push([`Account: ${activeAccount?.name || 'N/A'}`]);
-    data.push([`Period: ${getPeriodLabel(range)}`]);
-    data.push([`Exported: ${new Date().toLocaleDateString()}`]);
-    data.push([]);
-    data.push(['PERFORMANCE SUMMARY']);
-    data.push(['Total Number of Trades', inRange.length]);
-    data.push(['Number of Winning Trades', stats.wins.length]);
-    data.push(['Number of Losing Trades', stats.losses.length]);
-    data.push(['Win Rate (%)', stats.winRate]);
-    data.push(['Total Profit', stats.totalProfit]);
-    data.push(['Total Loss', stats.totalLoss]);
-    data.push(['Net Profit', stats.netProfit]);
-    data.push(['Profit Factor', stats.profitFactor]);
-    data.push([]);
-    data.push(['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion', 'Notes']);
-    inRange.forEach(t => {
-      data.push([t.date, t.symbol, t.type, t.lotSize, t.entryPrice, t.exitPrice, t.profit, t.commission, t.swap, t.strategy || '', t.emotion || '', t.notes || '']);
+    const NAVY = 'FF0F1E36';
+    const BLUE = 'FF2F5B8E';
+    const NAVY_TEXT = 'FF1E3A5F';
+    const WHITE = 'FFFFFFFF';
+    const META_FILL = 'FFEEF2F7';
+    const SUMMARY_FILL = 'FFF1F5FA';
+    const ALT_FILL = 'FFF4F7FB';
+    const TOTAL_FILL = 'FFE3EAF3';
+    const GREEN = 'FF1E7D32';
+    const RED = 'FFC62828';
+    const GRAY = 'FF6B7280';
+    const TEXT_COLOR = 'FF1F2937';
+    const BORDER = 'FFB7C4D6';
+    const BRAND = 'FF1F4E79';
+
+    const TABLE_COLS = 12;
+    const SPACER_COL = 13;
+    const SUMMARY_LABEL_COL = 14;
+    const SUMMARY_VALUE_COL = 15;
+    const TOTAL_COLS = 15;
+
+    const solid = (rgb: string) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: rgb } });
+    const fnt = (size: number, color: string, bold = false) => ({ name: 'Calibri', size, bold, color: { argb: color } });
+    const algn = (horizontal: 'left' | 'center' | 'right', vertical = 'middle') => ({ horizontal, vertical });
+    const borderAll = (color: string) => ({
+      top: { style: 'thin', color: { argb: color } },
+      bottom: { style: 'thin', color: { argb: color } },
+      left: { style: 'thin', color: { argb: color } },
+      right: { style: 'thin', color: { argb: color } },
     });
-    data.push([]);
-    data.push([`FXJournalPro | ${BRAND_WEBSITE}`]);
 
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    const navy = { fgColor: { rgb: '0F1E36' } };
-    const blue = { fgColor: { rgb: '2F5B8E' } };
-    const light = { fgColor: { rgb: 'F2F5F9' } };
-    const footerFill = { fgColor: { rgb: 'E9EEF4' } };
-    const white = { rgb: 'FFFFFF' };
-    const borderThin = { style: 'thin', color: { rgb: 'D9E2EC' } };
-    const borderHair = { style: 'hair', color: { rgb: 'E3E8EE' } };
+    const TABLE_HEADER = 7;
+    const DATA_START = 8;
+    const SUMMARY_START = 8;
+    const TOTAL = DATA_START + inRange.length;
+    const FOOTER = Math.max(TOTAL + 2, SUMMARY_START + 8);
+    const SPACER_AFTER = FOOTER - 1;
 
-    const summaryHeaderRow = 7;
-    const summaryStartRow = 8;
-    const summaryEndRow = 15;
-    const tableHeaderRow = 17;
-    const footerRow = data.length - 1;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Journal');
 
-    for (let R = 0; R <= rng.e.r; R++) {
-      for (let C = 0; C <= rng.e.c; C++) {
-        const addr = XLSX.utils.encode_cell({ r: R, c: C });
-        const cell = ws[addr];
-        if (!cell) continue;
-        const s = (cell.s = cell.s || {});
-        if (R === 0) {
-          s.font = { bold: true, sz: 18, color: white };
-          s.fill = navy;
-          s.alignment = { horizontal: 'center', vertical: 'center' };
-        } else if (R === 1) {
-          s.font = { bold: true, sz: 12, color: white };
-          s.fill = navy;
-          s.alignment = { horizontal: 'center', vertical: 'center' };
-        } else if (R >= 2 && R <= 5) {
-          s.font = { sz: 10, color: white };
-          s.fill = navy;
-          s.alignment = { horizontal: 'center', vertical: 'center' };
-        } else if (R === summaryHeaderRow) {
-          s.font = { bold: true, sz: 12, color: white };
-          s.fill = navy;
-          s.alignment = { horizontal: 'left', vertical: 'center' };
-        } else if (R >= summaryStartRow && R <= summaryEndRow) {
-          s.font = { bold: C === 0, sz: 10 };
-          s.fill = C === 0 ? light : { fgColor: { rgb: 'FFFFFF' } };
-          s.border = { top: borderThin, bottom: borderThin };
-          s.alignment = { horizontal: C === 0 ? 'left' : 'right', vertical: 'center' };
-        } else if (R === tableHeaderRow) {
-          s.font = { bold: true, sz: 10, color: white };
-          s.fill = blue;
-          s.alignment = { horizontal: 'center', vertical: 'center' };
-          s.border = { top: borderThin, bottom: borderThin };
-        } else if (R > tableHeaderRow && R < footerRow) {
-          s.font = { sz: 9 };
-          s.alignment = { horizontal: [3, 4, 5, 6, 7, 8].includes(C) ? 'right' : 'left', vertical: 'center' };
-          s.border = { top: borderHair, bottom: borderHair };
-          if (R % 2 === 0) s.fill = { fgColor: { rgb: 'FAFBFD' } };
-        } else if (R === footerRow) {
-          s.font = { bold: true, sz: 10, color: { rgb: '1E3A5F' } };
-          s.fill = footerFill;
-          s.alignment = { horizontal: 'center', vertical: 'center' };
-          s.border = { top: borderThin };
+    const outlineMergedRow = (rowNum: number) => {
+      for (let c = 1; c <= TOTAL_COLS; c++) {
+        const cell = ws.getCell(rowNum, c);
+        cell.border = {
+          top: { style: 'thin', color: { argb: BORDER } },
+          bottom: { style: 'thin', color: { argb: BORDER } },
+          left: c === 1 ? { style: 'thin', color: { argb: BORDER } } : undefined,
+          right: c === TOTAL_COLS ? { style: 'thin', color: { argb: BORDER } } : undefined,
+        };
+      }
+    };
+
+    const title = ws.getCell('A1');
+    title.value = 'FX JOURNAL PRO - TRADING JOURNAL';
+    ws.mergeCells(1, 1, 1, TOTAL_COLS);
+    title.font = fnt(18, WHITE, true);
+    title.fill = solid(BRAND);
+    title.alignment = algn('center');
+    ws.getRow(1).height = 36;
+
+    const subtitle = ws.getCell('A2');
+    subtitle.value = 'Trading Performance Report';
+    ws.mergeCells(2, 1, 2, TOTAL_COLS);
+    subtitle.font = fnt(10, WHITE, true);
+    subtitle.fill = solid(BRAND);
+    subtitle.alignment = algn('center');
+    ws.getRow(2).height = 18;
+
+    const meta = [
+      `Account: ${activeAccount?.name || 'N/A'}`,
+      `Period: ${getPeriodLabel(range)}`,
+      `Exported: ${new Date().toLocaleString()}`,
+    ];
+    meta.forEach((text, i) => {
+      const r = 3 + i;
+      const cell = ws.getCell(r, 1);
+      cell.value = text;
+      ws.mergeCells(r, 1, r, TOTAL_COLS);
+      cell.font = fnt(10, NAVY_TEXT);
+      cell.fill = solid(META_FILL);
+      cell.alignment = algn('left');
+      ws.getRow(r).height = 16;
+      for (let c = 1; c <= TOTAL_COLS; c++) {
+        const cc = ws.getCell(r, c);
+        cc.border = {
+          top: { style: 'thin', color: { argb: BORDER } },
+          bottom: { style: 'thin', color: { argb: BORDER } },
+          left: c === 1 ? { style: 'thin', color: { argb: BORDER } } : undefined,
+          right: c === TOTAL_COLS ? { style: 'thin', color: { argb: BORDER } } : undefined,
+        };
+      }
+    });
+    ws.getRow(6).height = 6;
+
+    const sTitle = ws.getCell(TABLE_HEADER, SUMMARY_LABEL_COL);
+    sTitle.value = 'PERFORMANCE SUMMARY';
+    ws.mergeCells(TABLE_HEADER, SUMMARY_LABEL_COL, TABLE_HEADER, SUMMARY_VALUE_COL);
+    sTitle.font = fnt(10, WHITE, true);
+    sTitle.fill = solid(NAVY);
+    sTitle.alignment = algn('center');
+    sTitle.border = borderAll(BORDER);
+    ws.getRow(TABLE_HEADER).height = 22;
+
+    const net = stats.netProfit;
+    const summaryRows: { label: string; value: number; numFmt: string; color?: string; bold?: boolean }[] = [
+      { label: 'Total Trades', value: inRange.length, numFmt: '0' },
+      { label: 'No. of Winning Trades', value: stats.wins.length, numFmt: '0' },
+      { label: 'No. of Losing Trades', value: stats.losses.length, numFmt: '0' },
+      { label: 'Win Rate (%)', value: stats.winRate, numFmt: '0.0' },
+      { label: 'Total Profit', value: stats.totalProfit, numFmt: '#,##0.00', color: GREEN, bold: true },
+      { label: 'Total Loss', value: stats.totalLoss, numFmt: '#,##0.00', color: RED, bold: true },
+      { label: 'Net Profit/Loss', value: stats.netProfit, numFmt: '#,##0.00', color: net > 0 ? GREEN : net < 0 ? RED : undefined, bold: true },
+    ];
+    summaryRows.forEach((s, i) => {
+      const r = SUMMARY_START + i;
+      const lc = ws.getCell(r, SUMMARY_LABEL_COL);
+      const vc = ws.getCell(r, SUMMARY_VALUE_COL);
+      lc.value = s.label;
+      vc.value = s.value;
+      lc.font = fnt(10, NAVY_TEXT, true);
+      lc.fill = solid(SUMMARY_FILL);
+      lc.alignment = algn('left');
+      lc.border = borderAll(BORDER);
+      vc.font = fnt(10, s.color || TEXT_COLOR, !!s.bold);
+      vc.fill = solid('FFFFFFFF');
+      vc.alignment = algn('right');
+      vc.border = borderAll(BORDER);
+      vc.numFmt = s.numFmt;
+      ws.getRow(r).height = 20;
+    });
+
+    const lastSum = SUMMARY_START + summaryRows.length - 1;
+    const tL = ws.getCell(TABLE_HEADER, SUMMARY_LABEL_COL);
+    const tV = ws.getCell(TABLE_HEADER, SUMMARY_VALUE_COL);
+    tL.border = { ...tL.border, top: { style: 'medium', color: { argb: BLUE } }, left: { style: 'medium', color: { argb: BLUE } } };
+    tV.border = { ...tV.border, top: { style: 'medium', color: { argb: BLUE } }, right: { style: 'medium', color: { argb: BLUE } } };
+    const bL = ws.getCell(lastSum, SUMMARY_LABEL_COL);
+    const bV = ws.getCell(lastSum, SUMMARY_VALUE_COL);
+    bL.border = { ...bL.border, left: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
+    bV.border = { ...bV.border, right: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
+
+    const headers = ['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion', 'Notes'];
+    const hr = ws.getRow(TABLE_HEADER);
+    headers.forEach((h, i) => {
+      const c = hr.getCell(i + 1);
+      c.value = h;
+      c.font = fnt(10, WHITE, true);
+      c.fill = solid(BLUE);
+      c.alignment = algn('center');
+      c.border = borderAll(BORDER);
+    });
+    hr.height = 22;
+
+    const fmtDate = (iso: string): string => {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    };
+
+    inRange.forEach((t, idx) => {
+      const row = ws.getRow(DATA_START + idx);
+      const vals: (string | number)[] = [
+        fmtDate(t.date), t.symbol, t.type, t.lotSize, t.entryPrice, t.exitPrice,
+        t.profit, t.commission, t.swap, t.strategy || '', t.emotion || '', t.notes || '',
+      ];
+      vals.forEach((v, i) => {
+        const c = row.getCell(i + 1);
+        c.value = v;
+        c.border = borderAll(BORDER);
+        c.alignment = i === 0 || i >= 9 ? algn('left') : i === 1 || i === 2 ? algn('center') : algn('right');
+        if (i === 3) c.numFmt = '0.00';
+        if (i === 4 || i === 5) c.numFmt = '0.00000';
+        if (i === 6 || i === 7 || i === 8) {
+          c.numFmt = '#,##0.00';
+          const num = Number(v);
+          c.font = i === 6
+            ? fnt(10, num > 0 ? GREEN : num < 0 ? RED : GRAY, num !== 0)
+            : fnt(10, num > 0 ? GREEN : num < 0 ? RED : TEXT_COLOR);
         }
-        if (R === 11) s.numFmt = '0.00';
-        if (R >= 12 && R <= 14) s.numFmt = '#,##0.00';
-        if (R === 15) s.numFmt = '0.00';
-        if (R > tableHeaderRow && R < footerRow) {
-          if (C === 3) s.numFmt = '0.00';
-          if (C === 4 || C === 5) s.numFmt = '0.00000';
-          if (C === 6 || C === 7 || C === 8) s.numFmt = '#,##0.00';
-        }
+        if (idx % 2 === 1) c.fill = solid(ALT_FILL);
+      });
+      row.height = 20;
+    });
+
+    const netProfit = stats.netProfit;
+    const totLots = inRange.reduce((s, t) => s + (Number(t.lotSize) || 0), 0);
+    const totCommission = inRange.reduce((s, t) => s + (Number(t.commission) || 0), 0);
+    const totSwap = inRange.reduce((s, t) => s + (Number(t.swap) || 0), 0);
+    const tr = ws.getRow(TOTAL);
+    tr.getCell(1).value = 'TOTALS';
+    tr.getCell(4).value = totLots;
+    tr.getCell(7).value = netProfit;
+    tr.getCell(8).value = totCommission;
+    tr.getCell(9).value = totSwap;
+    [1, 4, 7, 8, 9].forEach(col => {
+      const c = tr.getCell(col);
+      c.fill = solid(TOTAL_FILL);
+      c.alignment = col === 1 ? algn('left') : algn('right');
+      c.border = { ...borderAll(BORDER), top: { style: 'medium', color: { argb: BLUE } } };
+      if (col >= 7) {
+        c.numFmt = '#,##0.00';
+        const num = Number(c.value);
+        c.font = fnt(10, num > 0 ? GREEN : num < 0 ? RED : NAVY_TEXT, true);
+      } else {
+        c.font = fnt(10, NAVY_TEXT, true);
+      }
+    });
+    tr.height = 22;
+
+    ws.getRow(SPACER_AFTER).height = 6;
+
+    const foot = ws.getCell(FOOTER, 1);
+    foot.value = BRAND_WEBSITE;
+    ws.mergeCells(FOOTER, 1, FOOTER, TOTAL_COLS);
+    foot.font = fnt(10, WHITE, true);
+    foot.fill = solid(BRAND);
+    foot.alignment = algn('center');
+    ws.getRow(FOOTER).height = 22;
+
+    outlineMergedRow(FOOTER);
+
+    const fmtMoneyLen = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).length;
+    const displayLen = (v: unknown, col: number): number => {
+      if (v === null || v === undefined) return 0;
+      if (typeof v === 'number') {
+        if (col === 4) return fmtMoneyLen(v);
+        if (col === 5 || col === 6) return v.toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 }).length;
+        if (col >= 7 && col <= 9) return fmtMoneyLen(v);
+        return String(v).length;
+      }
+      return String(v).length;
+    };
+    const colMax: number[] = Array(TABLE_COLS).fill(0);
+    for (let r = TABLE_HEADER; r <= TOTAL; r++) {
+      const row = ws.getRow(r);
+      for (let c = 1; c <= TABLE_COLS; c++) {
+        const cell = row.getCell(c);
+        if (cell.value === null || cell.value === undefined) continue;
+        colMax[c - 1] = Math.max(colMax[c - 1], displayLen(cell.value, c));
       }
     }
+    const minW = [11, 10, 8, 8, 10, 10, 10, 13, 10, 12, 12, 8];
+    const maxW = [14, 16, 12, 12, 14, 14, 14, 16, 12, 24, 18, 45];
+    const widths = colMax.map((len, i) => Math.max(minW[i], Math.min(maxW[i], Math.ceil(len * 1.15) + 2)));
+    widths.push(3, 23, 13);
+    ws.columns = widths.map(width => ({ width }));
 
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: rng.e.c } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: rng.e.c } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: rng.e.c } },
-      { s: { r: 3, c: 0 }, e: { r: 3, c: rng.e.c } },
-      { s: { r: 4, c: 0 }, e: { r: 4, c: rng.e.c } },
-      { s: { r: 5, c: 0 }, e: { r: 5, c: rng.e.c } },
-      { s: { r: summaryHeaderRow, c: 0 }, e: { r: summaryHeaderRow, c: rng.e.c } },
-      { s: { r: footerRow, c: 0 }, e: { r: footerRow, c: rng.e.c } },
-    ];
-    ws['!cols'] = [
-      { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 14 }, { wch: 40 },
-    ];
-    ws['!rows'] = [
-      { hpt: 30 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 },
-      { hpt: 8 }, { hpt: 24 },
-      ...Array.from({ length: 8 }, () => ({ hpt: 20 })),
-      { hpt: 8 }, { hpt: 22 },
-      ...Array.from({ length: inRange.length }, () => ({ hpt: 18 })),
-      { hpt: 8 }, { hpt: 22 },
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Journal');
-    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     downloadBlob(blob, getExportFilename('xlsx'));
   };
 
