@@ -121,17 +121,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
     setActionLoading(true);
     setAuthError(null);
     try {
-      if (isSupabaseConfigured) {
-        try {
-          await supabase.auth.signUp({
-            email: authEmail,
-            password: authPassword,
-            options: { data: { full_name: authName } }
-          });
-        } catch (sErr) {
-          console.warn('[AxyFx] Supabase register warning:', sErr);
-        }
-      }
+      // We delay Supabase signUp until AFTER OTP is verified to prevent auto-login
       persistAuthSession(sessionStorage.getItem('auth_user_id') || '', authEmail);
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -171,7 +161,22 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
       });
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || 'Invalid or expired code.'); return; }
-      if (data.user) { persistAuthSession(data.user.id, data.user.email || authEmail); onLoginSuccess(); return; }
+      if (data.user) {
+        if (isRegistering && isSupabaseConfigured && authPassword) {
+          try {
+            await supabase.auth.signUp({
+              email: authEmail,
+              password: authPassword,
+              options: { data: { full_name: authName || authEmail.split('@')[0] } }
+            });
+          } catch (sErr) {
+            console.warn('[AxyFx] Supabase post-verify register warning:', sErr);
+          }
+        }
+        persistAuthSession(data.user.id, data.user.email || authEmail); 
+        onLoginSuccess(); 
+        return; 
+      }
     } catch (err: any) {
       setAuthError(`Verification error: ${err?.message || err}`);
     } finally {
