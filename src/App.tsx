@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText
+  FileSpreadsheet, FileText, Mail
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -32,6 +32,7 @@ import AdminPanel from './components/AdminPanel';
 import GuidedTour from './components/GuidedTour';
 import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
+import LegalFooter from './components/LegalFooter';
 import LoginPage from './pages/LoginPage';
 
 async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
@@ -324,8 +325,6 @@ export default function App() {
   const [journalCompletionReminder, setJournalCompletionReminder] = useState(false);
 
   // About Forms
-  const [supportSubject, setSupportSubject] = useState('');
-  const [supportMessage, setSupportMessage] = useState('');
   const [bugTitle, setBugTitle] = useState('');
   const [bugSeverity, setBugSeverity] = useState('Medium');
   const [bugSteps, setBugSteps] = useState('');
@@ -1652,42 +1651,6 @@ export default function App() {
       }
     } catch (e) {
       alert('Error cancelling subscription.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleContactSupport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supportSubject || !supportMessage) {
-      alert('Please fill out all fields.');
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const res = await authFetch('/api/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `[Support Request] ${supportSubject}`,
-          description: supportMessage,
-          category: 'Support'
-        })
-      });
-      if (res.ok) {
-        setSupportSubject('');
-        setSupportMessage('');
-        setActiveAboutForm('none');
-        // Refresh tickets list
-        const tickRes = await authFetch('/api/tickets');
-        const tickData = await tickRes.json();
-        setTickets(tickData.tickets);
-        alert('Support request submitted successfully. You can track this under Support Tickets.');
-      } else {
-        alert('Failed to submit support request.');
-      }
-    } catch (err) {
-      alert('Error submitting support request.');
     } finally {
       setActionLoading(false);
     }
@@ -4277,113 +4240,35 @@ export default function App() {
                     <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                       <div>
                         <h3 className="font-extrabold text-slate-900 text-base">About FX Journal Pro</h3>
-                        <p className="text-xs text-slate-400">Application diagnostics and legal information.</p>
+                        <p className="text-xs text-slate-400">Application diagnostics and contact information.</p>
                       </div>
                       <span className="bg-slate-100 text-slate-800 font-mono text-xs font-bold px-3 py-1 rounded-full">
                         App Version 2.5.0
                       </span>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Terms scroll widget */}
-                      <div className="space-y-1.5">
-                        <strong className="text-slate-700 block">Terms & Conditions</strong>
-                        <div className="h-28 overflow-y-auto p-3 bg-slate-50 rounded-lg text-[10px] text-slate-400 leading-relaxed border border-slate-100">
-                          Welcome to FX Journal Pro. By accessing or using our simulated trading journaling workspace, you agree to comply with our Terms of Use. We provide diagnostic evaluation tools and integration utilities. Simulated trading performance is not indicative of real-world returns. Users maintain full responsibility for actual broker deposits and trade executions.
-                        </div>
-                      </div>
-
-                      {/* Privacy scroll widget */}
-                      <div className="space-y-1.5">
-                        <strong className="text-slate-700 block">Privacy Policy</strong>
-                        <div className="h-28 overflow-y-auto p-3 bg-slate-50 rounded-lg text-[10px] text-slate-400 leading-relaxed border border-slate-100">
-                          Your trading logs, notes, cognitive mood profiles, and portfolio balances are strictly confidential. We only utilize local state, authenticated database schemas, and secured server protocols to persist records. Third-party integrations (e.g. Gemini AI prompts) proxy parameters securely and anonymously. We never sell user metrics or transaction history data.
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Forms Grid for Contact Support, Report Bug, Feature Request */}
+                  {/* Forms Grid for Contact, Report Bug, Feature Request */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    
-                    {/* Contact Support */}
-                    <div 
-                      className={`bg-white border rounded-xl p-5 shadow-xs transition-all duration-300 flex flex-col justify-between min-h-[160px] ${
-                        activeAboutForm === 'support' 
-                          ? 'border-slate-900 ring-1 ring-slate-900 md:col-span-1' 
-                          : 'border-slate-100 hover:border-slate-300 cursor-pointer'
-                      }`}
-                      onClick={() => {
-                        if (activeAboutForm !== 'support') {
-                          setActiveAboutForm('support');
-                        }
-                      }}
-                    >
+
+                    {/* Contact */}
+                    <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-xs transition-all duration-300 flex flex-col justify-between min-h-[160px] hover:border-slate-300">
                       <div className="space-y-3 w-full">
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
-                            <strong className="text-sm font-black text-slate-900 block">Contact Support</strong>
-                            <p className="text-[11px] text-slate-400">Send an inquiry directly to our engineering support queue.</p>
+                            <strong className="text-sm font-black text-slate-900 block">Contact</strong>
+                            <p className="text-[11px] text-slate-400">Reach our support team directly by email.</p>
                           </div>
-                          <div className={`p-2 rounded-lg shrink-0 ${activeAboutForm === 'support' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-500'}`}>
+                          <div className="p-2 rounded-lg bg-slate-50 text-slate-500 shrink-0">
                             <HelpCircle className="h-4 w-4" />
                           </div>
                         </div>
-
-                        {activeAboutForm === 'support' ? (
-                          <form onSubmit={handleContactSupport} className="space-y-3 pt-2 text-xs border-t border-slate-100 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                            <div>
-                              <label className="font-semibold text-slate-600 block mb-0.5">Subject</label>
-                              <input 
-                                type="text" 
-                                required
-                                value={supportSubject}
-                                onChange={(e) => setSupportSubject(e.target.value)}
-                                placeholder="e.g. Billing Sync"
-                                className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2 w-full font-semibold focus:outline-hidden focus:ring-1 focus:ring-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="font-semibold text-slate-600 block mb-0.5">Message</label>
-                              <textarea 
-                                required
-                                rows={3}
-                                value={supportMessage}
-                                onChange={(e) => setSupportMessage(e.target.value)}
-                                placeholder="Detail your request..."
-                                className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2 w-full font-semibold focus:outline-hidden focus:ring-1 focus:ring-slate-900"
-                              />
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveAboutForm('none');
-                                }}
-                                className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2 rounded-lg transition text-center"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="submit"
-                                disabled={actionLoading}
-                                className="w-2/3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 rounded-lg transition text-center"
-                              >
-                                {actionLoading ? 'Sending...' : 'Send Inquiry'}
-                              </button>
-                            </div>
-                          </form>
-                        ) : (
-                          <div className="pt-2">
-                            <button
-                              type="button"
-                              className="text-xs font-bold text-slate-900 hover:underline flex items-center gap-1 mt-1"
-                            >
-                              Write Message <ChevronRight className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
+                        <a
+                          href="mailto:contact@fxjournalpro.com"
+                          className="text-xs font-bold text-slate-900 hover:text-blue-600 hover:underline inline-flex items-center gap-1.5 break-all"
+                        >
+                          contact@fxjournalpro.com <Mail className="h-3 w-3 shrink-0" />
+                        </a>
                       </div>
                     </div>
 
@@ -4888,6 +4773,9 @@ export default function App() {
         {activeTab === 'admin' && (
           <AdminPanel onPublishAnnouncement={fetchAccountData} />
         )}
+
+        {/* Site footer with legal links */}
+        <LegalFooter />
 
       </main>
 
