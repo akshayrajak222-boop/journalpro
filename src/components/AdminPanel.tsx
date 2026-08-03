@@ -345,6 +345,9 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
               <div key={t.id} className="p-4 border border-slate-700 bg-slate-800/50 rounded-xl flex flex-col hover:border-slate-600 transition">
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                    t.category === 'Support' ? 'bg-blue-500/10 text-blue-400' :
+                    t.category === 'Bug' ? 'bg-red-500/10 text-red-400' :
+                    t.category === 'Feature Request' ? 'bg-emerald-500/10 text-emerald-400' :
                     t.category === 'Billing' ? 'bg-amber-500/10 text-amber-400' :
                     t.category === 'MT5 Sync' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700 text-slate-300'
                   }`}>
@@ -359,11 +362,15 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
                 <h4 className="font-bold text-slate-200 text-sm mb-1">{t.title}</h4>
                 <p className="text-xs text-slate-400 leading-relaxed flex-1">{t.description}</p>
                 <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-700/50">
-                  <span className="text-[10px] text-slate-500">{t.userEmail} &bull; {new Date(t.date).toLocaleDateString()}</span>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-slate-300 truncate">{t.userName || 'Unknown user'}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{t.userEmail}</div>
+                    <div className="text-[10px] text-slate-500">{t.date ? new Date(t.date).toLocaleString() : 'N/A'}</div>
+                  </div>
                   {t.status !== 'Closed' && (
                     <button
                       onClick={() => handleCloseTicket(t.id)}
-                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold"
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold shrink-0"
                     >
                       Mark Closed
                     </button>
@@ -372,7 +379,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
               </div>
             ))}
           </div>
-          {tickets.length === 0 && <div className="text-center py-8 text-slate-500 text-xs">No active support tickets reported.</div>}
+          {tickets.length === 0 && <div className="text-center py-8 text-slate-500 text-xs">No support submissions reported.</div>}
         </div>
       )}
 
@@ -381,9 +388,25 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
           <div className="grid grid-cols-1 gap-4">
             {bugs.length === 0 ? <div className="text-center py-8 text-slate-500 text-xs">No bugs reported.</div> : bugs.map((b) => (
               <div key={b.id} className="p-4 border border-slate-700 bg-slate-800/50 rounded-xl flex flex-col">
-                <h4 className="font-bold text-slate-200 text-sm mb-1">{b.title}</h4>
-                <p className="text-xs text-slate-400 leading-relaxed mb-2">{b.description}</p>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 w-max">Priority: {b.priority}</span>
+                <div className="flex justify-between items-start mb-1.5">
+                  <h4 className="font-bold text-slate-200 text-sm">{b.title}</h4>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 shrink-0">Priority: {b.priority || 'Low'}</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-2 flex-1">{b.description}</p>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-slate-300 truncate">{b.userName || 'Unknown user'}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{b.userEmail}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      b.status === 'Open' ? 'bg-red-500/10 text-red-400' : 'bg-slate-700 text-slate-400'
+                    }`}>
+                      {b.status}
+                    </span>
+                    <div className="text-[10px] text-slate-500 mt-1">{b.date ? new Date(b.date).toLocaleString() : 'N/A'}</div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -395,9 +418,18 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
           <div className="grid grid-cols-1 gap-4">
             {features.length === 0 ? <div className="text-center py-8 text-slate-500 text-xs">No feature requests.</div> : features.map((f) => (
               <div key={f.id} className="p-4 border border-slate-700 bg-slate-800/50 rounded-xl flex flex-col">
-                <h4 className="font-bold text-slate-200 text-sm mb-1">{f.title}</h4>
-                <p className="text-xs text-slate-400 leading-relaxed mb-2">{f.description}</p>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 w-max">Status: {f.status}</span>
+                <div className="flex justify-between items-start mb-1.5">
+                  <h4 className="font-bold text-slate-200 text-sm">{f.title}</h4>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 shrink-0">{f.status || 'Open'}</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-2 flex-1">{f.description}</p>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-slate-300 truncate">{f.userName || 'Unknown user'}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{f.userEmail}</div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 shrink-0">{f.date ? new Date(f.date).toLocaleString() : 'N/A'}</div>
+                </div>
               </div>
             ))}
           </div>

@@ -67,10 +67,11 @@ export interface SupportTicket {
   id: string;
   userId: string;
   userEmail: string;
+  userName?: string;
   title: string;
   description: string;
   status: 'Open' | 'In Progress' | 'Closed';
-  category: 'Billing' | 'MT5 Sync' | 'Feature Request' | 'Bug' | 'Other';
+  category: 'Support' | 'Billing' | 'MT5 Sync' | 'Feature Request' | 'Bug' | 'Other';
   date: string;
 }
 

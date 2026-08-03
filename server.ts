@@ -842,6 +842,43 @@ async function removeUserDatabaseAliases(userId?: string, email?: string) {
   void email;
 }
 
+// Attach the submitting user's name to ticket rows (joins the users table by user_id)
+async function attachTicketUserNames(tickets: any[]): Promise<any[]> {
+  if (!useSupabase || !Array.isArray(tickets) || tickets.length === 0) return tickets;
+  try {
+    const ids = Array.from(new Set(tickets.map((t: any) => t.userId || t.user_id).filter(Boolean)));
+    if (ids.length === 0) return tickets;
+    const { data: users } = await supabase.from('users').select('id, name, email').in('id', ids);
+    const nameMap = Object.fromEntries((users || []).map((u: any) => [u.id, u]));
+    return tickets.map((t: any) => {
+      const u = nameMap[t.userId || t.user_id];
+      return {
+        ...toCamel(t),
+        userName: u?.name || '',
+        userEmail: t.userEmail || t.user_email || u?.email || ''
+      };
+    });
+  } catch (e) {
+    console.error('[Tickets] Failed to attach user names:', e);
+    return tickets.map((t: any) => toCamel(t));
+  }
+}
+
+// Aggregate all support tickets from the in-memory per-user databases (local dev fallback)
+function collectAllInMemoryTickets(): any[] {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  userDatabases.forEach((d: any) => {
+    (d.supportTickets || []).forEach((t: any) => {
+      if (!seen.has(t.id)) {
+        seen.add(t.id);
+        out.push(t);
+      }
+    });
+  });
+  return out;
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -3383,14 +3420,35 @@ RESTRICTIONS:
   // SUPPORT TICKETS & ANNOUNCEMENTS ROUTES
   // ==========================================
 
-  app.get('/api/tickets', (req, res) => {
+  app.get('/api/tickets', async (req, res) => {
     let db = (req as any).userDb;
     let currentUser = (req as any).currentUser;
     if (!currentUser || !db) return res.json({ tickets: [] });
+
+    const isAdmin = await checkIsAdmin(currentUser);
     // Admins see all tickets, regular users see their own
-    if (currentUser.email === 'admin@axyfx.com') {
-      return res.json({ tickets: db.supportTickets || [] });
+    if (isAdmin) {
+      if (useSupabase) {
+        try {
+          const { data, error } = await supabase
+            .from('support_tickets')
+            .select('*')
+            .order('date', { ascending: false });
+          if (error) {
+            console.error('[GET /api/tickets] Supabase error:', error);
+            return res.status(500).json({ error: error.message });
+          }
+          const tickets = await attachTicketUserNames(data || []);
+          return res.json({ tickets });
+        } catch (e: any) {
+          console.error('[GET /api/tickets] Admin query exception:', e);
+          return res.status(500).json({ error: e?.message || 'Failed to load tickets' });
+        }
+      }
+      const tickets = await attachTicketUserNames(collectAllInMemoryTickets());
+      return res.json({ tickets });
     }
+
     const userTickets = (db.supportTickets || []).filter((t: any) => t.userId === currentUser?.id);
     res.json({ tickets: userTickets });
   });
@@ -3408,15 +3466,21 @@ RESTRICTIONS:
       id: `ticket_${Date.now()}`,
       userId: currentUser.id,
       userEmail: currentUser.email,
+      userName: currentUser.name || '',
       title,
       description,
       status: 'Open',
-      category: category || 'Other',
+      category: category || 'Support',
       date: new Date().toISOString()
     };
 
     db.supportTickets.push(newTicket);
-    await saveDatabase(db);
+    try {
+      await saveDatabase(db);
+    } catch (e: any) {
+      console.error('[POST /api/tickets] Failed to persist ticket:', e?.message || e);
+      return res.status(500).json({ error: 'Failed to save your submission. Please try again.' });
+    }
     res.json({ message: 'Support ticket submitted successfully', ticket: newTicket });
   });
 
@@ -3694,28 +3758,53 @@ RESTRICTIONS:
 
   app.get('/api/admin/bugs', async (req, res) => {
     let currentUser = (req as any).currentUser;
-    if (!currentUser || (currentUser.email !== 'admin@axyfx.com' && currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'ADMIN')) {
+    if (!currentUser || !(await checkIsAdmin(currentUser))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
     if (useSupabase) {
-      const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('category', 'Bug')
+        .order('date', { ascending: false });
       if (error) return res.status(500).json({ error: error.message });
-      return res.json({ bugs: data });
+      const tickets = await attachTicketUserNames(data || []);
+      // Derive a priority badge from the severity embedded in the title
+      const bugs = tickets.map((t: any) => {
+        const m = /Severity:\s*(\w+)/i.exec(t.title || '');
+        return { ...t, priority: (m?.[1] || 'Low').toUpperCase() };
+      });
+      return res.json({ bugs });
     }
-    res.json({ bugs: [] });
+    const tickets = await attachTicketUserNames(
+      collectAllInMemoryTickets().filter((t: any) => t.category === 'Bug')
+    );
+    const bugs = tickets.map((t: any) => {
+      const m = /Severity:\s*(\w+)/i.exec(t.title || '');
+      return { ...t, priority: (m?.[1] || 'Low').toUpperCase() };
+    });
+    res.json({ bugs });
   });
 
   app.get('/api/admin/features', async (req, res) => {
     let currentUser = (req as any).currentUser;
-    if (!currentUser || (currentUser.email !== 'admin@axyfx.com' && currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'ADMIN')) {
+    if (!currentUser || !(await checkIsAdmin(currentUser))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
     if (useSupabase) {
-      const { data, error } = await supabase.from('feature_requests').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('category', 'Feature Request')
+        .order('date', { ascending: false });
       if (error) return res.status(500).json({ error: error.message });
-      return res.json({ features: data });
+      const features = await attachTicketUserNames(data || []);
+      return res.json({ features });
     }
-    res.json({ features: [] });
+    const features = await attachTicketUserNames(
+      collectAllInMemoryTickets().filter((t: any) => t.category === 'Feature Request')
+    );
+    res.json({ features });
   });
 
   // ==========================================

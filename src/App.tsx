@@ -1671,7 +1671,7 @@ export default function App() {
         body: JSON.stringify({
           title: `[Support Request] ${supportSubject}`,
           description: supportMessage,
-          category: 'Other'
+          category: 'Support'
         })
       });
       if (res.ok) {
