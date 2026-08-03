@@ -786,6 +786,57 @@ async function saveDatabase(
   }
 }
 
+// Auto-create a default portfolio account for new signups if the user has no accounts
+async function ensureDefaultPortfolioAccount(
+  db: any,
+  userId: string,
+  email?: string
+): Promise<TradingAccount | null> {
+  try {
+    if (!db || !userId) return null;
+    if (!Array.isArray(db.accounts)) db.accounts = [];
+    if (!Array.isArray(db.riskSettings)) db.riskSettings = [];
+
+    const existing = db.accounts.filter((acc: any) => acc.userId === userId || !acc.userId);
+    if (existing.length > 0) return null;
+
+    const newAcc: TradingAccount = {
+      id: `acc_${Date.now()}`,
+      userId,
+      name: 'Portfolio Account',
+      broker: 'MT5 Demo Broker',
+      platform: 'MT5',
+      accountType: 'Demo',
+      currency: 'USD',
+      startingBalance: 10000,
+      currentBalance: 10000,
+      equity: 10000,
+      status: 'Active'
+    };
+    db.accounts.push(newAcc);
+
+    // Add a starter risk setting for the default account
+    const newRisk: RiskSettings = {
+      id: `r_${Date.now()}`,
+      accountId: newAcc.id,
+      riskPerTradeLimit: 2.0,
+      dailyLossLimit: 500,
+      weeklyLossLimit: 1500,
+      maxDrawdownLimit: 10.0,
+      disciplineEnabled: true,
+      maxTradesPerDay: 5
+    };
+    db.riskSettings.push(newRisk);
+
+    await saveDatabase(db, userId, email);
+    console.log(`[Auth] Auto-created default portfolio account ${newAcc.id} for user ${userId}`);
+    return newAcc;
+  } catch (err: any) {
+    console.error('[Auth] Failed to auto-create default portfolio account:', err?.message || err);
+    return null;
+  }
+}
+
 async function removeUserDatabaseAliases(userId?: string, email?: string) {
   void userId;
   void email;
@@ -996,8 +1047,15 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           } else {
             Object.assign(user, toCamel(userRecord));
           }
-          userDatabases.set(normalizedEmail, db);
-          userDatabases.set(uid, db);
+        userDatabases.set(normalizedEmail, db);
+        userDatabases.set(uid, db);
+        }
+        // Auto-create a default portfolio account for new signups
+        try {
+          const ssoDb = await ensureUserDbLoaded(uid, normalizedEmail);
+          await ensureDefaultPortfolioAccount(ssoDb, uid, normalizedEmail);
+        } catch (e) {
+          console.error('[Register SSO] Failed to auto-create default portfolio account:', e);
         }
         const camelUser = toCamel(userRecord);
         return res.json({ message: 'Registration successful.', user: camelUser, requiresOtp: false });
@@ -1136,6 +1194,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         db.users.push(devUser);
         await saveDatabase(db);
         console.log(`[Dev] Auto-created user: ${normalizedEmail}`);
+        // Auto-create a default portfolio account for the dev user
+        await ensureDefaultPortfolioAccount(db, uid, normalizedEmail);
         return res.json({ message: 'Login successful', user: devUser });
       }
 
@@ -1219,6 +1279,15 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         }
 
         const verifiedUser = toCamel({ ...row, is_email_verified: true, email_otp: null, otp_expires_at: null });
+
+        // Auto-create a default portfolio account for the newly verified user
+        try {
+          const otpDb = await ensureUserDbLoaded(verifiedUser.id, normalizedEmail);
+          await ensureDefaultPortfolioAccount(otpDb, verifiedUser.id, normalizedEmail);
+        } catch (e) {
+          console.error('[verify-otp] Failed to auto-create default portfolio account:', e);
+        }
+
         return res.json({ message: 'Email verified successfully.', user: verifiedUser });
       }
 
@@ -1238,6 +1307,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         user.isEmailVerified = true;
         delete user.emailOtp;
         delete user.otpExpiresAt;
+        // Auto-create a default portfolio account for the newly verified user
+        await ensureDefaultPortfolioAccount(db, user.id, normalizedEmail);
         await saveDatabase(db, user.id, normalizedEmail);
         return res.json({ message: 'Email verified successfully.', user });
       } else {
@@ -1440,57 +1511,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       db.users[userIdx].onboardingCompleted = true;
       db.users[userIdx].onboardingData = { experience, tradingStyle, markets };
       
-      // Auto-create a default trading account for new users during onboarding
-      const userAccounts = db.accounts.filter((acc: any) => acc.userId === currentUser?.id);
-      if (userAccounts.length === 0) {
-        const newAcc: TradingAccount = {
-          id: `acc_${Date.now()}`,
-          userId: currentUser.id,
-          name: 'Primary Trading Account',
-          broker: 'MT5 Demo Broker',
-          platform: 'MT5',
-          accountType: 'Demo',
-          currency: 'USD',
-          startingBalance: 10000,
-          currentBalance: 10000,
-          equity: 10000,
-          status: 'Active'
-        };
-        db.accounts.push(newAcc);
-
-        if (useSupabase) {
-          try {
-            await supabase.from('trading_accounts').upsert({
-              id: newAcc.id,
-              user_id: currentUser.id,
-              name: newAcc.name,
-              broker: newAcc.broker,
-              platform: newAcc.platform,
-              account_type: newAcc.accountType,
-              currency: newAcc.currency,
-              starting_balance: newAcc.startingBalance,
-              current_balance: newAcc.currentBalance,
-              equity: newAcc.equity,
-              status: newAcc.status
-            }, { onConflict: 'id' });
-          } catch (e) {
-            console.error('[Onboarding] Supabase account insert error:', e);
-          }
-        }
-
-        // Add a starter Risk Setting
-        const newRisk: RiskSettings = {
-          id: `r_${Date.now()}`,
-          accountId: newAcc.id,
-          riskPerTradeLimit: 2.0,
-          dailyLossLimit: 500,
-          weeklyLossLimit: 1500,
-          maxDrawdownLimit: 10.0,
-          disciplineEnabled: true,
-          maxTradesPerDay: 5
-        };
-        db.riskSettings.push(newRisk);
-      }
+      // Auto-create a default portfolio account for new users if none exists yet
+      await ensureDefaultPortfolioAccount(db, currentUser.id, authEmail);
 
       await saveDatabase(db, authEmail);
       currentUser = db.users[userIdx];
