@@ -3478,8 +3478,23 @@ RESTRICTIONS:
     try {
       await saveDatabase(db);
     } catch (e: any) {
-      console.error('[POST /api/tickets] Failed to persist ticket:', e?.message || e);
-      return res.status(500).json({ error: 'Failed to save your submission. Please try again.' });
+      console.error('[POST /api/tickets] Local persistence failed:', e?.message || e);
+    }
+    if (useSupabase) {
+      const { error } = await supabase.from('support_tickets').insert({
+        id: newTicket.id,
+        user_id: currentUser.id,
+        user_email: currentUser.email,
+        title,
+        description,
+        status: 'Open',
+        category: newTicket.category,
+        date: newTicket.date
+      });
+      if (error) {
+        console.error('[POST /api/tickets] Supabase insert failed:', error.message);
+        return res.status(500).json({ error: 'Failed to save your submission. Please try again.' });
+      }
     }
     res.json({ message: 'Support ticket submitted successfully', ticket: newTicket });
   });
