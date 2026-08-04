@@ -163,7 +163,7 @@ export default function GuidedTour({ step, accountCreated, onNext, onBack, onSki
     const title = isCreate ? 'Create Your Portfolio' : 'Add Your First Trade';
     const body = isCreate
       ? 'Your trading accounts live here. Click below to add your broker or a manual account.'
-      : 'Click below to log a trade manually, or connect MT5 to auto-sync.';
+      : 'Click below to log a trade manually, or paste trades in from your MT5/MT4 terminal report.';
 
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-4 animate-in fade-in zoom-in duration-300">

@@ -71,7 +71,7 @@ export interface SupportTicket {
   title: string;
   description: string;
   status: 'Open' | 'In Progress' | 'Closed';
-  category: 'Support' | 'Billing' | 'MT5 Sync' | 'Feature Request' | 'Bug' | 'Other';
+  category: 'Support' | 'Billing' | 'Feature Request' | 'Bug' | 'Other';
   date: string;
 }
 
@@ -80,21 +80,6 @@ export interface Announcement {
   title: string;
   content: string;
   date: string;
-}
-
-export interface MT5Connection {
-  id: string;
-  userId: string;
-  accountId: string;
-  brokerName: string;
-  status: 'Connected' | 'Disconnected' | 'Syncing' | 'Error';
-  lastSyncTime?: string;
-  syncToken: string;
-  totalSyncedTrades: number;
-  loginNumber?: string;
-  brokerServer?: string;
-  isInvestorSync?: boolean;
-  autoSync?: boolean;
 }
 
 export interface PaymentHistory {

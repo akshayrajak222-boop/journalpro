@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
-  DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
+  DollarSign, Plus, CheckCircle2, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
-  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
+  Terminal, Globe, Bell, CreditCard, Info, Menu, Sun, Moon, Brain, Upload,
   FileSpreadsheet, FileText, Mail
 } from 'lucide-react';
 import { 
@@ -25,7 +25,6 @@ import {
 
 import { supabase } from './supabaseClient';
 
-import MT5Instructions from './components/MT5Instructions';
 import TradingCalendar from './components/TradingCalendar';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
@@ -142,9 +141,7 @@ export default function App() {
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
   const [newAccBalance, setNewAccBalance] = useState('10000');
   
-  const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual' | 'mt5'>('select');
-  const [eaLogin, setEaLogin] = useState('');
-  const [eaBroker, setEaBroker] = useState('');
+  const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual'>('select');
 
   // Edit Account form fields
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
@@ -184,7 +181,7 @@ export default function App() {
   // Support ticket form
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [ticketTitle, setTicketTitle] = useState('');
-  const [ticketCategory, setTicketCategory] = useState<'Billing' | 'MT5 Sync' | 'Feature Request' | 'Bug' | 'Other'>('MT5 Sync');
+  const [ticketCategory, setTicketCategory] = useState<'Support' | 'Billing' | 'Feature Request' | 'Bug' | 'Other'>('Other');
   const [ticketDescription, setTicketDescription] = useState('');
 
   // Filtering / Search state for Journal
@@ -550,13 +547,12 @@ export default function App() {
 
       if (loadedAccs.length > 0) {
         const storedSelectedId = sessionStorage.getItem('selected_account_id');
-        // Prefer stored selection → then MT5 EA account → then first account
-        const mt5Account = loadedAccs.find((a: any) => a.id?.startsWith('acc_mt5_ea_'));
+        // Prefer stored selection → then first account
         const defaultId = overrideAccountId
           ? overrideAccountId
           : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
             ? storedSelectedId
-            : (mt5Account ? mt5Account.id : loadedAccs[0].id));
+            : loadedAccs[0].id);
 
         setSelectedAccountId(defaultId);
         persistSelectedAccount(defaultId);
@@ -949,42 +945,6 @@ export default function App() {
     } catch (err) {
       console.error('Onboarding exception:', err);
       alert('Failed to complete onboarding: ' + err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCreateEaAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!eaLogin || !eaBroker) return;
-    setActionLoading(true);
-    try {
-      const res = await authFetch('/api/mt5/connect-ea', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          loginNumber: eaLogin,
-          brokerName: eaBroker,
-          startingBalance: 0
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        
-        // Refresh accounts list
-        const accsRes = await authFetch('/api/accounts');
-        const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
-        
-        setShowAccountModal(false);
-        setSelectedAccountId(data.account.id);
-        setActiveTab('mt5');
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to create EA account');
-      }
-    } catch (err) {
-      console.error(err);
     } finally {
       setActionLoading(false);
     }
@@ -1504,32 +1464,6 @@ export default function App() {
     };
     reader.readAsText(file);
     e.target.value = '';
-  };
-
-  // Simulated MT5 integration call
-  const handleTriggerSimulatedSync = async (symbol: string) => {
-    if (!selectedAccountId) return;
-    setActionLoading(true);
-    try {
-      const res = await authFetch('/api/mt5/connections/test-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId: selectedAccountId, symbol })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`MT5 Synchronization Success! Trade parsed:\n${data.trade.symbol} ${data.trade.type} at ${data.trade.entryPrice} with net P/L of $${data.trade.profit}`);
-        fetchTradesAndParams(selectedAccountId);
-        // Refresh accounts
-        const accsRes = await authFetch('/api/accounts');
-        const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
-      }
-    } catch (e) {
-      alert('Sync simulation failed.');
-    } finally {
-      setActionLoading(false);
-    }
   };
 
   // Pro Upgrade Trigger: redirect to Settings > Subscription for plan selection
@@ -2891,19 +2825,6 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
-              title="MT5 Automation"
-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
-              } ${
-                activeTab === 'mt5' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
-              }`}
-            >
-              <Terminal className="h-4 w-4 text-slate-500" />
-              {!sidebarCollapsed && 'MT5 Automation'}
-            </button>
-
-            <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
               title="AI Mentor"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3002,7 +2923,6 @@ export default function App() {
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'settings' ? 'Settings' :
-                 activeTab === 'mt5' ? 'MT5 Automation' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
               <p className="text-xs text-slate-400 mt-1">
@@ -3011,8 +2931,7 @@ export default function App() {
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
-                 activeTab === 'settings' ? 'Configure portfolio guard, MT5 automation link, and co-pilot preferences.' :
-                 activeTab === 'mt5' ? 'Connect your MetaTrader terminal for real-time synchronization.' :
+                 activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
@@ -3345,12 +3264,6 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* MT5 Sync Refresh button */}
-                  {activeAccount?.id?.startsWith('acc_mt5_ea_') && (
-                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg flex items-center gap-1">
-                      <Radio className="h-2.5 w-2.5 animate-pulse" /> MT5 EA Account
-                    </span>
-                  )}
                   <button
                     onClick={refreshTrades}
                     disabled={tradesRefreshing}
@@ -4153,7 +4066,7 @@ export default function App() {
                       <ul className="mt-4 space-y-2">
                         {[
                           'Unlimited trade journaling',
-                          'MT5 auto-sync (EA)',
+                          'MT5 paste import tools',
                           'AI Mentor coaching',
                           'Performance analytics',
                           'Risk Guard alerts',
@@ -4305,7 +4218,7 @@ export default function App() {
                                 required
                                 value={bugTitle}
                                 onChange={(e) => setBugTitle(e.target.value)}
-                                placeholder="e.g. Broken MT5 feed"
+                                placeholder="e.g. Chart does not load"
                                 className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2 w-full font-semibold focus:outline-hidden focus:ring-1 focus:ring-slate-900"
                               />
                             </div>
@@ -4490,15 +4403,9 @@ export default function App() {
                         <div>
                           <strong className="text-sm font-black text-slate-900 dark:text-white block">Getting Started Tips</strong>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                            Create a portfolio first, then log trades manually or sync your MT5 account from the MT5 Automation tab.
+                            Create a portfolio first, then log trades manually or paste them in from your MT5/MT4 terminal report.
                           </p>
                         </div>
-                        <button
-                          onClick={() => setActiveTab('mt5')}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg transition flex items-center justify-center gap-1.5"
-                        >
-                          <Radio className="h-3.5 w-3.5" /> Explore MT5 Sync
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -4745,21 +4652,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 5. MT5 AUTOMATION VIEW */}
-        {activeTab === 'mt5' && activeAccount && (
-          <MT5Instructions 
-            account={activeAccount} 
-            onTriggerSimulatedSync={handleTriggerSimulatedSync}
-            isSyncing={actionLoading}
-            onSyncSuccess={async (newAccountId) => {
-              await fetchAccountData();
-              if (newAccountId && typeof newAccountId === 'string') {
-                setSelectedAccountId(newAccountId);
-              }
-            }}
-          />
-        )}
-
         {/* 6. AI CO-PILOT INSIGHTS VIEW */}
         {activeTab === 'insights' && activeAccount && user && (
           <AIInsights 
@@ -4897,13 +4789,6 @@ export default function App() {
                   <p className="text-[11px] text-slate-400">Choose how you want to connect and log trades.</p>
                 </div>
                 <div className="grid gap-3">
-                  <button onClick={() => setAccountCreationMethod('mt5')} className="border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
-                     <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Activity className="w-5 h-5"/></div>
-                     <div>
-                       <div className="font-bold text-slate-800 text-sm">MT5 Auto-Sync (Recommended)</div>
-                       <div className="text-[11px] text-slate-500">Automatically synchronize live trades from MetaTrader 5 using our Expert Advisor.</div>
-                     </div>
-                  </button>
                   <button onClick={() => setAccountCreationMethod('manual')} className="border-2 border-slate-100 hover:border-slate-300 hover:bg-slate-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
                      <div className="bg-slate-100 p-2 rounded-lg text-slate-600"><Edit3 className="w-5 h-5"/></div>
                      <div>
@@ -4913,51 +4798,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            )}
-
-            {accountCreationMethod === 'mt5' && (
-              <form onSubmit={handleCreateEaAccount} className="space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <button type="button" onClick={() => setAccountCreationMethod('select')} className="text-slate-400 hover:text-slate-700 text-xs font-semibold">← Back</button>
-                </div>
-                <div>
-                  <h3 className="font-bold text-indigo-900 text-base flex items-center gap-2"><Lock className="h-4 w-4" /> Connect MT5 EA Sync</h3>
-                  <p className="text-[11px] text-indigo-800/80">We will provision a new trading account and unique API token specifically for your MT5 Expert Advisor.</p>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">MT5 Login Number</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. 5591240"
-                    value={eaLogin}
-                    onChange={(e) => setEaLogin(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Broker Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. ICMarketsSC-MT5-2"
-                    value={eaBroker}
-                    onChange={(e) => setEaBroker(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition flex items-center justify-center gap-1.5 mt-2"
-                >
-                  {actionLoading ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    "Generate MT5 Token & Account"
-                  )}
-                </button>
-              </form>
             )}
 
             {accountCreationMethod === 'manual' && (
@@ -5587,7 +5427,7 @@ export default function App() {
                   onChange={(e: any) => setTicketCategory(e.target.value)}
                   className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
                 >
-                  <option value="MT5 Sync">MT5 Synchronization EA</option>
+                  <option value="Other">General Support Query</option>
                   <option value="Billing">Billing & Subscription</option>
                   <option value="Feature Request">Feature Request</option>
                   <option value="Bug">Technical Bug Report</option>
