@@ -8,6 +8,13 @@ import Logo from '../components/Logo';
 import { supabase } from '../supabaseClient';
 import { Turnstile } from '@marsidev/react-turnstile';
 
+// TEMPORARY: disable Turnstile only on the remove-mt5-sync branch preview
+// deployment (identified by its preview hostname). Production and all other
+// environments keep Turnstile.
+const turnstileBypassed =
+  typeof window !== 'undefined' &&
+  window.location.hostname.includes('journalpro-git-remove-mt5-sync-');
+
 interface LoginPageProps {
   isSupabaseConfigured: boolean;
   onLoginSuccess: () => void;
@@ -460,9 +467,11 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 </div>
                 {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
                 <div className="flex justify-center my-2">
-                  <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+                  {!turnstileBypassed && (
+                    <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+                  )}
                 </div>
-                <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured)} className={buttonPrimary}>
+                <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured && !turnstileBypassed)} className={buttonPrimary}>
                   {actionLoading ? 'Creating Account...' : 'Create Account'}
                 </button>
                 <p className="text-center text-sm text-slate-400">
@@ -491,9 +500,11 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 </div>
                 {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
                 <div className="flex justify-center my-2">
-                  <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+                  {!turnstileBypassed && (
+                    <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+                  )}
                 </div>
-                <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured)} className={buttonPrimary}>
+                <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured && !turnstileBypassed)} className={buttonPrimary}>
                   {actionLoading ? 'Signing in...' : 'Sign in'}
                 </button>
 
