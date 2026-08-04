@@ -26,6 +26,7 @@ import {
 import { supabase } from './supabaseClient';
 
 import TradingCalendar from './components/TradingCalendar';
+import MT5Automation from './components/MT5Automation';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import GuidedTour from './components/GuidedTour';
@@ -2825,6 +2826,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
+              title="MT5 Automation"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'mt5' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <Terminal className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'MT5 Automation'}
+            </button>
+
+            <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
               title="AI Mentor"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -2923,6 +2937,7 @@ export default function App() {
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'settings' ? 'Settings' :
+                 activeTab === 'mt5' ? 'MT5 Automation' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
               <p className="text-xs text-slate-400 mt-1">
@@ -2932,6 +2947,7 @@ export default function App() {
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
+                 activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
@@ -4650,6 +4666,15 @@ export default function App() {
 
             </div>
           </div>
+        )}
+
+        {/* 5. MT5 AUTOMATION VIEW */}
+        {activeTab === 'mt5' && user && (
+          <MT5Automation
+            account={activeAccount || null}
+            authFetch={authFetch}
+            onRefresh={fetchAccountData}
+          />
         )}
 
         {/* 6. AI CO-PILOT INSIGHTS VIEW */}

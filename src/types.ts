@@ -27,6 +27,14 @@ export interface TradingAccount {
   currentBalance: number;
   equity: number;
   status: 'Active' | 'Inactive' | 'Archived';
+  eaToken?: string;
+  eaStatus?: 'Not Connected' | 'Connected' | 'Error';
+  eaLastDealId?: number;
+  eaLastSyncTime?: string;
+  eaSyncTradeCount?: number;
+  eaConnectedAt?: string;
+  eaTerminalLogin?: string;
+  eaTerminalServer?: string;
 }
 
 export interface Trade {
@@ -50,6 +58,8 @@ export interface Trade {
   screenshot?: string; // base64 or URL
   tags: string[];
   isMt5Sync?: boolean;
+  eaDealId?: number;
+  eaPositionId?: number;
 }
 
 export interface RiskSettings {

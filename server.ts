@@ -14,6 +14,7 @@ import {
   Announcement, 
   PaymentHistory 
 } from './src/types.js';
+import { EA_TEMPLATE } from './src/eaTemplate.js';
 import { createClient } from '@supabase/supabase-js';
 
 // Absolute file paths for database persistence
@@ -257,6 +258,7 @@ function loadDatabaseFromFile() {
         date: '2026-07-11T10:00:00Z'
       }
     ] as Announcement[],
+    mt5Deals: [],
     payments: [] as PaymentHistory[]
   };
 
@@ -423,12 +425,15 @@ function createEmptyUserDb(userId?: string, email?: string, injectDummyUser = fa
         startingBalance: 10000,
         currentBalance: 10000,
         equity: 10000,
-        status: 'Active'
+        status: 'Active',
+        eaToken: `ea_demo_${cleanUserId.slice(-8)}`,
+        eaStatus: 'Not Connected'
       }
     ] : [],
     trades: [],
     riskSettings: [],
     supportTickets: [],
+    mt5Deals: [],
     payments: []
   };
 }
@@ -461,6 +466,157 @@ function toSnake(obj: any): any {
   return obj;
 }
 
+// ==========================================
+// MT5 EXPERT ADVISOR (EA) SYNCHRONIZATION
+// Fresh implementation: each portfolio account gets a unique EA whose
+// embedded token authenticates it against the matching account.
+// ==========================================
+
+function generateEaToken(): string {
+  return `ea_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// Derive the public base URL for the EA (works behind the Vercel proxy too)
+function apiBaseUrl(req: any): string {
+  const proto = (req.headers['x-forwarded-proto']?.toString().split(',')[0] || req.protocol || 'https').trim();
+  const host = (req.headers['x-forwarded-host']?.toString().split(',')[0] || req.get('host') || 'www.fxjournalpro.com').trim();
+  return `${proto}://${host}/api/mt5`;
+}
+
+// Fill the .mq5 template with this account's unique token + id
+function generateEaSource(account: any, apiUrl: string): string {
+  const host = apiUrl.replace(/^https?:\/\//, '').split('/')[0];
+  return EA_TEMPLATE
+    .split('__FXJP_ACCOUNT_ID__').join(account.id)
+    .split('__FXJP_TOKEN__').join(account.eaToken || '')
+    .split('__FXJP_API_URL__').join(apiUrl)
+    .split('__FXJP_WEBREQUEST_HOST__').join(host);
+}
+
+// Locate a user's DB by trading account id (used by token-authenticated EA calls)
+async function findDbByAccountId(accountId: string): Promise<any | null> {
+  if (useSupabase) {
+    try {
+      const { data } = await supabase.from('trading_accounts').select('user_id').eq('id', accountId).maybeSingle();
+      if (data?.user_id) return ensureUserDbLoaded(data.user_id, '');
+    } catch (e) {
+      console.error('[EA] findDbByAccountId supabase error:', e);
+    }
+    return null;
+  }
+  for (const d of userDatabases.values()) {
+    if (d && Array.isArray(d.accounts) && d.accounts.some((a: any) => a.id === accountId)) return d;
+  }
+  return null;
+}
+
+const DEAL_TYPE_BUY = 0;
+const DEAL_TYPE_SELL = 1;
+const DEAL_TYPE_BALANCE = 2;
+const DEAL_TYPE_CREDIT = 3;
+const ENTRY_IN = 0;
+const ENTRY_OUT = 1;
+const ENTRY_INOUT = 2;
+
+function normalizeDeal(raw: any): any {
+  return {
+    ticket: Number(raw.ticket),
+    positionId: Number(raw.positionId) || 0,
+    time: Number(raw.time),
+    type: Number(raw.type),
+    entry: Number(raw.entry),
+    magic: Number(raw.magic) || 0,
+    symbol: String(raw.symbol || '').toUpperCase(),
+    volume: parseFloat(raw.volume) || 0,
+    price: parseFloat(raw.price) || 0,
+    profit: parseFloat(raw.profit) || 0,
+    commission: parseFloat(raw.commission) || 0,
+    swap: parseFloat(raw.swap) || 0,
+    comment: String(raw.comment || '')
+  };
+}
+
+// Rebuild the journal trade list for an account from its stored MT5 deals.
+// Positions are only imported once fully closed; deposits/withdrawals are
+// mapped from balance/credit deals. Stable ids enable upsert/dedupe.
+function recomputeMt5TradesForAccount(account: any, deals: any[]): Trade[] {
+  const result: Trade[] = [];
+  const posGroups = new Map<number, any[]>();
+
+  for (const d of deals) {
+    if (d.symbol && (d.entry === ENTRY_IN || d.entry === ENTRY_OUT || d.entry === ENTRY_INOUT)) {
+      if (!posGroups.has(d.positionId)) posGroups.set(d.positionId, []);
+      posGroups.get(d.positionId)!.push(d);
+    }
+  }
+
+  for (const [posId, list] of posGroups) {
+    const inDeals = list.filter((d: any) => d.entry === ENTRY_IN);
+    const outDeals = list.filter((d: any) => d.entry === ENTRY_OUT || d.entry === ENTRY_INOUT);
+    if (outDeals.length === 0) continue; // position still open — import when closed
+
+    const inDeal = inDeals[0] || outDeals[0];
+    const lastOut = outDeals[outDeals.length - 1];
+    const totalProfit = outDeals.reduce((s: number, d: any) => s + d.profit, 0);
+    const totalComm = outDeals.reduce((s: number, d: any) => s + d.commission, 0);
+    const totalSwap = outDeals.reduce((s: number, d: any) => s + d.swap, 0);
+
+    result.push({
+      id: `mt5ea_${account.id}_${posId}`,
+      accountId: account.id,
+      date: new Date(lastOut.time * 1000).toISOString(),
+      symbol: lastOut.symbol || inDeal.symbol || 'UNKNOWN',
+      type: (lastOut.type === DEAL_TYPE_SELL ? 'Sell' : 'Buy') as any,
+      lotSize: lastOut.volume || inDeal.volume || 0.01,
+      entryPrice: inDeal.price,
+      exitPrice: lastOut.price,
+      profit: totalProfit,
+      commission: totalComm,
+      swap: totalSwap,
+      riskPercentage: 1.0,
+      strategy: 'MT5 EA Sync',
+      emotion: 'Calm' as any,
+      notes: lastOut.comment ? `MT5 comment: ${lastOut.comment}` : 'Imported via MT5 Expert Advisor',
+      screenshot: '',
+      tags: ['MT5 Sync'],
+      isMt5Sync: true,
+      eaDealId: lastOut.ticket,
+      eaPositionId: posId
+    });
+  }
+
+  // Balance / credit deals → deposit / withdrawal rows
+  for (const d of deals) {
+    if (d.symbol) continue;
+    if (d.type !== DEAL_TYPE_BALANCE && d.type !== DEAL_TYPE_CREDIT) continue;
+    const type = d.profit >= 0 ? 'Deposit' : 'Withdrawal';
+    result.push({
+      id: `mt5ea_${account.id}_dep_${d.ticket}`,
+      accountId: account.id,
+      date: new Date(d.time * 1000).toISOString(),
+      symbol: 'BALANCE',
+      type: type as any,
+      lotSize: 0,
+      entryPrice: 0,
+      exitPrice: 0,
+      profit: d.profit,
+      commission: d.commission,
+      swap: d.swap,
+      riskPercentage: 1.0,
+      strategy: 'MT5 EA Sync',
+      emotion: 'Calm' as any,
+      notes: d.comment ? `MT5: ${d.comment}` : (type === 'Deposit' ? 'Deposit' : 'Withdrawal'),
+      screenshot: '',
+      tags: ['MT5 Sync'],
+      isMt5Sync: true,
+      eaDealId: d.ticket,
+      eaPositionId: 0
+    });
+  }
+
+  return result;
+}
+
 
 
 async function ensureUserDbLoaded(userId?: string, email?: string) {
@@ -484,13 +640,15 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
           { data: accounts },
           { data: trades },
           { data: riskSettings },
-          { data: supportTickets }
+          { data: supportTickets },
+          { data: mt5Deals }
         ] = await Promise.all([
           supabase.from('users').select('*').eq('id', uid),
           supabase.from('trading_accounts').select('*').eq('user_id', uid),
           supabase.from('trades').select('*').eq('user_id', uid),
           supabase.from('risk_settings').select('*').eq('user_id', uid),
-          supabase.from('support_tickets').select('*').eq('user_id', uid)
+          supabase.from('support_tickets').select('*').eq('user_id', uid),
+          supabase.from('mt5_deals').select('*').eq('user_id', uid)
         ]);
         return {
           users: toCamel(users || []),
@@ -498,6 +656,7 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
           trades: toCamel(trades || []),
           riskSettings: toCamel(riskSettings || []),
           supportTickets: toCamel(supportTickets || []),
+          mt5Deals: toCamel(mt5Deals || []),
           payments: []
         };
       };
@@ -539,6 +698,25 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
         if (loadedDb.riskSettings.length === 0 && cached.riskSettings?.length > 0) {
           loadedDb.riskSettings = cached.riskSettings;
         }
+        if (!loadedDb.mt5Deals && cached.mt5Deals?.length > 0) {
+          loadedDb.mt5Deals = cached.mt5Deals;
+        }
+        if (loadedDb.accounts.length > 0) {
+          // Carry EA sync status/cursor from the live cache when Supabase copy is stale
+          for (const la of loadedDb.accounts) {
+            const ca = (cached.accounts || []).find((x: any) => x.id === la.id);
+            if (ca && ca.eaStatus) {
+              if (ca.eaStatus) la.eaStatus = ca.eaStatus;
+              if (ca.eaLastDealId !== undefined) la.eaLastDealId = ca.eaLastDealId;
+              if (ca.eaLastSyncTime) la.eaLastSyncTime = ca.eaLastSyncTime;
+              if (ca.eaSyncTradeCount !== undefined) la.eaSyncTradeCount = ca.eaSyncTradeCount;
+              if (ca.eaConnectedAt) la.eaConnectedAt = ca.eaConnectedAt;
+              if (ca.eaTerminalLogin) la.eaTerminalLogin = ca.eaTerminalLogin;
+              if (ca.eaTerminalServer) la.eaTerminalServer = ca.eaTerminalServer;
+              if (ca.eaToken) la.eaToken = ca.eaToken;
+            }
+          }
+        }
 
         // Merge transient fields (OTPs) from cache into loaded users
         if (cached.users && cached.users.length > 0 && loadedDb.users.length > 0) {
@@ -553,6 +731,8 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
         }
       }
 
+      if (cleanUserId) userDatabases.set(cleanUserId, loadedDb);
+
       return loadedDb;
     } catch (err) {
       console.error('[AxyFx SQL Query Error]', err);
@@ -562,7 +742,10 @@ async function ensureUserDbLoaded(userId?: string, email?: string) {
   const cached = userDatabases.get(cleanUserId) || (cleanEmail ? userDatabases.get(cleanEmail) : null);
   if (cached) return cached;
 
-  return createEmptyUserDb(cleanUserId, cleanEmail, false);
+  const fresh = createEmptyUserDb(cleanUserId, cleanEmail, false);
+  if (cleanUserId) userDatabases.set(cleanUserId, fresh);
+  if (cleanEmail) userDatabases.set(cleanEmail.toLowerCase(), fresh);
+  return fresh;
 }
 
 async function ensureDbLoaded() {
@@ -665,7 +848,9 @@ async function saveDatabase(
       const validAccCols = new Set([
         'id', 'user_id', 'name', 'broker', 'platform', 'account_type',
         'currency', 'starting_balance', 'current_balance', 'equity', 'status',
-        'created_at', 'updated_at'
+        'ea_token', 'ea_status', 'ea_last_deal_id', 'ea_last_sync_time',
+        'ea_sync_trade_count', 'ea_connected_at', 'ea_terminal_login',
+        'ea_terminal_server', 'created_at', 'updated_at'
       ]);
       const accs = toSnake(data.accounts).map((a: any) => {
         const clean: any = {};
@@ -697,6 +882,17 @@ async function saveDatabase(
       const tix = toSnake(data.supportTickets).map((t: any) => ({ ...t, user_id: t.user_id || uid }));
       await supabase.from('support_tickets').upsert(tix, { onConflict: 'id' });
     }
+    // Upsert MT5 deals (raw deal stream used to recompute synced trades)
+    if (data.mt5Deals && data.mt5Deals.length > 0) {
+      const deals = toSnake(data.mt5Deals).map((d: any) => ({
+        id: String(d.ticket),
+        account_id: d.account_id || d.accountId,
+        position_id: d.position_id ?? d.positionId ?? 0,
+        deal: d,
+        user_id: d.user_id || uid
+      }));
+      await supabase.from('mt5_deals').upsert(deals, { onConflict: 'id' });
+    }
   } catch(err) {
     console.error('[AxyFx SQL Save Error]', err);
   }
@@ -727,7 +923,9 @@ async function ensureDefaultPortfolioAccount(
       startingBalance: 10000,
       currentBalance: 10000,
       equity: 10000,
-      status: 'Active'
+      status: 'Active',
+      eaToken: generateEaToken(),
+      eaStatus: 'Not Connected'
     };
     db.accounts.push(newAcc);
 
@@ -1564,7 +1762,9 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       startingBalance: startBal,
       currentBalance: startBal,
       equity: startBal,
-      status: 'Active'
+      status: 'Active',
+      eaToken: generateEaToken(),
+      eaStatus: 'Not Connected'
     };
 
     db.accounts.push(newAcc);
@@ -2048,6 +2248,149 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       await saveDatabase(db, authEmail);
       res.json({ message: 'Risk parameters created', riskSettings: newRisk });
     }
+  });
+
+  // ==========================================
+  // MT5 EXPERT ADVISOR (EA) ROUTES
+  // Each portfolio account gets a unique EA; the EA authenticates with its
+  // embedded token and streams deals + account info to these endpoints.
+  // ==========================================
+
+  // Download the unique .mq5 EA for an account (session-authenticated)
+  app.get('/api/mt5/ea/:accountId/download', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const account = db.accounts.find((a: any) => a.id === req.params.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    if (!account.eaToken) {
+      account.eaToken = generateEaToken();
+      account.eaStatus = account.eaStatus || 'Not Connected';
+      await saveDatabase(db, currentUser.email);
+    }
+
+    const apiUrl = apiBaseUrl(req);
+    const source = generateEaSource(account, apiUrl);
+    const safeName = String(account.name || 'account').replace(/[^A-Za-z0-9]+/g, '_').slice(0, 30);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="FXJournalPro_Sync_${safeName}.mq5"`);
+    res.send(source);
+  });
+
+  // Reset an account's EA token (invalidates the previous EA file)
+  app.post('/api/mt5/ea/:accountId/reset-token', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const account = db.accounts.find((a: any) => a.id === req.params.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    account.eaToken = generateEaToken();
+    account.eaStatus = 'Not Connected';
+    account.eaConnectedAt = undefined;
+    account.eaLastDealId = 0;
+    account.eaLastSyncTime = undefined;
+    account.eaSyncTradeCount = account.eaSyncTradeCount || 0;
+
+    await saveDatabase(db, currentUser.email);
+    res.json({ message: 'EA token reset. Download a fresh EA file for this account.', account });
+  });
+
+  // EA handshake: validates the embedded token and records terminal info
+  app.post('/api/mt5/ea/authenticate', async (req, res) => {
+    const { accountId, token, terminal } = req.body;
+    if (!accountId || !token) return res.status(400).json({ error: 'accountId and token are required' });
+
+    const db = await findDbByAccountId(accountId);
+    if (!db) return res.status(404).json({ error: 'Account not found' });
+    const account = db.accounts.find((a: any) => a.id === accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (!account.eaToken || account.eaToken !== token) {
+      return res.status(401).json({ error: 'Invalid EA token. Reset the token from your dashboard and download a new EA file.' });
+    }
+
+    if (terminal && typeof terminal === 'object') {
+      if (terminal.login !== undefined) account.eaTerminalLogin = String(terminal.login);
+      if (terminal.server !== undefined) account.eaTerminalServer = String(terminal.server);
+    }
+    account.eaStatus = 'Connected';
+    account.eaConnectedAt = account.eaConnectedAt || new Date().toISOString();
+
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, status: 'Connected', lastDealId: account.eaLastDealId || 0 });
+  });
+
+  // EA sync: receives a batch of deals + account info, recomputes trades, upserts
+  app.post('/api/mt5/ea/sync', async (req, res) => {
+    const { accountId, token, account, deals } = req.body;
+    if (!accountId || !token) return res.status(400).json({ error: 'accountId and token are required' });
+    if (!Array.isArray(deals)) return res.status(400).json({ error: 'deals[] is required' });
+
+    const db = await findDbByAccountId(accountId);
+    if (!db) return res.status(404).json({ error: 'Account not found' });
+    const acc = db.accounts.find((a: any) => a.id === accountId);
+    if (!acc) return res.status(404).json({ error: 'Account not found' });
+    if (!acc.eaToken || acc.eaToken !== token) {
+      return res.status(401).json({ error: 'Invalid EA token' });
+    }
+
+    // 1. Merge new deals (dedupe by ticket)
+    if (!Array.isArray(db.mt5Deals)) db.mt5Deals = [];
+    const seen = new Set<number>(db.mt5Deals.map((d: any) => d.ticket));
+    let added = 0;
+    let maxTicket = acc.eaLastDealId || 0;
+    for (const raw of deals) {
+      const d = normalizeDeal(raw);
+      if (!d.ticket) continue;
+      if (!seen.has(d.ticket)) {
+        db.mt5Deals.push({ ...d, accountId });
+        seen.add(d.ticket);
+        added++;
+      }
+      if (d.ticket > maxTicket) maxTicket = d.ticket;
+    }
+
+    // 2. Recompute journal trades from the full deal stream and upsert
+    const accountDeals = db.mt5Deals.filter((d: any) => d.accountId === accountId);
+    const recomputed = recomputeMt5TradesForAccount(acc, accountDeals);
+    const existingById = new Map(
+      db.trades
+        .filter((t: any) => t.accountId === accountId && t.eaDealId !== undefined)
+        .map((t: any) => [t.id, t])
+    );
+    let inserted = 0;
+    let updated = 0;
+    for (const tr of recomputed) {
+      const prev = existingById.get(tr.id);
+      if (prev) {
+        Object.assign(prev, tr);
+        updated++;
+      } else {
+        db.trades.push(tr);
+        inserted++;
+      }
+    }
+
+    // 3. Update account balance/equity from the authoritative MT5 payload
+    if (account && typeof account === 'object') {
+      if (account.balance !== undefined) acc.currentBalance = parseFloat(account.balance) || acc.currentBalance;
+      if (account.equity !== undefined) acc.equity = parseFloat(account.equity) || acc.equity;
+      if (account.currency !== undefined && account.currency) acc.currency = String(account.currency);
+    }
+
+    acc.eaStatus = 'Connected';
+    acc.eaConnectedAt = acc.eaConnectedAt || new Date().toISOString();
+    acc.eaLastSyncTime = new Date().toISOString();
+    acc.eaLastDealId = maxTicket;
+    acc.eaSyncTradeCount = db.trades.filter((t: any) => t.accountId === accountId).length;
+
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, inserted, updated, totalTrades: acc.eaSyncTradeCount, cursor: maxTicket, status: acc.eaStatus });
   });
 
   // ==========================================
