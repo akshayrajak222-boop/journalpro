@@ -8,6 +8,7 @@ interface TradingCalendarProps {
 }
 
 export default function TradingCalendar({ trades, currency }: TradingCalendarProps) {
+  const tradingTrades = trades.filter(t => t.type !== 'Deposit' && t.type !== 'Withdrawal');
   const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 11)); // Seed to match our metadata context
   const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[] | null>(null);
   const [selectedDayString, setSelectedDayString] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   };
 
   // Group trades by day using local date to align with local calendar cells perfectly
-  const tradesByDay = trades.reduce((acc: { [key: string]: { trades: Trade[]; netProfit: number } }, trade) => {
+  const tradesByDay = tradingTrades.reduce((acc: { [key: string]: { trades: Trade[]; netProfit: number } }, trade) => {
     const dStr = getLocalDateString(trade.date);
     if (!dStr) return acc;
     if (!acc[dStr]) {

@@ -59,14 +59,4 @@ CREATE POLICY "Allow anon full access on support_tickets"
 CREATE POLICY "Allow authenticated full access on support_tickets"
   ON support_tickets FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- ── mt5_connections ──────────────────────────────────────────────────────────
-DROP POLICY IF EXISTS "Users can manage their own MT5 connections" ON mt5_connections;
-DROP POLICY IF EXISTS "Allow anon full access on mt5_connections" ON mt5_connections;
-DROP POLICY IF EXISTS "Allow authenticated full access on mt5_connections" ON mt5_connections;
-
-CREATE POLICY "Allow anon full access on mt5_connections"
-  ON mt5_connections FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow authenticated full access on mt5_connections"
-  ON mt5_connections FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
 -- Done! Now run your app and test account/trade creation.

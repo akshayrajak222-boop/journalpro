@@ -27,6 +27,15 @@ export interface TradingAccount {
   currentBalance: number;
   equity: number;
   status: 'Active' | 'Inactive' | 'Archived';
+  isMt5Sync?: boolean;
+  eaToken?: string;
+  eaStatus?: 'Not Connected' | 'Connected' | 'Error';
+  eaLastDealId?: number;
+  eaLastSyncTime?: string;
+  eaSyncTradeCount?: number;
+  eaConnectedAt?: string;
+  eaTerminalLogin?: string;
+  eaTerminalServer?: string;
 }
 
 export interface Trade {
@@ -50,6 +59,8 @@ export interface Trade {
   screenshot?: string; // base64 or URL
   tags: string[];
   isMt5Sync?: boolean;
+  eaDealId?: number;
+  eaPositionId?: number;
 }
 
 export interface RiskSettings {
@@ -71,7 +82,7 @@ export interface SupportTicket {
   title: string;
   description: string;
   status: 'Open' | 'In Progress' | 'Closed';
-  category: 'Support' | 'Billing' | 'MT5 Sync' | 'Feature Request' | 'Bug' | 'Other';
+  category: 'Support' | 'Billing' | 'Feature Request' | 'Bug' | 'Other';
   date: string;
 }
 
@@ -80,21 +91,6 @@ export interface Announcement {
   title: string;
   content: string;
   date: string;
-}
-
-export interface MT5Connection {
-  id: string;
-  userId: string;
-  accountId: string;
-  brokerName: string;
-  status: 'Connected' | 'Disconnected' | 'Syncing' | 'Error';
-  lastSyncTime?: string;
-  syncToken: string;
-  totalSyncedTrades: number;
-  loginNumber?: string;
-  brokerServer?: string;
-  isInvestorSync?: boolean;
-  autoSync?: boolean;
 }
 
 export interface PaymentHistory {

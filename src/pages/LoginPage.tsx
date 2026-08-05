@@ -132,7 +132,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
           console.warn('[AxyFx] Supabase register warning:', sErr);
         }
       }
-      persistAuthSession(sessionStorage.getItem('auth_user_id') || '', authEmail);
+      persistAuthSession('');
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
