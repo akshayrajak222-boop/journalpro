@@ -143,6 +143,7 @@ export default function App() {
   const [newAccBalance, setNewAccBalance] = useState('10000');
   
   const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual' | 'mt5'>('select');
+  const [newAccBalanceMode, setNewAccBalanceMode] = useState<'auto' | 'manual'>('auto');
 
   // Edit Account form fields
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
@@ -965,6 +966,10 @@ export default function App() {
       alert('Please fill in Starting Balance.');
       return;
     }
+    if (accountCreationMethod === 'mt5' && newAccBalanceMode === 'manual' && !newAccBalance) {
+      alert('Please fill in Starting Balance or switch to Auto Calculate.');
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await authFetch('/api/accounts', {
@@ -976,7 +981,9 @@ export default function App() {
           platform: accountCreationMethod === 'mt5' ? 'MT5' : newAccPlatform,
           accountType: newAccType,
           currency: newAccCurrency,
-          startingBalance: accountCreationMethod === 'mt5' ? undefined : newAccBalance,
+          startingBalance: accountCreationMethod === 'mt5'
+            ? (newAccBalanceMode === 'manual' ? newAccBalance : undefined)
+            : newAccBalance,
           isMt5Sync: accountCreationMethod === 'mt5'
         })
       });
@@ -1807,9 +1814,12 @@ export default function App() {
   // MATHEMATICAL STATISTICS & METRICS ENGINE
   // ==========================================
 
-  const totalTradesCount = trades.length;
-  const wins = trades.filter(t => t.profit > 0);
-  const losses = trades.filter(t => t.profit <= 0);
+  const isTradingTrade = (t: Trade) => t.type !== 'Deposit' && t.type !== 'Withdrawal';
+  const tradingTrades = trades.filter(isTradingTrade);
+
+  const totalTradesCount = tradingTrades.length;
+  const wins = tradingTrades.filter(t => t.profit > 0);
+  const losses = tradingTrades.filter(t => t.profit <= 0);
   const winRate = totalTradesCount > 0 ? (wins.length / totalTradesCount) * 100 : 0;
   
   const sumWins = wins.reduce((sum, t) => sum + t.profit, 0);
@@ -1822,7 +1832,7 @@ export default function App() {
   const avgRR = averageLoss > 0 ? parseFloat((averageWin / averageLoss).toFixed(2)) : 0;
 
   // Winning / Losing streaks
-  const sortedByDate = [...trades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedByDate = [...tradingTrades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   let currentWinStreak = 0, maxWinStreak = 0;
   let currentLossStreak = 0, maxLossStreak = 0;
   for (const t of sortedByDate) {
@@ -1848,7 +1858,7 @@ export default function App() {
     : 0;
 
   // Today's cumulative metrics for Guard scanner
-  const todayTrades = trades.filter(t => {
+  const todayTrades = tradingTrades.filter(t => {
     if (!t.date) return false;
     const tradeDate = new Date(t.date);
     const today = new Date();
@@ -1876,7 +1886,7 @@ export default function App() {
 
   // 2. Bar Chart: Profit by Symbol
   const symbolMap: { [key: string]: number } = {};
-  trades.forEach(t => {
+  tradingTrades.forEach(t => {
     symbolMap[t.symbol] = (symbolMap[t.symbol] || 0) + t.profit;
   });
   const symbolChartData = Object.keys(symbolMap).map(sym => ({
@@ -1887,19 +1897,19 @@ export default function App() {
   // 3. Pie Chart: Sessions
   // Map trades to trading sessions (simulated based on timestamp hour, or mock)
   const sessionData = [
-    { name: 'London Session', value: trades.filter((_, idx) => idx % 3 === 0).length, color: '#2563eb' },
-    { name: 'New York Session', value: trades.filter((_, idx) => idx % 3 === 1).length, color: '#10b981' },
-    { name: 'Asian Session', value: trades.filter((_, idx) => idx % 3 === 2).length, color: '#f59e0b' }
+    { name: 'London Session', value: tradingTrades.filter((_, idx) => idx % 3 === 0).length, color: '#2563eb' },
+    { name: 'New York Session', value: tradingTrades.filter((_, idx) => idx % 3 === 1).length, color: '#10b981' },
+    { name: 'Asian Session', value: tradingTrades.filter((_, idx) => idx % 3 === 2).length, color: '#f59e0b' }
   ].filter(d => d.value > 0);
 
   // 4. Best & Worst Trades
-  const sortedTradesByProfit = [...trades].sort((a, b) => b.profit - a.profit);
+  const sortedTradesByProfit = [...tradingTrades].sort((a, b) => b.profit - a.profit);
   const bestTrade = sortedTradesByProfit.length > 0 ? sortedTradesByProfit[0] : null;
   const worstTrade = sortedTradesByProfit.length > 0 ? sortedTradesByProfit[sortedTradesByProfit.length - 1] : null;
 
   // 5. Monthly P&L Chart Data
   const monthlyMap: { [key: string]: number } = {};
-  trades.forEach(t => {
+  tradingTrades.forEach(t => {
     try {
       const d = new Date(t.date);
       if (!isNaN(d.getTime())) {
@@ -2033,7 +2043,8 @@ export default function App() {
     const ExcelJS = mod.default || mod;
     const range = getExportRange();
     const inRange = filterTradesByRange(range);
-    const stats = computeExportStats(inRange);
+    const tradingInRange = inRange.filter(isTradingTrade);
+    const stats = computeExportStats(tradingInRange);
 
     const NAVY = 'FF0F1E36';
     const BLUE = 'FF2F5B8E';
@@ -2141,7 +2152,7 @@ export default function App() {
 
     const net = stats.netProfit;
     const summaryRows: { label: string; value: number; numFmt: string; color?: string; bold?: boolean }[] = [
-      { label: 'Total Trades', value: inRange.length, numFmt: '0' },
+      { label: 'Total Trades', value: tradingInRange.length, numFmt: '0' },
       { label: 'No. of Winning Trades', value: stats.wins.length, numFmt: '0' },
       { label: 'No. of Losing Trades', value: stats.losses.length, numFmt: '0' },
       { label: 'Win Rate (%)', value: stats.winRate, numFmt: '0.0' },
@@ -2294,7 +2305,8 @@ export default function App() {
     const logoDataUrl = await loadBrandLogoDataUrl();
     const range = getExportRange();
     const inRange = filterTradesByRange(range);
-    const stats = computeExportStats(inRange);
+    const tradingInRange = inRange.filter(isTradingTrade);
+    const stats = computeExportStats(tradingInRange);
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
@@ -2336,7 +2348,7 @@ export default function App() {
     autoTable(doc, {
       head: [['Performance Summary', '']],
       body: [
-        ['Total Number of Trades', String(inRange.length)],
+        ['Total Number of Trades', String(tradingInRange.length)],
         ['Number of Winning Trades', String(stats.wins.length)],
         ['Number of Losing Trades', String(stats.losses.length)],
         ['Win Rate (%)', `${stats.winRate.toFixed(2)}%`],
@@ -4906,6 +4918,42 @@ export default function App() {
                   </select>
                 </div>
               </div>
+
+              {accountCreationMethod === 'mt5' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Initial Balance</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewAccBalanceMode('auto')}
+                      className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'auto' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                    >
+                      <div className="font-bold">Auto Calculate</div>
+                      <div className="text-[10px] mt-0.5 opacity-80">Initial Balance = Current Balance − Total Profit</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewAccBalanceMode('manual')}
+                      className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'manual' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                    >
+                      <div className="font-bold">Enter Manually</div>
+                      <div className="text-[10px] mt-0.5 opacity-80">Provide your own starting balance</div>
+                    </button>
+                  </div>
+                  {newAccBalanceMode === 'manual' && (
+                    <div className="mt-3">
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">Starting Balance</label>
+                      <input
+                        type="number"
+                        required
+                        value={newAccBalance}
+                        onChange={(e) => setNewAccBalance(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

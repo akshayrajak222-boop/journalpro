@@ -1763,7 +1763,14 @@ function turnstileBypassed(): boolean {
       return res.status(400).json({ error: 'Starting balance is required for manual accounts.' });
     }
 
-    const startBal = isMt5Sync ? 0 : (parseFloat(startingBalance) || 10000);
+    let startBal: number;
+    if (isMt5Sync) {
+      startBal = (startingBalance !== undefined && startingBalance !== null && startingBalance !== '')
+        ? (parseFloat(startingBalance) || 0)
+        : 0;
+    } else {
+      startBal = parseFloat(startingBalance) || 10000;
+    }
 
     const newAcc: TradingAccount = {
       id: `acc_${Date.now()}`,
@@ -1785,7 +1792,7 @@ function turnstileBypassed(): boolean {
     db.accounts.push(newAcc);
 
     // Create default risk settings
-    const riskBase = isMt5Sync ? 10000 : startBal;
+    const riskBase = startBal || 10000;
     const newRisk: RiskSettings = {
       id: `r_${Date.now()}`,
       accountId: newAcc.id,
@@ -2408,17 +2415,24 @@ function turnstileBypassed(): boolean {
       if (account.currency !== undefined && account.currency) acc.currency = String(account.currency);
     }
 
-    // 4. MT5 sync accounts: starting balance = current balance - total synced profit
-    if (acc.isMt5Sync) {
-      const totalProfit = accountDeals.reduce((s: number, d: any) => s + d.profit, 0);
-      acc.startingBalance = parseFloat(((acc.currentBalance || 0) - totalProfit).toFixed(2));
+    // 4. MT5 sync accounts with auto-calculated balance:
+    //    starting balance = current balance - total synced delta (profit + commission + swap).
+    //    Only derived once (while starting balance is still 0) so manually entered balances are preserved.
+    if (acc.isMt5Sync && (!acc.startingBalance || acc.startingBalance === 0)) {
+      const totalDelta = accountDeals.reduce(
+        (s: number, d: any) => s + (d.profit || 0) + (d.commission || 0) + (d.swap || 0),
+        0
+      );
+      acc.startingBalance = parseFloat(((acc.currentBalance || 0) - totalDelta).toFixed(2));
     }
 
     acc.eaStatus = 'Connected';
     acc.eaConnectedAt = acc.eaConnectedAt || new Date().toISOString();
     acc.eaLastSyncTime = new Date().toISOString();
     acc.eaLastDealId = maxTicket;
-    acc.eaSyncTradeCount = db.trades.filter((t: any) => t.accountId === accountId).length;
+    acc.eaSyncTradeCount = db.trades.filter(
+      (t: any) => t.accountId === accountId && t.type !== 'Deposit' && t.type !== 'Withdrawal'
+    ).length;
 
     await saveDatabase(db, db.users?.[0]?.email);
     res.json({ ok: true, inserted, updated, totalTrades: acc.eaSyncTradeCount, cursor: maxTicket, status: acc.eaStatus });
@@ -2452,7 +2466,11 @@ function turnstileBypassed(): boolean {
     const accountName = targetAcc ? targetAcc.name : 'Primary Portfolio';
 
     // Fetch trades
-    const accountTrades = db.trades.filter((t: any) => t.accountId === accountId);
+    const accountTrades = db.trades.filter((t: any) =>
+      t.accountId === accountId &&
+      t.type !== 'Deposit' &&
+      t.type !== 'Withdrawal'
+    );
     
     // Prepare a concise trading digest for Gemini API (latest 50 trades)
     const recentTrades = accountTrades.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 50);
