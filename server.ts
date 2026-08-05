@@ -805,22 +805,22 @@ async function saveDatabase(
   overrideUserId?: string,
   overrideEmail?: string,
   previousAliases?: { userId?: string; email?: string }
-) {
-  if (!data) return;
+): Promise<{ accountsError?: any }> {
+  if (!data) return {};
   const usersToSync = Array.isArray(data.users) ? data.users : [];
-  if (usersToSync.length === 0) return;
+  if (usersToSync.length === 0) return {};
 
   const targetUser = usersToSync[0];
   const uid = targetUser.id;
   const email = targetUser.email;
-  if (!uid) return;
+  if (!uid) return {};
 
   if (uid) userDatabases.set(uid, data);
   if (email) userDatabases.set(email.toLowerCase(), data);
   if (overrideUserId) userDatabases.set(overrideUserId, data);
   if (overrideEmail) userDatabases.set(overrideEmail.toLowerCase(), data);
 
-  if (!useSupabase) return;
+  if (!useSupabase) return {};
 
   try {
     // Upsert users
@@ -864,7 +864,10 @@ async function saveDatabase(
         return clean;
       });
       const { error: err2 } = await supabase.from('trading_accounts').upsert(accs, { onConflict: 'id' });
-      if (err2) console.error('[saveDatabase] trading_accounts upsert error:', err2);
+      if (err2) {
+        console.error('[saveDatabase] trading_accounts upsert error:', err2);
+        return { accountsError: err2 };
+      }
     }
     // Upsert trades
     if (data.trades && data.trades.length > 0) {
@@ -1795,7 +1798,16 @@ function turnstileBypassed(): boolean {
     };
     db.riskSettings.push(newRisk);
 
-    await saveDatabase(db, authEmail);
+    const saveResult = await saveDatabase(db, authEmail);
+    if (saveResult?.accountsError) {
+      const code = saveResult.accountsError.code;
+      if (code === '42703') {
+        return res.status(500).json({
+          error: 'Database is missing required columns. Please run the MT5 EA schema migration in Supabase (mt5_ea_schema_migration.sql) and try again.'
+        });
+      }
+      return res.status(500).json({ error: 'Account could not be saved to the database. Please try again.' });
+    }
     res.json({ message: 'Trading account created', account: newAcc });
   });
 
