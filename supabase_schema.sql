@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS trading_accounts (
   broker TEXT,
   platform TEXT,
   account_type TEXT,
+  institution_type TEXT DEFAULT 'Broker',
   currency TEXT,
   starting_balance FLOAT,
   current_balance FLOAT,

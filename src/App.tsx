@@ -139,6 +139,7 @@ export default function App() {
   const [newAccBroker, setNewAccBroker] = useState('');
   const [newAccPlatform, setNewAccPlatform] = useState<'MT4' | 'MT5' | 'cTrader' | 'DXtrade'>('MT5');
   const [newAccType, setNewAccType] = useState<'Live' | 'Demo'>('Live');
+  const [newAccInstitutionType, setNewAccInstitutionType] = useState<'Broker' | 'Prop Firm'>('Broker');
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
   const [newAccBalance, setNewAccBalance] = useState('10000');
   
@@ -1005,7 +1006,7 @@ export default function App() {
     const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
     console.log('[handleCreateAccount] auth check — id:', storedId, 'email:', storedEmail);
     if (!newAccName || !newAccBroker) {
-      alert('Please fill in Account Name and Broker.');
+      alert('Please fill in Account Name and Broker/Prop Firm Name.');
       return;
     }
     if (accountCreationMethod !== 'mt5' && !newAccBalance) {
@@ -1030,7 +1031,8 @@ export default function App() {
           startingBalance: accountCreationMethod === 'mt5'
             ? (newAccBalanceMode === 'manual' ? newAccBalance : undefined)
             : newAccBalance,
-          isMt5Sync: accountCreationMethod === 'mt5'
+          isMt5Sync: accountCreationMethod === 'mt5',
+          ...(accountCreationMethod === 'mt5' ? { institutionType: newAccInstitutionType } : {})
         })
       });
       console.log('[handleCreateAccount] response status:', res.status);
@@ -1040,6 +1042,7 @@ export default function App() {
         setShowAccountModal(false);
         setNewAccName('');
         setNewAccBroker('');
+        setNewAccInstitutionType('Broker');
         if (data.account?.id) {
           setSelectedAccountId(data.account.id);
           persistSelectedAccount(data.account.id);
@@ -3487,7 +3490,7 @@ export default function App() {
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-extrabold text-slate-900 text-sm">{acc.name}</h4>
-                          <span className="text-[10px] text-slate-400 block font-semibold">{acc.broker} • {acc.platform}</span>
+                          <span className="text-[10px] text-slate-400 block font-semibold">{acc.broker} • {acc.platform}{acc.institutionType ? ` • ${acc.institutionType}` : ''}</span>
                         </div>
                         <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
                           acc.accountType === 'Live' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
@@ -4952,17 +4955,56 @@ export default function App() {
                   />
                 </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Broker Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newAccBroker}
-                  onChange={(e) => setNewAccBroker(e.target.value)}
-                  placeholder="IC Markets"
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              {accountCreationMethod === 'mt5' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">Account Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewAccInstitutionType('Broker')}
+                        className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccInstitutionType === 'Broker' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                      >
+                        <div className="font-bold">Broker Account</div>
+                        <div className="text-[10px] mt-0.5 opacity-80">Retail or broker-funded account</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewAccInstitutionType('Prop Firm')}
+                        className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccInstitutionType === 'Prop Firm' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                      >
+                        <div className="font-bold">Prop Firm Account</div>
+                        <div className="text-[10px] mt-0.5 opacity-80">Proprietary trading firm account</div>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      {newAccInstitutionType === 'Broker' ? 'Broker Name' : 'Prop Firm Name'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newAccBroker}
+                      onChange={(e) => setNewAccBroker(e.target.value)}
+                      placeholder={newAccInstitutionType === 'Broker' ? 'IC Markets' : 'FTMO'}
+                      className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Broker Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAccBroker}
+                    onChange={(e) => setNewAccBroker(e.target.value)}
+                    placeholder="IC Markets"
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 {accountCreationMethod !== 'mt5' && (
@@ -4981,7 +5023,7 @@ export default function App() {
                 </div>
                 )}
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Account Type</label>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">{accountCreationMethod === 'mt5' ? 'Portfolio Mode' : 'Account Type'}</label>
                   <select
                     value={newAccType}
                     onChange={(e: any) => setNewAccType(e.target.value)}

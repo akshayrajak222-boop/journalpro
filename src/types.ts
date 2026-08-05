@@ -22,6 +22,7 @@ export interface TradingAccount {
   broker: string;
   platform: 'MT4' | 'MT5' | 'cTrader' | 'DXtrade';
   accountType: 'Live' | 'Demo';
+  institutionType?: 'Broker' | 'Prop Firm';
   currency: string;
   startingBalance: number;
   currentBalance: number;

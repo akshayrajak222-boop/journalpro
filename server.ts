@@ -850,6 +850,7 @@ async function saveDatabase(
     if (data.accounts && data.accounts.length > 0) {
       const validAccCols = new Set([
         'id', 'user_id', 'name', 'broker', 'platform', 'account_type',
+        'institution_type',
         'currency', 'starting_balance', 'current_balance', 'equity', 'status',
         'is_mt5_sync',
         'ea_token', 'ea_status', 'ea_last_deal_id', 'ea_last_sync_time',
@@ -1768,7 +1769,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     if (!db.accounts) db.accounts = [];
     if (!db.riskSettings) db.riskSettings = [];
 
-    const { name, broker, platform, accountType, currency, startingBalance, isMt5Sync } = req.body;
+    const { name, broker, platform, accountType, currency, startingBalance, isMt5Sync, institutionType } = req.body;
     if (!name || !broker) {
       return res.status(400).json({ error: 'Account name and broker are required.' });
     }
@@ -1792,6 +1793,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       broker,
       platform: isMt5Sync ? 'MT5' : (platform || 'MT5'),
       accountType: accountType || 'Live',
+      ...(institutionType ? { institutionType } : {}),
       currency: currency || 'USD',
       startingBalance: startBal,
       currentBalance: startBal,
