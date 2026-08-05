@@ -213,6 +213,10 @@ export default function App() {
   const [showGuidedTour, setShowGuidedTour] = useState(false);
   const [guidedTourStep, setGuidedTourStep] = useState(1);
 
+  // One-time MT5 Sync tour (all users)
+  const [showMT5Tour, setShowMT5Tour] = useState(false);
+  const [mt5TourStep, setMT5TourStep] = useState(1);
+
   // Theme state with local persistence
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
@@ -374,6 +378,17 @@ export default function App() {
     }
   }, [showGuidedTour, guidedTourStep, accounts]);
 
+  // One-time MT5 Sync tour: introduces the MT5 Automation window and announces the sync fix for all users
+  useEffect(() => {
+    if (!user || loading) return;
+    if (localStorage.getItem('journal_mt5_tour_done') === '1') return;
+    if (showGuidedTour) return;
+    if (localStorage.getItem('journal_tutorial_done') === '1' || accounts.length > 0) {
+      setMT5TourStep(1);
+      setShowMT5Tour(true);
+    }
+  }, [user, loading, showGuidedTour, accounts]);
+
   const startGuidedTour = () => {
     setGuidedTourStep(1);
     setShowGuidedTour(true);
@@ -397,6 +412,32 @@ export default function App() {
     setGuidedTourStep(prev => {
       const back = prev - 1;
       if (back === 2) setActiveTab('accounts');
+      if (back === 1) setActiveTab('dashboard');
+      return Math.max(back, 1);
+    });
+  };
+
+  const startMT5Tour = () => {
+    setMT5TourStep(1);
+    setShowMT5Tour(true);
+  };
+
+  const completeMT5Tour = () => {
+    localStorage.setItem('journal_mt5_tour_done', '1');
+    setShowMT5Tour(false);
+  };
+
+  const nextMT5TourStep = () => {
+    setMT5TourStep(prev => {
+      const next = prev + 1;
+      if (next === 2) setActiveTab('mt5');
+      return Math.min(next, 3);
+    });
+  };
+
+  const backMT5TourStep = () => {
+    setMT5TourStep(prev => {
+      const back = prev - 1;
       if (back === 1) setActiveTab('dashboard');
       return Math.max(back, 1);
     });
@@ -4456,6 +4497,26 @@ export default function App() {
                           </p>
                         </div>
                       </div>
+
+                      <div className="bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-500/10 dark:to-blue-500/5 border border-sky-100 dark:border-sky-500/20 rounded-xl p-5 space-y-3 md:col-span-2">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center shrink-0">
+                            <Terminal className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <strong className="text-sm font-black text-slate-900 dark:text-white block">MT5 Sync Tour</strong>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                              Replay the tour that walks you through the MT5 Sync window and automatic trade syncing.
+                            </p>
+                          </div>
+                          <button
+                            onClick={startMT5Tour}
+                            className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg transition flex items-center justify-center gap-1.5"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> Show MT5 Sync Tour
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -5589,6 +5650,19 @@ export default function App() {
           onBack={backGuidedTourStep}
           onSkip={completeGuidedTour}
           onFinish={completeGuidedTour}
+        />
+      )}
+
+      {/* One-time MT5 Sync tour */}
+      {showMT5Tour && user && (
+        <GuidedTour
+          variant="mt5"
+          step={mt5TourStep}
+          accountCreated={accounts.length > 0}
+          onNext={nextMT5TourStep}
+          onBack={backMT5TourStep}
+          onSkip={completeMT5Tour}
+          onFinish={completeMT5Tour}
         />
       )}
 

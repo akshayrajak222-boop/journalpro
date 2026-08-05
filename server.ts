@@ -1022,13 +1022,6 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   }
 }
 
-// TEMPORARY: bypass Turnstile ONLY on preview deployments of the
-// remove-mt5-sync branch. Production and all other branches keep Turnstile.
-function turnstileBypassed(): boolean {
-  return process.env.VERCEL_ENV === 'preview'
-      && process.env.VERCEL_GIT_COMMIT_REF === 'remove-mt5-sync';
-}
-
   // Rate limiter for auth endpoints (prevents brute force / OTP spam)
   const authRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -1152,7 +1145,7 @@ function turnstileBypassed(): boolean {
       const authUserId = (req.headers['x-auth-user-id'] as string) || id || userId || '';
 
       // Skip Turnstile for SSO/Google OAuth path — user already verified externally
-      if (isEmailVerified !== true && !turnstileBypassed()) {
+      if (isEmailVerified !== true) {
         const isHuman = await verifyTurnstile(turnstileToken);
         if (!isHuman) {
           return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
@@ -1330,7 +1323,7 @@ function turnstileBypassed(): boolean {
       
       // Skip Turnstile in development mode (NODE_ENV not set or 'development')
       const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
-      if (!isDev && !turnstileBypassed()) {
+      if (!isDev) {
         const isHuman = await verifyTurnstile(turnstileToken);
         if (!isHuman) {
           return res.status(403).json({ error: 'Captcha verification failed. Please try again.' });
