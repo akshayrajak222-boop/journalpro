@@ -539,7 +539,9 @@ function normalizeDeal(raw: any): any {
 // Rebuild the journal trade list for an account from its stored MT5 deals.
 // Positions are only imported once fully closed; deposits/withdrawals are
 // mapped from balance/credit deals. Stable ids enable upsert/dedupe.
-function recomputeMt5TradesForAccount(account: any, deals: any[]): Trade[] {
+// skipBalanceTicket omits the initial deposit deal (it is represented by the
+// account's starting balance).
+function recomputeMt5TradesForAccount(account: any, deals: any[], skipBalanceTicket?: number): Trade[] {
   const result: Trade[] = [];
   const posGroups = new Map<number, any[]>();
 
@@ -557,9 +559,9 @@ function recomputeMt5TradesForAccount(account: any, deals: any[]): Trade[] {
 
     const inDeal = inDeals[0] || outDeals[0];
     const lastOut = outDeals[outDeals.length - 1];
-    const totalProfit = outDeals.reduce((s: number, d: any) => s + d.profit, 0);
-    const totalComm = outDeals.reduce((s: number, d: any) => s + d.commission, 0);
-    const totalSwap = outDeals.reduce((s: number, d: any) => s + d.swap, 0);
+    const totalProfit = list.reduce((s: number, d: any) => s + d.profit, 0);
+    const totalComm = list.reduce((s: number, d: any) => s + d.commission, 0);
+    const totalSwap = list.reduce((s: number, d: any) => s + d.swap, 0);
 
     result.push({
       id: `mt5ea_${account.id}_${posId}`,
@@ -589,6 +591,7 @@ function recomputeMt5TradesForAccount(account: any, deals: any[]): Trade[] {
   for (const d of deals) {
     if (d.symbol) continue;
     if (d.type !== DEAL_TYPE_BALANCE && d.type !== DEAL_TYPE_CREDIT) continue;
+    if (skipBalanceTicket !== undefined && d.ticket === skipBalanceTicket) continue;
     const type = d.profit >= 0 ? 'Deposit' : 'Withdrawal';
     result.push({
       id: `mt5ea_${account.id}_dep_${d.ticket}`,
@@ -2371,9 +2374,11 @@ function turnstileBypassed(): boolean {
       return res.status(401).json({ error: 'Invalid EA token' });
     }
 
-    // 1. Merge new deals (dedupe by ticket)
+    // 1. Merge new deals (dedupe by ticket within this account)
     if (!Array.isArray(db.mt5Deals)) db.mt5Deals = [];
-    const seen = new Set<number>(db.mt5Deals.map((d: any) => d.ticket));
+    const seen = new Set<number>(
+      db.mt5Deals.filter((d: any) => d.accountId === accountId).map((d: any) => d.ticket)
+    );
     let added = 0;
     let maxTicket = acc.eaLastDealId || 0;
     for (const raw of deals) {
@@ -2389,7 +2394,25 @@ function turnstileBypassed(): boolean {
 
     // 2. Recompute journal trades from the full deal stream and upsert
     const accountDeals = db.mt5Deals.filter((d: any) => d.accountId === accountId);
-    const recomputed = recomputeMt5TradesForAccount(acc, accountDeals);
+
+    // 2a. MT5 sync accounts: the FIRST deposit recorded in the account history is
+    //     the Initial Balance. It is set once (while starting balance is still 0) so
+    //     manually entered balances are preserved, and it is excluded from the journal
+    //     trades because it is already represented by the starting balance.
+    let skipBalanceTicket: number | undefined;
+    if (acc.isMt5Sync) {
+      const deposits = accountDeals
+        .filter((d: any) => d.type === DEAL_TYPE_BALANCE && (d.profit || 0) > 0)
+        .sort((a: any, b: any) => a.time - b.time);
+      if (deposits.length > 0) {
+        skipBalanceTicket = deposits[0].ticket;
+        if (!acc.startingBalance || acc.startingBalance === 0) {
+          acc.startingBalance = parseFloat(deposits[0].profit.toFixed(2));
+        }
+      }
+    }
+
+    const recomputed = recomputeMt5TradesForAccount(acc, accountDeals, skipBalanceTicket);
     const existingById = new Map(
       db.trades
         .filter((t: any) => t.accountId === accountId && t.eaDealId !== undefined)
@@ -2407,23 +2430,19 @@ function turnstileBypassed(): boolean {
         inserted++;
       }
     }
+    // 2b. Drop stale MT5-synced trades no longer produced by the recomputation
+    //     (e.g. the initial deposit once it is folded into the starting balance).
+    const recomputedIds = new Set(recomputed.map((t: any) => t.id));
+    db.trades = db.trades.filter((t: any) => {
+      if (t.accountId === accountId && t.eaDealId !== undefined && !recomputedIds.has(t.id)) return false;
+      return true;
+    });
 
     // 3. Update account balance/equity from the authoritative MT5 payload
     if (account && typeof account === 'object') {
       if (account.balance !== undefined) acc.currentBalance = parseFloat(account.balance) || acc.currentBalance;
       if (account.equity !== undefined) acc.equity = parseFloat(account.equity) || acc.equity;
       if (account.currency !== undefined && account.currency) acc.currency = String(account.currency);
-    }
-
-    // 4. MT5 sync accounts with auto-calculated balance:
-    //    starting balance = current balance - total synced delta (profit + commission + swap).
-    //    Only derived once (while starting balance is still 0) so manually entered balances are preserved.
-    if (acc.isMt5Sync && (!acc.startingBalance || acc.startingBalance === 0)) {
-      const totalDelta = accountDeals.reduce(
-        (s: number, d: any) => s + (d.profit || 0) + (d.commission || 0) + (d.swap || 0),
-        0
-      );
-      acc.startingBalance = parseFloat(((acc.currentBalance || 0) - totalDelta).toFixed(2));
     }
 
     acc.eaStatus = 'Connected';

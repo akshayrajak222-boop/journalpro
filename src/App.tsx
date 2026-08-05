@@ -4929,7 +4929,7 @@ export default function App() {
                       className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'auto' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
                     >
                       <div className="font-bold">Auto Calculate</div>
-                      <div className="text-[10px] mt-0.5 opacity-80">Initial Balance = Current Balance − Total Profit</div>
+                      <div className="text-[10px] mt-0.5 opacity-80">Initial Balance = your first deposit in MT5 history</div>
                     </button>
                     <button
                       type="button"
