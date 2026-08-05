@@ -848,6 +848,7 @@ async function saveDatabase(
       const validAccCols = new Set([
         'id', 'user_id', 'name', 'broker', 'platform', 'account_type',
         'currency', 'starting_balance', 'current_balance', 'equity', 'status',
+        'is_mt5_sync',
         'ea_token', 'ea_status', 'ea_last_deal_id', 'ea_last_sync_time',
         'ea_sync_trade_count', 'ea_connected_at', 'ea_terminal_login',
         'ea_terminal_server', 'created_at', 'updated_at'
@@ -1751,25 +1752,29 @@ function turnstileBypassed(): boolean {
     if (!db.accounts) db.accounts = [];
     if (!db.riskSettings) db.riskSettings = [];
 
-    const { name, broker, platform, accountType, currency, startingBalance } = req.body;
-    if (!name || !broker || startingBalance === undefined || startingBalance === null) {
-      return res.status(400).json({ error: 'Account name, broker, and starting balance are required.' });
+    const { name, broker, platform, accountType, currency, startingBalance, isMt5Sync } = req.body;
+    if (!name || !broker) {
+      return res.status(400).json({ error: 'Account name and broker are required.' });
+    }
+    if (!isMt5Sync && (startingBalance === undefined || startingBalance === null)) {
+      return res.status(400).json({ error: 'Starting balance is required for manual accounts.' });
     }
 
-    const startBal = parseFloat(startingBalance) || 10000;
+    const startBal = isMt5Sync ? 0 : (parseFloat(startingBalance) || 10000);
 
     const newAcc: TradingAccount = {
       id: `acc_${Date.now()}`,
       userId: currentUser.id,
       name,
       broker,
-      platform: platform || 'MT5',
+      platform: isMt5Sync ? 'MT5' : (platform || 'MT5'),
       accountType: accountType || 'Live',
       currency: currency || 'USD',
       startingBalance: startBal,
       currentBalance: startBal,
       equity: startBal,
       status: 'Active',
+      isMt5Sync: !!isMt5Sync,
       eaToken: generateEaToken(),
       eaStatus: 'Not Connected'
     };
@@ -1777,12 +1782,13 @@ function turnstileBypassed(): boolean {
     db.accounts.push(newAcc);
 
     // Create default risk settings
+    const riskBase = isMt5Sync ? 10000 : startBal;
     const newRisk: RiskSettings = {
       id: `r_${Date.now()}`,
       accountId: newAcc.id,
       riskPerTradeLimit: 2.0,
-      dailyLossLimit: startBal * 0.05,
-      weeklyLossLimit: startBal * 0.10,
+      dailyLossLimit: riskBase * 0.05,
+      weeklyLossLimit: riskBase * 0.10,
       maxDrawdownLimit: 10.0,
       disciplineEnabled: true,
       maxTradesPerDay: 5
@@ -2388,6 +2394,12 @@ function turnstileBypassed(): boolean {
       if (account.balance !== undefined) acc.currentBalance = parseFloat(account.balance) || acc.currentBalance;
       if (account.equity !== undefined) acc.equity = parseFloat(account.equity) || acc.equity;
       if (account.currency !== undefined && account.currency) acc.currency = String(account.currency);
+    }
+
+    // 4. MT5 sync accounts: starting balance = current balance - total synced profit
+    if (acc.isMt5Sync) {
+      const totalProfit = accountDeals.reduce((s: number, d: any) => s + d.profit, 0);
+      acc.startingBalance = parseFloat(((acc.currentBalance || 0) - totalProfit).toFixed(2));
     }
 
     acc.eaStatus = 'Connected';

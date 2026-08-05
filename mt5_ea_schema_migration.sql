@@ -4,6 +4,7 @@
 --  without dropping data.)
 
 -- EA fields on trading_accounts
+ALTER TABLE trading_accounts ADD COLUMN IF NOT EXISTS is_mt5_sync BOOLEAN DEFAULT FALSE;
 ALTER TABLE trading_accounts ADD COLUMN IF NOT EXISTS ea_token TEXT;
 ALTER TABLE trading_accounts ADD COLUMN IF NOT EXISTS ea_status TEXT;
 ALTER TABLE trading_accounts ADD COLUMN IF NOT EXISTS ea_last_deal_id BIGINT DEFAULT 0;

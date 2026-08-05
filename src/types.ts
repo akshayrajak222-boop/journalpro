@@ -27,6 +27,7 @@ export interface TradingAccount {
   currentBalance: number;
   equity: number;
   status: 'Active' | 'Inactive' | 'Archived';
+  isMt5Sync?: boolean;
   eaToken?: string;
   eaStatus?: 'Not Connected' | 'Connected' | 'Error';
   eaLastDealId?: number;

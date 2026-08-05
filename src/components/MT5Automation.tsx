@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   ShieldCheck,
   Plus,
-  Copy
+  Copy,
+  FileCode2
 } from 'lucide-react';
 import { TradingAccount } from '../types';
 
@@ -39,6 +40,8 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   const [error, setError] = useState('');
   const [downloadedName, setDownloadedName] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [eaCopied, setEaCopied] = useState(false);
 
   const host = typeof window !== 'undefined' ? window.location.host : 'www.fxjournalpro.com';
   const apiUrl = `${window.location.protocol}//${host}/api/mt5`;
@@ -70,6 +73,29 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
       setError('Download failed. Please try again.');
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function handleCopyCode() {
+    if (!account) return;
+    setCopying(true);
+    setError('');
+    try {
+      const res = await authFetch(`/api/mt5/ea/${account.id}/download`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || 'Failed to fetch EA code. Please try again.');
+        return;
+      }
+      const source = await res.text();
+      await navigator.clipboard.writeText(source);
+      setEaCopied(true);
+      setTimeout(() => setEaCopied(false), 2500);
+      onRefresh();
+    } catch (e) {
+      setError('Failed to copy EA code. Please try again.');
+    } finally {
+      setCopying(false);
     }
   }
 
@@ -192,14 +218,29 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               {downloading ? 'Generating…' : 'Download EA (.mq5)'}
             </button>
             <button
+              onClick={handleCopyCode}
+              disabled={copying}
+              className="flex items-center justify-center gap-2 border border-indigo-200 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 text-xs font-bold py-3 rounded-xl transition disabled:opacity-50"
+            >
+              <FileCode2 className="h-4 w-4" />
+              {copying ? 'Copying…' : 'Copy EA Code'}
+            </button>
+            <button
               onClick={handleReset}
               disabled={resetting}
-              className="flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold py-3 rounded-xl transition disabled:opacity-50"
+              className="flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold py-3 rounded-xl transition disabled:opacity-50 sm:col-span-2"
             >
               <KeyRound className="h-4 w-4" />
               {resetting ? 'Resetting…' : 'Reset Token'}
             </button>
           </div>
+
+          {eaCopied && (
+            <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-xl px-4 py-3">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              EA source code copied to clipboard. Save it as a <code className="text-[10px] bg-emerald-100 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded">.mq5</code> file inside <code className="text-[10px] bg-emerald-100 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded">MQL5/Experts</code>.
+            </div>
+          )}
 
           {downloadedName && (
             <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-xl px-4 py-3">

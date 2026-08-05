@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS trading_accounts (
   current_balance FLOAT,
   equity FLOAT,
   status TEXT,
+  is_mt5_sync BOOLEAN DEFAULT FALSE,
   ea_token TEXT,
   ea_status TEXT,
   ea_last_deal_id BIGINT DEFAULT 0,

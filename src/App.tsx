@@ -957,8 +957,12 @@ export default function App() {
     const storedId = sessionStorage.getItem('auth_user_id') || user?.id || '';
     const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
     console.log('[handleCreateAccount] auth check — id:', storedId, 'email:', storedEmail);
-    if (!newAccName || !newAccBroker || !newAccBalance) {
-      alert('Please fill in Account Name, Broker, and Starting Balance.');
+    if (!newAccName || !newAccBroker) {
+      alert('Please fill in Account Name and Broker.');
+      return;
+    }
+    if (accountCreationMethod !== 'mt5' && !newAccBalance) {
+      alert('Please fill in Starting Balance.');
       return;
     }
     setActionLoading(true);
@@ -969,10 +973,11 @@ export default function App() {
         body: JSON.stringify({
           name: newAccName,
           broker: newAccBroker,
-          platform: newAccPlatform,
+          platform: accountCreationMethod === 'mt5' ? 'MT5' : newAccPlatform,
           accountType: newAccType,
           currency: newAccCurrency,
-          startingBalance: newAccBalance
+          startingBalance: accountCreationMethod === 'mt5' ? undefined : newAccBalance,
+          isMt5Sync: accountCreationMethod === 'mt5'
         })
       });
       console.log('[handleCreateAccount] response status:', res.status);
@@ -4874,6 +4879,7 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+                {accountCreationMethod !== 'mt5' && (
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">Trading Platform</label>
                   <select
@@ -4887,6 +4893,7 @@ export default function App() {
                     <option value="DXtrade">DXtrade</option>
                   </select>
                 </div>
+                )}
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">Account Type</label>
                   <select
@@ -4917,6 +4924,7 @@ export default function App() {
                     <option value="CAD">CAD ($)</option>
                   </select>
                 </div>
+                {accountCreationMethod !== 'mt5' && (
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">Starting Balance</label>
                   <input
@@ -4927,6 +4935,7 @@ export default function App() {
                     className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
                   />
                 </div>
+                )}
               </div>
 
               <button
