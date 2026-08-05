@@ -1131,6 +1131,29 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     if (!currentUser) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
+    // Record this visit as the user's last login/activity, throttled so the
+    // timestamp refreshes on each page load without writing on every request.
+    try {
+      const nowIso = new Date().toISOString();
+      const prev = currentUser.lastLogin || currentUser.last_login;
+      const shouldUpdate = !prev || (Date.now() - new Date(prev).getTime()) >= 15 * 60 * 1000;
+      if (shouldUpdate) {
+        currentUser.lastLogin = nowIso;
+        currentUser.last_login = nowIso;
+        if (useSupabase) {
+          try {
+            await supabase.from('users').update({ last_login: nowIso }).eq('id', currentUser.id);
+          } catch (e) {
+            console.warn('[auth/me] last_login update skipped:', (e as any)?.message || e);
+          }
+        } else {
+          const db = (req as any).userDb;
+          if (db) await saveDatabase(db);
+        }
+      }
+    } catch (err) {
+      console.warn('[auth/me] last_login update failed:', err);
+    }
     return res.json({ user: currentUser });
   });
 

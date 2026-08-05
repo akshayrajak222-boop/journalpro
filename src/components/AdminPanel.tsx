@@ -5,6 +5,20 @@ import {
 import { User, SupportTicket, Announcement } from '../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return 'Never';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Never';
+  return new Intl.DateTimeFormat(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(d);
+}
+
 interface AdminPanelProps {
   onPublishAnnouncement: () => void;
 }
@@ -271,7 +285,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
                       <div className="text-[10px] text-slate-400">{u.email}</div>
                     </td>
                     <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
-                      {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never'}
+                      {formatDateTime(u.lastLogin)}
                     </td>
                     <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
                       {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}

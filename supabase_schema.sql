@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
   onboarding_completed BOOLEAN DEFAULT false,
   is_pro BOOLEAN DEFAULT false,
   is_email_verified BOOLEAN DEFAULT false,
+  auth_provider TEXT DEFAULT 'email',
+  last_login TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
