@@ -1088,8 +1088,20 @@ function turnstileBypassed(): boolean {
         // Never mutate the canonical user ID with a temporary session ID
         let dbUser = db.users[0] || null;
 
-        (req as any).userDb = db;
-        (req as any).currentUser = dbUser;
+        // Security: accounts that explicitly have NOT completed email/OTP verification
+        // are treated as unauthenticated. This blocks session-restore (and every
+        // protected API route) until OTP verification is successfully completed,
+        // even if the page is refreshed while the OTP window is open.
+        const unverified = dbUser
+          ? dbUser.isEmailVerified === false || dbUser.is_email_verified === false
+          : false;
+        if (dbUser && unverified) {
+          (req as any).userDb = null;
+          (req as any).currentUser = null;
+        } else {
+          (req as any).userDb = db;
+          (req as any).currentUser = dbUser;
+        }
       } else {
         (req as any).currentUser = null;
         (req as any).userDb = null;
@@ -1351,7 +1363,7 @@ function turnstileBypassed(): boolean {
           main_markets: ['Forex', 'Gold'],
           onboarding_completed: false,
           is_pro: false,
-          is_email_verified: false,
+          is_email_verified: true,
           auth_provider: 'email',
           created_at: new Date().toISOString(),
           last_login: new Date().toISOString()
@@ -1379,6 +1391,11 @@ function turnstileBypassed(): boolean {
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+      }
+
+      // Security: require email/OTP verification before signing in.
+      if (user.isEmailVerified === false || user.is_email_verified === false) {
+        return res.status(403).json({ error: 'Please verify your email before signing in. Enter the 6-digit code we sent to your inbox, or click resend.' });
       }
 
       // Update last_login timestamp

@@ -707,7 +707,9 @@ export default function App() {
       }
 
       // 2. Register with Express Backend API (sends 6-digit OTP code via SendGrid / Resend)
-      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '', authEmail);
+      // Do NOT persist a session before OTP verification — otherwise a page refresh
+      // while the OTP window is open would bypass verification.
+      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '');
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
