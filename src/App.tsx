@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Terminal, Globe, Bell, CreditCard, Info, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail
+  FileSpreadsheet, FileText, Mail, X
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -179,6 +179,9 @@ export default function App() {
   const [pasteRawText, setPasteRawText] = useState('');
   const [parsedTrades, setParsedTrades] = useState<any[]>([]);
   const [pasteImporting, setPasteImporting] = useState(false);
+
+  // Dismissible drawdown warning (dismissal is scoped to the current account)
+  const [dismissedDrawdownAccount, setDismissedDrawdownAccount] = useState<string | null>(null);
 
   // Support ticket form
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -3014,15 +3017,23 @@ export default function App() {
         </div>
 
         {/* Global Drawdown Risk alert strip if active */}
-        {activeAccount && maxDrawdownPercentage > 0 && (
+        {activeAccount && maxDrawdownPercentage > 0 && dismissedDrawdownAccount !== activeAccount.id && (
           <div className="bg-amber-50 border border-amber-200 text-amber-950 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <strong className="text-xs font-bold block">Portfolio Drawdown Active</strong>
               <p className="text-xs text-amber-800/90 leading-relaxed mt-0.5">
                 Your portfolio is currently down <span className="font-extrabold">{maxDrawdownPercentage}%</span> from its starting balance. Drawdown guard is monitoring executions.
               </p>
             </div>
+            <button
+              onClick={() => setDismissedDrawdownAccount(activeAccount.id)}
+              className="text-amber-500 hover:text-amber-700 hover:bg-amber-100 rounded-lg p-1.5 transition flex-shrink-0"
+              aria-label="Dismiss drawdown warning"
+              title="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
