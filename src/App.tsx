@@ -142,7 +142,7 @@ export default function App() {
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
   const [newAccBalance, setNewAccBalance] = useState('10000');
   
-  const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual'>('select');
+  const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual' | 'mt5'>('select');
 
   // Edit Account form fields
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
@@ -986,6 +986,9 @@ export default function App() {
           setSelectedAccountId(data.account.id);
           persistSelectedAccount(data.account.id);
           await fetchAccountData(data.account.id);
+          if (accountCreationMethod === 'mt5') {
+            setActiveTab('mt5');
+          }
         } else {
           await fetchAccountData();
         }
@@ -4821,18 +4824,29 @@ export default function App() {
                        <div className="text-[11px] text-slate-500">Create an empty portfolio to manually log your trades one-by-one.</div>
                      </div>
                   </button>
+                  <button onClick={() => setAccountCreationMethod('mt5')} className="border-2 border-slate-100 hover:border-slate-300 hover:bg-slate-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
+                     <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Terminal className="w-5 h-5"/></div>
+                     <div>
+                       <div className="font-bold text-slate-800 text-sm">MT5 Sync Account</div>
+                       <div className="text-[11px] text-slate-500">Connect a unique MT5 Expert Advisor to sync your trades automatically in real time.</div>
+                     </div>
+                  </button>
                 </div>
               </div>
             )}
 
-            {accountCreationMethod === 'manual' && (
+            {(accountCreationMethod === 'manual' || accountCreationMethod === 'mt5') && (
               <form onSubmit={handleCreateAccount} className="space-y-4">
                 <div className="flex items-center gap-2 mb-2">
                   <button type="button" onClick={() => setAccountCreationMethod('select')} className="text-slate-400 hover:text-slate-700 text-xs font-semibold">← Back</button>
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Register Manual Portfolio</h3>
-                  <p className="text-[11px] text-slate-400">Configure parameters for manual logs or automated Expert integrations.</p>
+                  <h3 className="font-bold text-slate-900 text-base">{accountCreationMethod === 'mt5' ? 'Create MT5 Sync Account' : 'Register Manual Portfolio'}</h3>
+                  <p className="text-[11px] text-slate-400">
+                    {accountCreationMethod === 'mt5'
+                      ? "We'll generate a unique MT5 Expert Advisor for this account and walk you through connecting it after creation."
+                      : 'Configure parameters for manual logs or automated Expert integrations.'}
+                  </p>
                 </div>
 
                 <div>
@@ -4920,7 +4934,7 @@ export default function App() {
                 disabled={actionLoading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
               >
-                {actionLoading ? 'Provisioning Account...' : 'Create Portfolio Account'}
+                {actionLoading ? 'Provisioning Account...' : (accountCreationMethod === 'mt5' ? 'Create MT5 Sync Account' : 'Create Portfolio Account')}
               </button>
             </form>
             )}
