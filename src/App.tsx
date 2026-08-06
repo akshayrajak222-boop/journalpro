@@ -1956,6 +1956,26 @@ export default function App() {
   const bestTrade = sortedTradesByProfit.length > 0 ? sortedTradesByProfit[0] : null;
   const worstTrade = sortedTradesByProfit.length > 0 ? sortedTradesByProfit[sortedTradesByProfit.length - 1] : null;
 
+  // 4b. Best & Worst Days (based on daily net P&L)
+  const getLocalDayKey = (dateInput: string | Date) => {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const dailyNetMap: { [key: string]: { net: number; count: number } } = {};
+  tradingTrades.forEach(t => {
+    const dKey = getLocalDayKey(t.date);
+    if (!dKey) return;
+    if (!dailyNetMap[dKey]) dailyNetMap[dKey] = { net: 0, count: 0 };
+    dailyNetMap[dKey].net += t.profit + (t.commission || 0) + (t.swap || 0);
+    dailyNetMap[dKey].count += 1;
+  });
+  const sortedDaysByNet = Object.keys(dailyNetMap)
+    .map(dKey => ({ dayKey: dKey, net: parseFloat(dailyNetMap[dKey].net.toFixed(2)), count: dailyNetMap[dKey].count }))
+    .sort((a, b) => b.net - a.net);
+  const bestDay = sortedDaysByNet.length > 0 ? sortedDaysByNet[0] : null;
+  const worstDay = sortedDaysByNet.length > 0 ? sortedDaysByNet[sortedDaysByNet.length - 1] : null;
+
   // 5. Monthly P&L Chart Data
   const monthlyMap: { [key: string]: number } = {};
   tradingTrades.forEach(t => {
@@ -3831,7 +3851,107 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </section>
 
+            {/* Best & Worst Day Statistics (based on daily net P&L) */}
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Best Day Card */}
+              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">Best Day</h4>
+                      <p className="text-[10px] text-slate-400">Most profitable day by net P&L</p>
+                    </div>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                  </div>
+                  {bestDay && bestDay.net > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xl font-black text-emerald-600">
+                          +{formatValue(bestDay.net)}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-50 text-slate-600 rounded">
+                          {new Date(`${bestDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-xs pt-2 border-t border-slate-50">
+                        <div>
+                          <span className="text-slate-400 font-medium block">Weekday</span>
+                          <span className="font-bold text-slate-800">{new Date(`${bestDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Date</span>
+                          <span className="font-bold text-slate-800">{new Date(`${bestDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Net P&L</span>
+                          <span className="font-bold text-emerald-600">+{formatValue(bestDay.net)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Trades</span>
+                          <span className="font-bold text-slate-800">{bestDay.count}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 py-6 text-center">
+                      No profitable trading days recorded.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Worst Day Card */}
+              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">Worst Day</h4>
+                      <p className="text-[10px] text-slate-400">Day with the largest net loss</p>
+                    </div>
+                    <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                  </div>
+                  {worstDay && worstDay.net < 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xl font-black text-rose-600">
+                          {formatValue(worstDay.net)}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-50 text-slate-600 rounded">
+                          {new Date(`${worstDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-xs pt-2 border-t border-slate-50">
+                        <div>
+                          <span className="text-slate-400 font-medium block">Weekday</span>
+                          <span className="font-bold text-slate-800">{new Date(`${worstDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Date</span>
+                          <span className="font-bold text-slate-800">{new Date(`${worstDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Net P&L</span>
+                          <span className="font-bold text-rose-600">{formatValue(worstDay.net)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Trades</span>
+                          <span className="font-bold text-slate-800">{worstDay.count}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 py-6 text-center">
+                      No losing trading days recorded.
+                    </div>
+                  )}
+                </div>
+              </div>
             </section>
           </div>
         )}
