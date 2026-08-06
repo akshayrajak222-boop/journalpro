@@ -34,6 +34,16 @@ const heroPoints = [
   'Complete Trading History Tracking',
 ];
 
+const getPasswordStrength = (pw: string) => {
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  return score;
+};
+
 const features = [
   { icon: Cpu, title: 'MT5 Automatic Sync', desc: 'Trades, balance, and equity sync automatically from MetaTrader 5 via the free Expert Advisor.' },
   { icon: Bot, title: 'AI Trade Mentor', desc: 'Get personalized coaching on your setups, entries, exits, and risk decisions.' },
@@ -891,6 +901,28 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {authPassword && (() => {
+                const strength = getPasswordStrength(authPassword);
+                const color = strength >= 5 ? 'bg-emerald-500' : strength >= 3 ? 'bg-amber-400' : 'bg-rose-500';
+                const textColor = strength >= 5 ? 'text-emerald-400' : strength >= 3 ? 'text-amber-300' : 'text-rose-400';
+                const message = strength >= 5
+                  ? 'Strong password.'
+                  : strength === 4
+                  ? 'Good password — almost there.'
+                  : strength === 3
+                  ? 'Getting stronger — add uppercase, numbers, or symbols.'
+                  : 'Use a stronger password — mix uppercase, lowercase, numbers, and symbols.';
+                return (
+                  <div className="mt-2">
+                    <div className="flex gap-1.5">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i <= strength ? color : 'bg-white/10'}`}></div>
+                      ))}
+                    </div>
+                    <p className={`text-xs mt-1.5 ${textColor}`}>{message}</p>
+                  </div>
+                );
+              })()}
             </div>
             {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
             <div className="flex justify-center my-2">
