@@ -102,6 +102,30 @@ html {
   animation: title-cycle 36s ease-in-out infinite;
 }
 
+/* ───── Premium Trading Title Ticker ───── */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.ticker-track {
+  animation: ticker-scroll 32s linear infinite;
+  will-change: transform;
+}
+.ticker-track:hover { animation-play-state: paused; }
+
+.ticker-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
+}
+
+.ticker-font-elegant { font-family: "Playfair Display", Georgia, serif; }
+.ticker-font-future { font-family: "Orbitron", "Space Grotesk", sans-serif; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+}
+
 details.faq summary .faq-chevron { transition: transform 0.25s ease; }
 details.faq[open] summary .faq-chevron { transform: rotate(180deg); }
 details.faq summary { list-style: none; }

@@ -8,6 +8,7 @@ import {
   Trophy, Users, Wallet, X, Zap
 } from 'lucide-react';
 import Logo from '../components/Logo';
+import TradingTicker from '../components/TradingTicker';
 import { supabase } from '../supabaseClient';
 import { Turnstile } from '@marsidev/react-turnstile';
 
@@ -419,6 +420,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
             <h1 className="font-display text-4xl sm:text-5xl xl:text-6xl font-bold leading-[1.05] tracking-tight max-w-4xl mx-auto bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent animate-title-cycle">
               Don't Take a Big Break From Trading
             </h1>
+
+            <div className="mt-10">
+              <TradingTicker />
+            </div>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-14 lg:gap-16 items-center mt-14 lg:mt-16">
