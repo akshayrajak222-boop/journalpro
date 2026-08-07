@@ -3247,7 +3247,11 @@ RESTRICTIONS:
         signal: controller.signal,
         headers: { 'User-Agent': 'FXJournalPro/1.0', Accept: 'application/json' },
       });
-      if (!res.ok) throw new Error(`Upstream API responded with ${res.status}`);
+      if (!res.ok) {
+        const err = new Error(`Upstream API responded with ${res.status}`) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
+      }
       return await res.json();
     } finally {
       clearTimeout(timer);
@@ -3493,17 +3497,46 @@ RESTRICTIONS:
     return '';
   }
 
-  // Financial Modeling Prep provider (free tier: 250 requests/day).
+  // Financial Modeling Prep provider.
+  // The legacy /api/v3/economic_calendar endpoint was retired by FMP (2025-08-31);
+  // the current route is /stable/economic-calendar and requires a paid FMP plan.
   // Replace or extend the providers map to swap in another source later.
+  class ProviderAccessError extends Error {
+    code: string;
+    constructor(message: string, code: string) {
+      super(message);
+      this.code = code;
+    }
+  }
+
   const economicCalendarProviders: Record<string, EconomicCalendarProvider> = {
     fmp: {
       name: 'Financial Modeling Prep Economic Calendar',
       async fetchEvents(from, to) {
         const apiKey = process.env.FMP_API_KEY?.trim();
         if (!apiKey) throw new Error('FMP_API_KEY is not configured');
-        const url = `${FMP_BASE}/api/v3/economic_calendar?from=${from}&to=${to}&apikey=${encodeURIComponent(apiKey)}`;
-        const data = await fetchJson(url);
+        const url = `${FMP_BASE}/stable/economic-calendar?from=${from}&to=${to}&apikey=${encodeURIComponent(apiKey)}`;
+        let data: any;
+        try {
+          data = await fetchJson(url);
+        } catch (err: any) {
+          if (err?.status === 402) {
+            throw new ProviderAccessError(
+              'Your Financial Modeling Prep plan does not include the Economic Calendar. Upgrade your FMP plan or switch providers.',
+              'RESTRICTED'
+            );
+          }
+          if (err?.status === 403) {
+            throw new ProviderAccessError(
+              'Your Financial Modeling Prep API key does not have access to the Economic Calendar.',
+              'RESTRICTED'
+            );
+          }
+          throw err;
+        }
         const rows = Array.isArray(data) ? data : [];
+        const fromMs = new Date(`${from}T00:00:00.000Z`).getTime();
+        const toMs = new Date(`${to}T23:59:59.999Z`).getTime();
         const events: EconomicEvent[] = [];
         for (const row of rows) {
           const eventName = (row?.event || '').toString().trim();
@@ -3511,11 +3544,14 @@ RESTRICTIONS:
           const country = (row?.country || '').toString().toUpperCase().trim();
           const date = toIsoUtc((row?.date || '').toString());
           if (!date) continue;
+          const eventMs = new Date(date).getTime();
+          if (eventMs < fromMs || eventMs > toMs) continue;
+          const currencyRaw = (row?.currency || '').toString().toUpperCase().trim();
           const numOrDash = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v).trim());
           events.push({
-            id: `${date}:${country}:${eventName}`,
+            id: `${date}:${currencyRaw || country}:${eventName}`,
             date,
-            currency: COUNTRY_TO_CURRENCY[country] || country || '--',
+            currency: currencyRaw || COUNTRY_TO_CURRENCY[country] || country || '--',
             country,
             event: eventName,
             impact: normalizeImpact(row?.impact),
@@ -3577,7 +3613,14 @@ RESTRICTIONS:
         timezone: 'UTC',
         generatedAt: new Date().toISOString(),
       });
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.code === 'RESTRICTED') {
+        console.error('[GET /api/economic-calendar] restricted:', err?.message || err);
+        return res.status(403).json({
+          error: err?.message || 'Your economic calendar provider is not accessible with the current plan.',
+          code: 'RESTRICTED',
+        });
+      }
       console.error('[GET /api/economic-calendar] error:', err?.message || err);
       res.status(502).json({
         error: 'Economic calendar data is temporarily unavailable.',
