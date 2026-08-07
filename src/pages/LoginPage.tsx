@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import TradingTicker from '../components/TradingTicker';
+import FXNewsPreview from '../components/FXNewsPreview';
 import { supabase } from '../supabaseClient';
 import { Turnstile } from '@marsidev/react-turnstile';
 
@@ -20,6 +21,7 @@ interface LoginPageProps {
 
 const navLinks = [
   { href: '#features', label: 'Features' },
+  { href: '#fx-news', label: 'FX News' },
   { href: '#analytics', label: 'Analytics' },
   { href: '#ai-mentor', label: 'AI Mentor' },
   { href: '#security', label: 'Security' },
@@ -505,6 +507,43 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 <p className="text-[13px] leading-relaxed text-slate-400">{f.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FX News & Economic Calendar ── */}
+      <section id="fx-news" className="relative scroll-mt-20 py-20 md:py-28 border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          <div>
+            <span className="inline-flex items-center gap-2 bg-white/[0.05] border border-white/[0.1] rounded-full px-3.5 py-1.5 mb-4">
+              <Newspaper className="h-3.5 w-3.5 text-blue-400" />
+              <span className="text-xs font-semibold text-slate-200">FX News &amp; Economic Calendar</span>
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">Never Trade Blind Again</h2>
+            <p className="mt-4 text-slate-400 text-base leading-relaxed">
+              Track live forex headlines and high-impact economic events — NFP, CPI, FOMC, GDP — all inside your journal, so you're always ahead of market-moving news.
+            </p>
+            <div className="mt-6 space-y-3">
+              {[
+                'Real-time forex headlines with sentiment scoring',
+                'High-impact events like NFP, CPI, FOMC & GDP',
+                'Filter by currency, category, and impact level',
+                'Live countdown to the next high-impact event',
+              ].map((p) => (
+                <div key={p} className="flex items-start gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                  <span className="text-sm text-slate-300">{p}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => openAuthModal('register')} className="mt-8 inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-semibold rounded-xl px-6 py-3.5 text-sm transition shadow-lg shadow-blue-600/25">
+              Explore FX News
+              <ArrowUpRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="animate-fade-up">
+            <FXNewsPreview />
           </div>
         </div>
       </section>
