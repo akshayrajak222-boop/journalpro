@@ -3222,6 +3222,7 @@ RESTRICTIONS:
   const ALPHA_VANTAGE_BASE = (process.env.ALPHA_VANTAGE_BASE_URL || 'https://www.alphavantage.co').trim().replace(/\/+$/, '');
   const FMP_BASE = (process.env.FMP_BASE_URL || 'https://financialmodelingprep.com').trim().replace(/\/+$/, '');
   const FINNHUB_BASE = (process.env.FINNHUB_BASE_URL || 'https://finnhub.io').trim().replace(/\/+$/, '');
+  const XOOMAR_BASE = (process.env.XOOMAR_BASE_URL || 'https://xoomar.com').trim().replace(/\/+$/, '');
 
   // Simple in-memory TTL cache so upstream APIs are only hit once per window.
   const apiCache = new Map<string, { data: unknown; expiresAt: number }>();
@@ -3513,6 +3514,43 @@ RESTRICTIONS:
   }
 
   const economicCalendarProviders: Record<string, EconomicCalendarProvider> = {
+    // Xoomar Economic Calendar — genuinely free, no API key required (30 req/min/IP).
+    // US macro releases synced weekly from BLS, the Fed, and BEA (CPI, NFP, FOMC, GDP).
+    // Docs: https://xoomar.com/markets/api/calendar
+    xoomar: {
+      name: 'Xoomar Economic Calendar (BLS/Fed/BEA)',
+      notConfiguredMessage: 'Economic calendar is not configured.',
+      configured: () => true,
+      async fetchEvents(from, to) {
+        const url = `${XOOMAR_BASE}/api/markets/calendar?from=${from}&to=${to}`;
+        const data = await fetchJson(url);
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        const fromMs = new Date(`${from}T00:00:00.000Z`).getTime();
+        const toMs = new Date(`${to}T23:59:59.999Z`).getTime();
+        const events: EconomicEvent[] = [];
+        for (const row of rows) {
+          const eventName = (row?.eventName || '').toString().trim();
+          if (!eventName) continue;
+          const date = toIsoUtc((row?.scheduledAt || '').toString());
+          if (!date) continue;
+          const eventMs = new Date(date).getTime();
+          if (eventMs < fromMs || eventMs > toMs) continue;
+          const numOrDash = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v).trim());
+          events.push({
+            id: `${date}:USD:${eventName}`,
+            date,
+            currency: 'USD',
+            country: 'US',
+            event: eventName,
+            impact: normalizeImpact(row?.importance),
+            actual: numOrDash(row?.actual),
+            forecast: numOrDash(row?.forecast),
+            previous: numOrDash(row?.previous),
+          });
+        }
+        return events;
+      },
+    },
     // Finnhub Economic Calendar — free tier (60 calls/min) includes this endpoint.
     // Docs: https://finnhub.io/docs/api/economic-calendar
     finnhub: {
@@ -3622,7 +3660,7 @@ RESTRICTIONS:
   };
 
   app.get('/api/economic-calendar', async (req, res) => {
-    const providerName = (process.env.ECONOMIC_CALENDAR_PROVIDER || 'finnhub').toLowerCase();
+    const providerName = (process.env.ECONOMIC_CALENDAR_PROVIDER || 'xoomar').toLowerCase();
     const provider = economicCalendarProviders[providerName];
     if (!provider) {
       return res.status(500).json({ error: `Unknown economic calendar provider: ${providerName}` });
