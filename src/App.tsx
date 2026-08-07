@@ -34,6 +34,7 @@ import GuidedTour from './components/GuidedTour';
 import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
 import LegalFooter from './components/LegalFooter';
+import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 
 async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
@@ -113,6 +114,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [fxNewsInitialTab, setFxNewsInitialTab] = useState<'news' | 'calendar'>('news');
+
+  const openEconomicCalendar = () => {
+    setFxNewsInitialTab('calendar');
+    setActiveTab('fxnews');
+  };
 
   // Core business states
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
@@ -2916,7 +2923,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => { setActiveTab('fxnews'); setMobileMenuOpen(false); }}
+              onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News & Economic Calendar"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
                 sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
@@ -3133,6 +3140,9 @@ export default function App() {
               winsCount={wins.length}
               totalTradesCount={totalTradesCount}
             />
+
+            {/* Next high-impact economic event → jumps to Economic Calendar */}
+            <NextEventCard onOpenCalendar={openEconomicCalendar} />
 
             {/* Main Visualizations Grid */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3508,7 +3518,7 @@ export default function App() {
 
         {/* 3b. FX NEWS & ECONOMIC CALENDAR VIEW */}
         {activeTab === 'fxnews' && (
-          <FXNews />
+          <FXNews initialTab={fxNewsInitialTab} />
         )}
 
         {/* 4. PORTFOLIO ACCOUNTS VIEW */}

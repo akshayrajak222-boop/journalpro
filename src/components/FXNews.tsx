@@ -140,8 +140,12 @@ function CellValue({ value }: { value: string | null }) {
   return <span className={`font-mono font-semibold ${numColor(value)}`}>{value}</span>;
 }
 
-export default function FXNews() {
-  const [tab, setTab] = useState<'news' | 'calendar'>('news');
+export default function FXNews({ initialTab = 'news' }: { initialTab?: 'news' | 'calendar' }) {
+  const [tab, setTab] = useState<'news' | 'calendar'>(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [newsCategories, setNewsCategories] = useState<string[]>(DEFAULT_CATEGORIES);
