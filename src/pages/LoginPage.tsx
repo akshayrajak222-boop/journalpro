@@ -417,13 +417,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
               <Sparkles className="h-3.5 w-3.5 text-blue-400" />
               <span className="text-xs font-semibold text-slate-200">Free Trading Journal</span>
             </div>
-            <h1 className="font-display text-4xl sm:text-5xl xl:text-6xl font-bold leading-[1.05] tracking-tight max-w-4xl mx-auto bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent animate-title-cycle">
-              Don't Take a Big Break From Trading
-            </h1>
-
-            <div className="mt-10">
-              <TradingTicker />
-            </div>
+            <TradingTicker />
           </div>
 
           <div className="grid lg:grid-cols-2 gap-14 lg:gap-16 items-center mt-14 lg:mt-16">
