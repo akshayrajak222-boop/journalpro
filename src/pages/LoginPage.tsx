@@ -3,7 +3,7 @@ import {
   ArrowUpRight, Ban, BarChart3, BookOpen, Bot, Brain, CheckCircle2,
   ChevronDown, Clock, Cpu, Database, Eye, EyeOff, FileDown,
   Flag, FileText, Globe, GraduationCap, KeyRound, Layers, LineChart, Lock,
-  MessageSquare, MoonStar, MousePointerClick, PieChart, Quote, RefreshCw, Shield,
+  MessageSquare, MoonStar, MousePointerClick, Newspaper, PieChart, Quote, RefreshCw, Shield,
   ShieldCheck, Sparkles, Star, Sun, Tags, Target, TrendingDown,
   Trophy, Users, Wallet, X, Zap
 } from 'lucide-react';
@@ -59,6 +59,7 @@ const features = [
   { icon: Tags, title: 'Custom Tags & Notes', desc: 'Tag strategies, setups, and mistakes for fast, smart filtering.' },
   { icon: Flag, title: 'Goal Setting & Tracking', desc: 'Set monthly profit, consistency, and risk targets and track progress.' },
   { icon: FileText, title: 'Download Trading Reports', desc: 'Export complete trading reports in PDF and CSV format for reviews, prop firm applications, and backups.' },
+  { icon: Newspaper, title: 'FX News & Economic Calendar', desc: 'Live forex headlines plus high-impact events like NFP, CPI, and FOMC — so you never trade blind.', new: true },
 ];
 
 const perfectFor = [
@@ -480,7 +481,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
           <div className="text-center max-w-2xl mx-auto mb-14">
             <span className="inline-flex items-center gap-2 bg-white/[0.05] border border-white/[0.1] rounded-full px-3.5 py-1.5 mb-4">
               <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-              <span className="text-xs font-semibold text-slate-200">17 Core Features</span>
+              <span className="text-xs font-semibold text-slate-200">{features.length} Core Features</span>
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Everything You Need to Win Consistently</h2>
             <p className="mt-4 text-slate-400 text-base leading-relaxed">
@@ -494,7 +495,14 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600/20 to-cyan-500/20 border border-white/[0.08] flex items-center justify-center mb-4 group-hover:scale-110 transition">
                   <f.icon className="h-5 w-5 text-blue-400" />
                 </div>
-                <h3 className="text-sm font-semibold text-white mb-1.5">{f.title}</h3>
+                <h3 className="text-sm font-semibold text-white mb-1.5 flex items-center gap-2">
+                  {f.title}
+                  {'new' in f && f.new && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider bg-gradient-to-r from-blue-500 to-cyan-400 text-white px-1.5 py-0.5 rounded-full">
+                      New
+                    </span>
+                  )}
+                </h3>
                 <p className="text-[13px] leading-relaxed text-slate-400">{f.desc}</p>
               </div>
             ))}
