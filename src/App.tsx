@@ -2922,18 +2922,28 @@ export default function App() {
               {!sidebarCollapsed && 'Calendar'}
             </button>
 
-            <button
-              onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
-              title="FX News & Economic Calendar"
-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+            <div
+              className={`rounded-lg bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 p-[1.5px] transition ${
+                sidebarCollapsed ? 'inline-flex' : 'w-full'
               } ${
-                activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+                activeTab === 'fxnews'
+                  ? 'shadow-[0_0_16px_rgba(99,102,241,0.45)]'
+                  : 'shadow-[0_0_10px_rgba(99,102,241,0.18)] hover:shadow-[0_0_14px_rgba(99,102,241,0.4)]'
               }`}
+              title="FX News & Economic Calendar"
             >
-              <Newspaper className="h-4 w-4 text-slate-500" />
-              {!sidebarCollapsed && 'FX News'}
-            </button>
+              <button
+                onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
+                className={`text-xs font-semibold transition flex items-center rounded-[7px] ${
+                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+                } ${
+                  activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'bg-[#FBFBFA] text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
+                {!sidebarCollapsed && 'FX News'}
+              </button>
+            </div>
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
