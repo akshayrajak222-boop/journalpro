@@ -3215,6 +3215,378 @@ RESTRICTIONS:
   });
 
   // ==========================================
+  // FX NEWS & ECONOMIC CALENDAR
+  // ==========================================
+
+  // Optional upstream base-URL overrides (useful for testing or proxying).
+  const ALPHA_VANTAGE_BASE = (process.env.ALPHA_VANTAGE_BASE_URL || 'https://www.alphavantage.co').trim().replace(/\/+$/, '');
+  const FMP_BASE = (process.env.FMP_BASE_URL || 'https://financialmodelingprep.com').trim().replace(/\/+$/, '');
+
+  // Simple in-memory TTL cache so upstream APIs are only hit once per window.
+  const apiCache = new Map<string, { data: unknown; expiresAt: number }>();
+
+  function getCached<T>(key: string): T | undefined {
+    const entry = apiCache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      apiCache.delete(key);
+      return undefined;
+    }
+    return entry.data as T;
+  }
+
+  function setCached(key: string, data: unknown, ttlMs: number) {
+    apiCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  }
+
+  async function fetchJson(url: string, timeoutMs = 15000): Promise<any> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'FXJournalPro/1.0', Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`Upstream API responded with ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // ---- FX News (Alpha Vantage News & Sentiment) ----
+
+  const NEWS_CATEGORY_ORDER = [
+    'Market Analysis',
+    'Central Banks',
+    'Interest Rates',
+    'Inflation',
+    'Employment',
+    'GDP',
+    'Commodities',
+    'Geopolitics',
+    'Government',
+  ];
+
+  // Alpha Vantage topic -> our display category (best-effort mapping).
+  const AV_TOPIC_CATEGORY: Record<string, string> = {
+    financial_markets: 'Market Analysis',
+    economy_monetary: 'Central Banks',
+    economy_fiscal: 'Government',
+    economy_macro: 'GDP',
+    energy_transportation: 'Commodities',
+    technology: 'Market Analysis',
+    mergers_and_acquisitions: 'Market Analysis',
+    retail_wholesale: 'Market Analysis',
+  };
+
+  const FX_NEWS_TOPICS = 'financial_markets,economy_monetary,economy_macro,economy_fiscal';
+
+  const CURRENCY_NAMES: Record<string, string> = {
+    USD: 'U.S. Dollar',
+    EUR: 'Euro',
+    GBP: 'British Pound',
+    JPY: 'Japanese Yen',
+    AUD: 'Australian Dollar',
+    CAD: 'Canadian Dollar',
+    CHF: 'Swiss Franc',
+    NZD: 'New Zealand Dollar',
+    CNY: 'Chinese Yuan',
+  };
+
+  const MAJOR_PAIRS = [
+    'EUR/USD', 'USD/JPY', 'GBP/USD', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+    'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'EUR/CHF', 'EUR/AUD', 'AUD/JPY', 'USD/CNY', 'USD/CNH',
+  ];
+
+  function mapTopicToCategory(topics: string[]): string {
+    for (const t of topics) {
+      const mapped = AV_TOPIC_CATEGORY[t.toLowerCase()];
+      if (mapped) return mapped;
+    }
+    return 'Market Analysis';
+  }
+
+  function deriveSentimentLabel(score: number | null): string {
+    if (score === null) return 'Neutral';
+    if (score >= 0.35) return 'Bullish';
+    if (score <= -0.35) return 'Bearish';
+    if (score > 0.1) return 'Somewhat Bullish';
+    if (score < -0.1) return 'Somewhat Bearish';
+    return 'Neutral';
+  }
+
+  function detectCurrenciesAndPairs(text: string, tickers: string[]): { currencies: string[]; pairs: string[] } {
+    const currencies = new Set<string>();
+    const pairs = new Set<string>();
+    const upper = ` ${text.toUpperCase()} `;
+
+    for (const pair of MAJOR_PAIRS) {
+      if (upper.includes(pair)) {
+        pairs.add(pair);
+        const [a, b] = pair.split('/');
+        if (CURRENCY_NAMES[a]) currencies.add(a);
+        if (CURRENCY_NAMES[b]) currencies.add(b);
+      }
+    }
+
+    for (const code of Object.keys(CURRENCY_NAMES)) {
+      if (new RegExp(`\\b${code}\\b`).test(upper)) currencies.add(code);
+    }
+
+    // Forex-style tickers from the API (e.g. FOREX:EURUSD or EURUSD)
+    for (const tk of tickers || []) {
+      const clean = tk.replace(/^FOREX:+/i, '').replace(/[^A-Za-z/]/g, '');
+      const m = /^([A-Z]{3})\/?([A-Z]{3})$/.exec(clean);
+      if (m) {
+        if (CURRENCY_NAMES[m[1]] && CURRENCY_NAMES[m[2]]) {
+          pairs.add(`${m[1]}/${m[2]}`);
+          currencies.add(m[1]);
+          currencies.add(m[2]);
+        } else if (CURRENCY_NAMES[m[1]]) {
+          currencies.add(m[1]);
+        }
+      }
+    }
+
+    return {
+      currencies: Array.from(currencies),
+      pairs: Array.from(pairs),
+    };
+  }
+
+  function normalizeNewsArticle(item: any) {
+    const title = (item?.title || '').trim();
+    if (!title) return null;
+
+    const timePublished = (item?.time_published || '').trim();
+    let publishedAt = '';
+    if (/^\d{8}T\d{6}$/.test(timePublished)) {
+      publishedAt = `${timePublished.slice(0, 4)}-${timePublished.slice(4, 6)}-${timePublished.slice(6, 8)}T${timePublished.slice(9, 11)}:${timePublished.slice(11, 13)}:${timePublished.slice(13, 15)}Z`;
+    } else {
+      const d = new Date(timePublished);
+      if (!isNaN(d.getTime())) publishedAt = d.toISOString();
+    }
+
+    const topics = Array.isArray(item?.topics) ? item.topics.map((t: any) => (t?.topic || '')).filter(Boolean) : [];
+    const category = mapTopicToCategory(topics);
+
+    const sentimentScore = typeof item?.overall_sentiment_score === 'number' ? item.overall_sentiment_score : null;
+    const sentimentLabel = item?.overall_sentiment_label || deriveSentimentLabel(sentimentScore);
+
+    const tickers = Array.isArray(item?.ticker_sentiment)
+      ? item.ticker_sentiment.map((t: any) => (t?.ticker || '')).filter(Boolean)
+      : [];
+
+    const { currencies, pairs } = detectCurrenciesAndPairs(`${title} ${item?.summary || ''}`, tickers);
+
+    return {
+      id: item?.url || title,
+      title,
+      summary: (item?.summary || '').trim(),
+      url: item?.url || '#',
+      source: item?.source || 'Unknown',
+      publishedAt,
+      category,
+      currencies,
+      pairs,
+      sentiment: { score: sentimentScore, label: sentimentLabel },
+    };
+  }
+
+  app.get('/api/fx-news', async (req, res) => {
+    const apiKey = process.env.ALPHA_VANTAGE_API_KEY?.trim();
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || '25'), 10) || 25, 1), 50);
+
+    if (!apiKey) {
+      return res.status(503).json({
+        error: 'FX news is not configured. Add ALPHA_VANTAGE_API_KEY to your environment.',
+        code: 'NOT_CONFIGURED',
+      });
+    }
+
+    const cacheKey = `fx-news:${limit}`;
+    try {
+      let articles = getCached<any[]>(cacheKey);
+      if (!articles) {
+        const url = `${ALPHA_VANTAGE_BASE}/query?function=NEWS_SENTIMENT&topics=${FX_NEWS_TOPICS}&limit=${limit}&sort=LATEST&apikey=${encodeURIComponent(apiKey)}`;
+        const data = await fetchJson(url);
+        // Alpha Vantage returns HTTP 200 with a "Note"/"Information" key when rate-limited.
+        if (data?.Note || data?.Information || data?.Error) {
+          console.warn('[GET /api/fx-news] Provider rate limit or info message:', data?.Note || data?.Information || data?.Error);
+          return res.status(429).json({
+            error: 'The news provider rate limit has been reached. Please try again later.',
+            code: 'RATE_LIMITED',
+          });
+        }
+        const feed = Array.isArray(data?.feed) ? data.feed : [];
+        articles = feed.map(normalizeNewsArticle).filter(Boolean);
+        setCached(cacheKey, articles, 15 * 60 * 1000);
+      }
+
+      let filtered = articles;
+      const topic = typeof req.query.topic === 'string' ? req.query.topic : '';
+      const currency = typeof req.query.currency === 'string' ? req.query.currency.toUpperCase() : '';
+      if (topic) filtered = filtered.filter(a => a.category === topic);
+      if (currency) filtered = filtered.filter(a => a.currencies.includes(currency));
+
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.json({
+        articles: filtered,
+        categories: NEWS_CATEGORY_ORDER,
+        source: 'Alpha Vantage News & Sentiment',
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[GET /api/fx-news] error:', err?.message || err);
+      res.status(502).json({
+        error: 'Unable to fetch FX news right now. Please try again shortly.',
+        code: 'UPSTREAM_ERROR',
+      });
+    }
+  });
+
+  // ---- Economic Calendar (modular provider architecture) ----
+
+  interface EconomicEvent {
+    id: string;
+    date: string; // ISO 8601 UTC
+    currency: string;
+    country: string;
+    event: string;
+    impact: 'high' | 'medium' | 'low' | 'none';
+    actual: string | null;
+    forecast: string | null;
+    previous: string | null;
+  }
+
+  interface EconomicCalendarProvider {
+    name: string;
+    fetchEvents(from: string, to: string): Promise<EconomicEvent[]>;
+  }
+
+  const COUNTRY_TO_CURRENCY: Record<string, string> = {
+    US: 'USD', EU: 'EUR', EMU: 'EUR', DE: 'EUR', FR: 'EUR', IT: 'EUR', ES: 'EUR',
+    GB: 'GBP', UK: 'GBP', JP: 'JPY', AU: 'AUD', CA: 'CAD', CH: 'CHF', NZ: 'NZD',
+    CN: 'CNY', HK: 'HKD', KR: 'KRW', SG: 'SGD', IN: 'INR', BR: 'BRL', MX: 'MXN',
+    ZA: 'ZAR', TR: 'TRY', RU: 'RUB', ID: 'IDR', TH: 'THB', MY: 'MYR', PH: 'PHP',
+    SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', CZ: 'CZK', HU: 'HUF', RO: 'RON',
+    GR: 'EUR', PT: 'EUR', NL: 'EUR', BE: 'EUR', AT: 'EUR', FI: 'EUR', IE: 'EUR',
+  };
+
+  function normalizeImpact(value: unknown): EconomicEvent['impact'] {
+    const s = String(value || '').toLowerCase();
+    if (s.startsWith('high')) return 'high';
+    if (s.startsWith('med')) return 'medium';
+    if (s.startsWith('low')) return 'low';
+    return 'none';
+  }
+
+  function toIsoUtc(dateStr: string): string {
+    if (!dateStr) return '';
+    const trimmed = dateStr.trim();
+    const asIso = trimmed.replace(' ', 'T');
+    const d = new Date(asIso.endsWith('Z') ? asIso : `${asIso}Z`);
+    if (!isNaN(d.getTime())) return d.toISOString();
+    const d2 = new Date(trimmed);
+    if (!isNaN(d2.getTime())) return d2.toISOString();
+    return '';
+  }
+
+  // Financial Modeling Prep provider (free tier: 250 requests/day).
+  // Replace or extend the providers map to swap in another source later.
+  const economicCalendarProviders: Record<string, EconomicCalendarProvider> = {
+    fmp: {
+      name: 'Financial Modeling Prep Economic Calendar',
+      async fetchEvents(from, to) {
+        const apiKey = process.env.FMP_API_KEY?.trim();
+        if (!apiKey) throw new Error('FMP_API_KEY is not configured');
+        const url = `${FMP_BASE}/api/v3/economic_calendar?from=${from}&to=${to}&apikey=${encodeURIComponent(apiKey)}`;
+        const data = await fetchJson(url);
+        const rows = Array.isArray(data) ? data : [];
+        const events: EconomicEvent[] = [];
+        for (const row of rows) {
+          const eventName = (row?.event || '').toString().trim();
+          if (!eventName) continue;
+          const country = (row?.country || '').toString().toUpperCase().trim();
+          const date = toIsoUtc((row?.date || '').toString());
+          if (!date) continue;
+          const numOrDash = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v).trim());
+          events.push({
+            id: `${date}:${country}:${eventName}`,
+            date,
+            currency: COUNTRY_TO_CURRENCY[country] || country || '--',
+            country,
+            event: eventName,
+            impact: normalizeImpact(row?.impact),
+            actual: numOrDash(row?.actual),
+            forecast: numOrDash(row?.estimate),
+            previous: numOrDash(row?.previous),
+          });
+        }
+        return events;
+      },
+    },
+  };
+
+  app.get('/api/economic-calendar', async (req, res) => {
+    const providerName = (process.env.ECONOMIC_CALENDAR_PROVIDER || 'fmp').toLowerCase();
+    const provider = economicCalendarProviders[providerName];
+    if (!provider) {
+      return res.status(500).json({ error: `Unknown economic calendar provider: ${providerName}` });
+    }
+    const fmpKey = process.env.FMP_API_KEY?.trim();
+    if (!fmpKey) {
+      return res.status(503).json({
+        error: 'Economic calendar is not configured. Add FMP_API_KEY to your environment.',
+        code: 'NOT_CONFIGURED',
+      });
+    }
+
+    const fmtDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    const today = new Date();
+    const fromRaw = req.query.from;
+    const toRaw = req.query.to;
+    const from = typeof fromRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fromRaw) ? fromRaw : fmtDate(today);
+    const to = typeof toRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(toRaw) ? toRaw : fmtDate(new Date(today.getTime() + 21 * 86400000));
+
+    const cacheKey = `economic-calendar:${providerName}:${from}:${to}`;
+    try {
+      let events = getCached<EconomicEvent[]>(cacheKey);
+      if (!events) {
+        events = await provider.fetchEvents(from, to);
+        setCached(cacheKey, events, 10 * 60 * 1000);
+      }
+
+      const impact = typeof req.query.impact === 'string' ? req.query.impact.toLowerCase() : '';
+      const currency = typeof req.query.currency === 'string' ? req.query.currency.toUpperCase() : '';
+      let filtered = events;
+      if (['high', 'medium', 'low'].includes(impact)) {
+        filtered = filtered.filter(e => e.impact === impact);
+      }
+      if (currency) filtered = filtered.filter(e => e.currency === currency);
+
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.json({
+        events: filtered,
+        provider: provider.name,
+        from,
+        to,
+        timezone: 'UTC',
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[GET /api/economic-calendar] error:', err?.message || err);
+      res.status(502).json({
+        error: 'Economic calendar data is temporarily unavailable.',
+        code: 'UPSTREAM_ERROR',
+      });
+    }
+  });
+
+  // ==========================================
   // VITE DEV SERVER OR STATIC ASSET PRODUCTION
   // ==========================================
 

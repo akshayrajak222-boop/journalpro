@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Terminal, Globe, Bell, CreditCard, Info, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, X
+  FileSpreadsheet, FileText, Mail, X, Newspaper
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -26,6 +26,7 @@ import {
 import { supabase } from './supabaseClient';
 
 import TradingCalendar from './components/TradingCalendar';
+import FXNews from './components/FXNews';
 import MT5Automation from './components/MT5Automation';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
@@ -2915,6 +2916,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => { setActiveTab('fxnews'); setMobileMenuOpen(false); }}
+              title="FX News & Economic Calendar"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <Newspaper className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'FX News'}
+            </button>
+
+            <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
               title="MT5 Automation"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3025,6 +3039,7 @@ export default function App() {
                  activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
+                 activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
                  activeTab === 'mt5' ? 'MT5 Automation' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
@@ -3035,6 +3050,7 @@ export default function App() {
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
+                 activeTab === 'fxnews' ? 'Stay updated with the latest market-moving forex news and economic events.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
                  activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
@@ -3488,6 +3504,11 @@ export default function App() {
         {/* 3. CALENDAR VIEW */}
         {activeTab === 'calendar' && (
           <TradingCalendar trades={trades} currency={activeAccount?.currency || 'USD'} />
+        )}
+
+        {/* 3b. FX NEWS & ECONOMIC CALENDAR VIEW */}
+        {activeTab === 'fxnews' && (
+          <FXNews />
         )}
 
         {/* 4. PORTFOLIO ACCOUNTS VIEW */}
