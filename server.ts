@@ -3221,6 +3221,7 @@ RESTRICTIONS:
   // Optional upstream base-URL overrides (useful for testing or proxying).
   const ALPHA_VANTAGE_BASE = (process.env.ALPHA_VANTAGE_BASE_URL || 'https://www.alphavantage.co').trim().replace(/\/+$/, '');
   const FMP_BASE = (process.env.FMP_BASE_URL || 'https://financialmodelingprep.com').trim().replace(/\/+$/, '');
+  const FINNHUB_BASE = (process.env.FINNHUB_BASE_URL || 'https://finnhub.io').trim().replace(/\/+$/, '');
 
   // Simple in-memory TTL cache so upstream APIs are only hit once per window.
   const apiCache = new Map<string, { data: unknown; expiresAt: number }>();
@@ -3466,6 +3467,9 @@ RESTRICTIONS:
 
   interface EconomicCalendarProvider {
     name: string;
+    /** Message shown when the provider's API key is missing from the environment. */
+    notConfiguredMessage: string;
+    configured(): boolean;
     fetchEvents(from: string, to: string): Promise<EconomicEvent[]>;
   }
 
@@ -3500,7 +3504,6 @@ RESTRICTIONS:
   // Financial Modeling Prep provider.
   // The legacy /api/v3/economic_calendar endpoint was retired by FMP (2025-08-31);
   // the current route is /stable/economic-calendar and requires a paid FMP plan.
-  // Replace or extend the providers map to swap in another source later.
   class ProviderAccessError extends Error {
     code: string;
     constructor(message: string, code: string) {
@@ -3510,8 +3513,61 @@ RESTRICTIONS:
   }
 
   const economicCalendarProviders: Record<string, EconomicCalendarProvider> = {
+    // Finnhub Economic Calendar — free tier (60 calls/min) includes this endpoint.
+    // Docs: https://finnhub.io/docs/api/economic-calendar
+    finnhub: {
+      name: 'Finnhub Economic Calendar',
+      notConfiguredMessage: 'Economic calendar is not configured. Add FINNHUB_API_KEY to your environment.',
+      configured: () => Boolean(process.env.FINNHUB_API_KEY?.trim()),
+      async fetchEvents(from, to) {
+        const apiKey = process.env.FINNHUB_API_KEY?.trim();
+        if (!apiKey) throw new Error('FINNHUB_API_KEY is not configured');
+        const url = `${FINNHUB_BASE}/api/v1/calendar/economic?from=${from}&to=${to}&token=${encodeURIComponent(apiKey)}`;
+        let data: any;
+        try {
+          data = await fetchJson(url);
+        } catch (err: any) {
+          if (err?.status === 401 || err?.status === 403) {
+            throw new ProviderAccessError('Your Finnhub API key is invalid or has no access to the Economic Calendar.', 'RESTRICTED');
+          }
+          if (err?.status === 429) {
+            throw new ProviderAccessError('Finnhub rate limit reached. Please try again shortly.', 'RATE_LIMITED');
+          }
+          throw err;
+        }
+        const rows = Array.isArray(data?.economicCalendar) ? data.economicCalendar : [];
+        const fromMs = new Date(`${from}T00:00:00.000Z`).getTime();
+        const toMs = new Date(`${to}T23:59:59.999Z`).getTime();
+        const events: EconomicEvent[] = [];
+        for (const row of rows) {
+          const eventName = (row?.event || '').toString().trim();
+          if (!eventName) continue;
+          const country = (row?.country || '').toString().toUpperCase().trim();
+          const date = toIsoUtc((row?.time || '').toString());
+          if (!date) continue;
+          const eventMs = new Date(date).getTime();
+          if (eventMs < fromMs || eventMs > toMs) continue;
+          const currency = COUNTRY_TO_CURRENCY[country] || country || '--';
+          const numOrDash = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v).trim());
+          events.push({
+            id: `${date}:${currency}:${eventName}`,
+            date,
+            currency,
+            country,
+            event: eventName,
+            impact: normalizeImpact(row?.impact),
+            actual: numOrDash(row?.actual),
+            forecast: numOrDash(row?.estimate),
+            previous: numOrDash(row?.prev),
+          });
+        }
+        return events;
+      },
+    },
     fmp: {
       name: 'Financial Modeling Prep Economic Calendar',
+      notConfiguredMessage: 'Economic calendar is not configured. Add FMP_API_KEY to your environment.',
+      configured: () => Boolean(process.env.FMP_API_KEY?.trim()),
       async fetchEvents(from, to) {
         const apiKey = process.env.FMP_API_KEY?.trim();
         if (!apiKey) throw new Error('FMP_API_KEY is not configured');
@@ -3566,15 +3622,14 @@ RESTRICTIONS:
   };
 
   app.get('/api/economic-calendar', async (req, res) => {
-    const providerName = (process.env.ECONOMIC_CALENDAR_PROVIDER || 'fmp').toLowerCase();
+    const providerName = (process.env.ECONOMIC_CALENDAR_PROVIDER || 'finnhub').toLowerCase();
     const provider = economicCalendarProviders[providerName];
     if (!provider) {
       return res.status(500).json({ error: `Unknown economic calendar provider: ${providerName}` });
     }
-    const fmpKey = process.env.FMP_API_KEY?.trim();
-    if (!fmpKey) {
+    if (!provider.configured()) {
       return res.status(503).json({
-        error: 'Economic calendar is not configured. Add FMP_API_KEY to your environment.',
+        error: provider.notConfiguredMessage,
         code: 'NOT_CONFIGURED',
       });
     }
@@ -3619,6 +3674,13 @@ RESTRICTIONS:
         return res.status(403).json({
           error: err?.message || 'Your economic calendar provider is not accessible with the current plan.',
           code: 'RESTRICTED',
+        });
+      }
+      if (err?.code === 'RATE_LIMITED') {
+        console.error('[GET /api/economic-calendar] rate limited:', err?.message || err);
+        return res.status(429).json({
+          error: err?.message || 'Economic calendar provider rate limit reached. Please try again later.',
+          code: 'RATE_LIMITED',
         });
       }
       console.error('[GET /api/economic-calendar] error:', err?.message || err);
