@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail
+  FileSpreadsheet, FileText, Mail, Wrench
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -34,6 +34,7 @@ import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
 import LegalFooter from './components/LegalFooter';
 import LoginPage from './pages/LoginPage';
+import TradingTools from './components/TradingTools';
 
 async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
   const fflate = await import('fflate');
@@ -2904,6 +2905,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
+              title="Tools"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'tools' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <Wrench className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Tools'}
+            </button>
+
+            <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
               title="AI Mentor"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3003,6 +3017,7 @@ export default function App() {
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'settings' ? 'Settings' :
                  activeTab === 'mt5' ? 'MT5 Automation' :
+                 activeTab === 'tools' ? 'Tools' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
               <p className="text-xs text-slate-400 mt-1">
@@ -3013,6 +3028,7 @@ export default function App() {
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, MT5 automation link, and co-pilot preferences.' :
                  activeTab === 'mt5' ? 'Connect your MetaTrader terminal for real-time synchronization.' :
+                 activeTab === 'tools' ? 'Precision calculators to plan your trades with confidence.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
@@ -4772,6 +4788,11 @@ export default function App() {
         {/* 7. ADMIN PANEL VIEW */}
         {activeTab === 'admin' && (
           <AdminPanel onPublishAnnouncement={fetchAccountData} />
+        )}
+
+        {/* 8. TOOLS VIEW */}
+        {activeTab === 'tools' && (
+          <TradingTools />
         )}
 
         {/* Site footer with legal links */}
