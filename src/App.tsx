@@ -2923,38 +2923,28 @@ export default function App() {
               {!sidebarCollapsed && 'Calendar'}
             </button>
 
-            <div
-              className={`rounded-lg bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 p-[1.5px] transition ${
-                sidebarCollapsed ? 'inline-flex' : 'w-full'
-              } ${
-                activeTab === 'fxnews'
-                  ? 'shadow-[0_0_16px_rgba(99,102,241,0.45)]'
-                  : 'shadow-[0_0_10px_rgba(99,102,241,0.18)] hover:shadow-[0_0_14px_rgba(99,102,241,0.4)]'
-              }`}
+            <button
+              onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News & Economic Calendar"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
             >
-              <button
-                onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
-                className={`text-xs font-semibold transition flex items-center rounded-[7px] ${
-                  sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
-                } ${
-                  activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'bg-[#FBFBFA] text-slate-700 hover:text-slate-900'
-                }`}
-              >
-                <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
-                  <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
-                  {!sidebarCollapsed && 'FX News'}
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
+                {!sidebarCollapsed && 'FX News'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
                 </span>
-                {!sidebarCollapsed && (
-                  <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                    NEW
-                  </span>
-                )}
-                {sidebarCollapsed && (
-                  <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
-                )}
-              </button>
-            </div>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+              )}
+            </button>
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
