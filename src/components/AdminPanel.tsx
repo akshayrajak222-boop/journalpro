@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, CreditCard, Radio, AlertCircle, FileText, Plus, CheckCircle, Ban, RefreshCw, Star, BarChart3, Shield, Bug, Lightbulb
+  Users, CreditCard, AlertCircle, FileText, Plus, CheckCircle, Ban, RefreshCw, Star, BarChart3, Shield, Bug, Lightbulb
 } from 'lucide-react';
 import { User, SupportTicket, Announcement } from '../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return 'Never';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Never';
+  return new Intl.DateTimeFormat(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(d);
+}
 
 interface AdminPanelProps {
   onPublishAnnouncement: () => void;
 }
 
 export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'billing' | 'mt5' | 'tickets' | 'bugs' | 'features' | 'announcements'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'billing' | 'tickets' | 'bugs' | 'features' | 'announcements'>('dashboard');
   
   const [dashboardStats, setDashboardStats] = useState<any>({});
   const [users, setUsers] = useState<any[]>([]);
@@ -168,7 +182,6 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
           { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
           { id: 'users', label: 'User Registry', icon: Users },
           { id: 'billing', label: 'Billing History', icon: CreditCard },
-          { id: 'mt5', label: 'MT5 Sync', icon: Radio },
           { id: 'tickets', label: 'Tickets', icon: AlertCircle },
           { id: 'bugs', label: 'Bugs', icon: Bug },
           { id: 'features', label: 'Features', icon: Lightbulb },
@@ -198,10 +211,6 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
             <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Active Users</span>
               <span className="text-2xl font-extrabold text-blue-400">{dashboardStats?.activeUsers || 0}</span>
-            </div>
-            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total MT5</span>
-              <span className="text-2xl font-extrabold text-purple-400">{dashboardStats?.totalMt5 || 0}</span>
             </div>
             <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-800">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Trades</span>
@@ -276,7 +285,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
                       <div className="text-[10px] text-slate-400">{u.email}</div>
                     </td>
                     <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
-                      {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never'}
+                      {formatDateTime(u.lastLogin)}
                     </td>
                     <td className="py-3 px-4 text-[11px] text-slate-400 font-medium">
                       {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}
@@ -332,11 +341,6 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
           Billing history is mock-only currently.
         </div>
       )}
-      {activeTab === 'mt5' && (
-        <div className="p-6 text-center text-slate-400 bg-slate-800/50 rounded-xl border border-slate-800">
-          MT5 accounts list goes here.
-        </div>
-      )}
       
       {activeTab === 'tickets' && (
         <div className="space-y-4">
@@ -348,8 +352,7 @@ export default function AdminPanel({ onPublishAnnouncement }: AdminPanelProps) {
                     t.category === 'Support' ? 'bg-blue-500/10 text-blue-400' :
                     t.category === 'Bug' ? 'bg-red-500/10 text-red-400' :
                     t.category === 'Feature Request' ? 'bg-emerald-500/10 text-emerald-400' :
-                    t.category === 'Billing' ? 'bg-amber-500/10 text-amber-400' :
-                    t.category === 'MT5 Sync' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700 text-slate-300'
+                    t.category === 'Billing' ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-700 text-slate-300'
                   }`}>
                     {t.category}
                   </span>

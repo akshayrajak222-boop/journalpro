@@ -7,12 +7,14 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
-  MousePointerClick
+  MousePointerClick,
+  Terminal
 } from 'lucide-react';
 
 interface GuidedTourProps {
   step: number;
   accountCreated: boolean;
+  variant?: 'onboarding' | 'mt5';
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
@@ -33,9 +35,18 @@ const STEPS = [
   { id: 'done', badge: 'Done' },
 ];
 
-export default function GuidedTour({ step, accountCreated, onNext, onBack, onSkip, onFinish }: GuidedTourProps) {
+const MT5_STEPS = [
+  { id: 'announce', badge: 'MT5 Sync' },
+  { id: 'window', badge: 'The MT5 Sync Window' },
+  { id: 'done', badge: 'Done' },
+];
+
+export default function GuidedTour({ step, accountCreated, variant = 'onboarding', onNext, onBack, onSkip, onFinish }: GuidedTourProps) {
   const [rect, setRect] = useState<Rect | null>(null);
-  const selector = step === 2 ? '[data-tour="create-portfolio"]' : step === 3 ? '[data-tour="add-trade"]' : null;
+  const isMT5 = variant === 'mt5';
+  const selector = !isMT5
+    ? step === 2 ? '[data-tour="create-portfolio"]' : step === 3 ? '[data-tour="add-trade"]' : null
+    : null;
 
   const measure = useCallback(() => {
     if (!selector) {
@@ -73,8 +84,8 @@ export default function GuidedTour({ step, accountCreated, onNext, onBack, onSki
     };
   }, [selector, measure]);
 
-  const isSpotlight = step === 2 || step === 3;
-  const isFull = step === 1 || step === 4;
+  const isSpotlight = !isMT5 && (step === 2 || step === 3);
+  const isFull = isMT5 ? (step === 1 || step === 2 || step === 3) : (step === 1 || step === 4);
 
   const tooltipWidth = 320;
   const tooltipHeightEst = 200;
@@ -93,6 +104,99 @@ export default function GuidedTour({ step, accountCreated, onNext, onBack, onSki
   }
 
   const renderCard = (stepId: number) => {
+    if (stepId === 4 || (isMT5 && stepId === 3)) {
+      return (
+        <div className="max-w-sm w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in duration-300">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+          <div className="p-5 text-center">
+            <div className="h-12 w-12 mx-auto rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+            </div>
+            <h2 className="text-lg font-black text-slate-900 dark:text-white font-display mt-3">You're all set!</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              {isMT5
+                ? <>MT5 Sync is ready whenever you are — restart anytime from <span className="font-semibold text-slate-700 dark:text-slate-200">Settings &gt; Help</span>.</>
+                : <>Restart anytime from <span className="font-semibold text-slate-700 dark:text-slate-200">Settings &gt; Help</span>.</>}
+            </p>
+            <button
+              onClick={onFinish}
+              className="mt-4 w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              Finish <CheckCircle2 className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (isMT5) {
+      const isAnnounce = stepId === 1;
+      return (
+        <div className="max-w-sm w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in duration-300">
+          <div className="h-1 bg-gradient-to-r from-sky-500 via-indigo-500 to-blue-600" />
+          <div className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white shrink-0">
+                <Terminal className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-slate-900 dark:text-white font-display leading-tight">
+                  {isAnnounce ? 'MT5 Sync is here — and it\'s fixed' : 'Your MT5 Sync window'}
+                </h2>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded-full inline-block mt-1">
+                  {MT5_STEPS[stepId - 1].badge}
+                </span>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {isAnnounce ? (
+                <>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                    We've fixed and improved MT5 syncing. Trades now flow from your MT5 terminal into your journal automatically — no more copy-paste or failed syncs.
+                  </p>
+                  <div className="flex items-center gap-2.5 text-[11px] text-slate-600 dark:text-slate-300">
+                    <span className="h-6 w-6 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0"><Terminal className="h-3.5 w-3.5" /></span>
+                    Connect your MT5 terminal via the new MT5 Sync window
+                  </div>
+                  <div className="flex items-center gap-2.5 text-[11px] text-slate-600 dark:text-slate-300">
+                    <span className="h-6 w-6 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /></span>
+                    Every trade syncs automatically with accurate balances
+                  </div>
+                </>
+              ) : (
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  This is your MT5 Sync window. Create an MT5 Sync account, attach the Expert Advisor to your terminal, and your trades sync automatically — with corrected balances and reliable re-syncs.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-3 mt-5">
+              {isAnnounce ? (
+                <button
+                  onClick={onSkip}
+                  className="px-3 py-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition flex items-center gap-1"
+                >
+                  <X className="h-3 w-3" /> Skip Tour
+                </button>
+              ) : (
+                <button
+                  onClick={onBack}
+                  className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition flex items-center gap-0.5"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Back
+                </button>
+              )}
+              <button
+                onClick={onNext}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow-sm"
+              >
+                {isAnnounce ? 'Show me' : 'Continue'} <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (stepId === 1) {
       return (
         <div className="max-w-sm w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in duration-300">
@@ -163,7 +267,7 @@ export default function GuidedTour({ step, accountCreated, onNext, onBack, onSki
     const title = isCreate ? 'Create Your Portfolio' : 'Add Your First Trade';
     const body = isCreate
       ? 'Your trading accounts live here. Click below to add your broker or a manual account.'
-      : 'Click below to log a trade manually, or connect MT5 to auto-sync.';
+      : 'Click below to log a trade manually, or paste trades in from your MT5/MT4 terminal report.';
 
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-4 animate-in fade-in zoom-in duration-300">

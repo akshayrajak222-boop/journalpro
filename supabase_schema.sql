@@ -9,9 +9,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Drop existing tables so we can recreate them with the correct structure
 DROP TABLE IF EXISTS announcements CASCADE;
-DROP TABLE IF EXISTS mt5_connections CASCADE;
 DROP TABLE IF EXISTS support_tickets CASCADE;
 DROP TABLE IF EXISTS risk_settings CASCADE;
+DROP TABLE IF EXISTS mt5_deals CASCADE;
 DROP TABLE IF EXISTS trades CASCADE;
 DROP TABLE IF EXISTS trading_accounts CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
   onboarding_completed BOOLEAN DEFAULT false,
   is_pro BOOLEAN DEFAULT false,
   is_email_verified BOOLEAN DEFAULT false,
+  auth_provider TEXT DEFAULT 'email',
+  last_login TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -44,11 +46,21 @@ CREATE TABLE IF NOT EXISTS trading_accounts (
   broker TEXT,
   platform TEXT,
   account_type TEXT,
+  institution_type TEXT DEFAULT 'Broker',
   currency TEXT,
   starting_balance FLOAT,
   current_balance FLOAT,
   equity FLOAT,
   status TEXT,
+  is_mt5_sync BOOLEAN DEFAULT FALSE,
+  ea_token TEXT,
+  ea_status TEXT,
+  ea_last_deal_id BIGINT DEFAULT 0,
+  ea_last_sync_time TIMESTAMPTZ,
+  ea_sync_trade_count INTEGER DEFAULT 0,
+  ea_connected_at TIMESTAMPTZ,
+  ea_terminal_login TEXT,
+  ea_terminal_server TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -79,8 +91,24 @@ CREATE TABLE IF NOT EXISTS trades (
   screenshot TEXT,
   tags JSONB,
   is_mt5_sync BOOLEAN DEFAULT false,
+  ea_deal_id BIGINT,
+  ea_position_id BIGINT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Table: mt5_deals (raw MT5 deal stream used to recompute synced trades)
+CREATE TABLE IF NOT EXISTS mt5_deals (
+  id TEXT PRIMARY KEY,
+  account_id TEXT REFERENCES trading_accounts(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  position_id BIGINT DEFAULT 0,
+  deal JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE mt5_deals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow anon full access on mt5_deals" ON mt5_deals FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated full access on mt5_deals" ON mt5_deals FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow anon full access on trades" ON trades FOR ALL TO anon USING (true) WITH CHECK (true);
@@ -120,29 +148,6 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow anon full access on support_tickets" ON support_tickets FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow authenticated full access on support_tickets" ON support_tickets FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- Table: mt5_connections
-CREATE TABLE IF NOT EXISTS mt5_connections (
-  id TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
-  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-  account_id TEXT REFERENCES trading_accounts(id) ON DELETE CASCADE,
-  broker_name TEXT,
-  status TEXT,
-  last_sync_time TIMESTAMPTZ,
-  sync_token TEXT,
-  total_synced_trades INTEGER DEFAULT 0,
-  login_number TEXT,
-  broker_server TEXT,
-  is_investor_sync BOOLEAN,
-  auto_sync BOOLEAN,
-  history_months INTEGER DEFAULT 3,
-  initial_sync_done BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE mt5_connections ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow anon full access on mt5_connections" ON mt5_connections FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow authenticated full access on mt5_connections" ON mt5_connections FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Table: announcements (Public readable)
 CREATE TABLE IF NOT EXISTS announcements (

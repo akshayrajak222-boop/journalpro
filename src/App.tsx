@@ -3,11 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
-  DollarSign, Plus, CheckCircle2, Lock, Key, ArrowRight,
+  DollarSign, Plus, CheckCircle2, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, Wrench
+  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -25,14 +25,16 @@ import {
 
 import { supabase } from './supabaseClient';
 
-import MT5Instructions from './components/MT5Instructions';
 import TradingCalendar from './components/TradingCalendar';
+import FXNews from './components/FXNews';
+import MT5Automation from './components/MT5Automation';
 import AIInsights from './components/AIInsights';
 import AdminPanel from './components/AdminPanel';
 import GuidedTour from './components/GuidedTour';
 import Logo from './components/Logo';
 import { TraderRankCard } from './components/TraderRankCard';
 import LegalFooter from './components/LegalFooter';
+import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
 
@@ -113,6 +115,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [fxNewsInitialTab, setFxNewsInitialTab] = useState<'news' | 'calendar'>('news');
+
+  const openEconomicCalendar = () => {
+    setFxNewsInitialTab('calendar');
+    setActiveTab('fxnews');
+  };
 
   // Core business states
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
@@ -140,12 +148,12 @@ export default function App() {
   const [newAccBroker, setNewAccBroker] = useState('');
   const [newAccPlatform, setNewAccPlatform] = useState<'MT4' | 'MT5' | 'cTrader' | 'DXtrade'>('MT5');
   const [newAccType, setNewAccType] = useState<'Live' | 'Demo'>('Live');
+  const [newAccInstitutionType, setNewAccInstitutionType] = useState<'Broker' | 'Prop Firm'>('Broker');
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
   const [newAccBalance, setNewAccBalance] = useState('10000');
   
   const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual' | 'mt5'>('select');
-  const [eaLogin, setEaLogin] = useState('');
-  const [eaBroker, setEaBroker] = useState('');
+  const [newAccBalanceMode, setNewAccBalanceMode] = useState<'auto' | 'manual'>('auto');
 
   // Edit Account form fields
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
@@ -182,10 +190,13 @@ export default function App() {
   const [parsedTrades, setParsedTrades] = useState<any[]>([]);
   const [pasteImporting, setPasteImporting] = useState(false);
 
+  // Dismissible drawdown warning (dismissal is scoped to the current account)
+  const [dismissedDrawdownAccount, setDismissedDrawdownAccount] = useState<string | null>(null);
+
   // Support ticket form
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [ticketTitle, setTicketTitle] = useState('');
-  const [ticketCategory, setTicketCategory] = useState<'Billing' | 'MT5 Sync' | 'Feature Request' | 'Bug' | 'Other'>('MT5 Sync');
+  const [ticketCategory, setTicketCategory] = useState<'Support' | 'Billing' | 'Feature Request' | 'Bug' | 'Other'>('Other');
   const [ticketDescription, setTicketDescription] = useState('');
 
   // Filtering / Search state for Journal
@@ -211,6 +222,10 @@ export default function App() {
   // First-time guided onboarding tour
   const [showGuidedTour, setShowGuidedTour] = useState(false);
   const [guidedTourStep, setGuidedTourStep] = useState(1);
+
+  // One-time MT5 Sync tour (all users)
+  const [showMT5Tour, setShowMT5Tour] = useState(false);
+  const [mt5TourStep, setMT5TourStep] = useState(1);
 
   // Theme state with local persistence
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -373,6 +388,17 @@ export default function App() {
     }
   }, [showGuidedTour, guidedTourStep, accounts]);
 
+  // One-time MT5 Sync tour: introduces the MT5 Automation window and announces the sync fix for all users
+  useEffect(() => {
+    if (!user || loading) return;
+    if (localStorage.getItem('journal_mt5_tour_done') === '1') return;
+    if (showGuidedTour) return;
+    if (localStorage.getItem('journal_tutorial_done') === '1' || accounts.length > 0) {
+      setMT5TourStep(1);
+      setShowMT5Tour(true);
+    }
+  }, [user, loading, showGuidedTour, accounts]);
+
   const startGuidedTour = () => {
     setGuidedTourStep(1);
     setShowGuidedTour(true);
@@ -396,6 +422,32 @@ export default function App() {
     setGuidedTourStep(prev => {
       const back = prev - 1;
       if (back === 2) setActiveTab('accounts');
+      if (back === 1) setActiveTab('dashboard');
+      return Math.max(back, 1);
+    });
+  };
+
+  const startMT5Tour = () => {
+    setMT5TourStep(1);
+    setShowMT5Tour(true);
+  };
+
+  const completeMT5Tour = () => {
+    localStorage.setItem('journal_mt5_tour_done', '1');
+    setShowMT5Tour(false);
+  };
+
+  const nextMT5TourStep = () => {
+    setMT5TourStep(prev => {
+      const next = prev + 1;
+      if (next === 2) setActiveTab('mt5');
+      return Math.min(next, 3);
+    });
+  };
+
+  const backMT5TourStep = () => {
+    setMT5TourStep(prev => {
+      const back = prev - 1;
       if (back === 1) setActiveTab('dashboard');
       return Math.max(back, 1);
     });
@@ -551,13 +603,12 @@ export default function App() {
 
       if (loadedAccs.length > 0) {
         const storedSelectedId = sessionStorage.getItem('selected_account_id');
-        // Prefer stored selection → then MT5 EA account → then first account
-        const mt5Account = loadedAccs.find((a: any) => a.id?.startsWith('acc_mt5_ea_'));
+        // Prefer stored selection → then first account
         const defaultId = overrideAccountId
           ? overrideAccountId
           : (storedSelectedId && loadedAccs.some((a: any) => a.id === storedSelectedId)
             ? storedSelectedId
-            : (mt5Account ? mt5Account.id : loadedAccs[0].id));
+            : loadedAccs[0].id);
 
         setSelectedAccountId(defaultId);
         persistSelectedAccount(defaultId);
@@ -707,7 +758,9 @@ export default function App() {
       }
 
       // 2. Register with Express Backend API (sends 6-digit OTP code via SendGrid / Resend)
-      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '', authEmail);
+      // Do NOT persist a session before OTP verification — otherwise a page refresh
+      // while the OTP window is open would bypass verification.
+      persistAuthSession(sessionStorage.getItem('auth_user_id') || user?.id || '');
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-email': authEmail },
@@ -955,50 +1008,22 @@ export default function App() {
     }
   };
 
-  const handleCreateEaAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!eaLogin || !eaBroker) return;
-    setActionLoading(true);
-    try {
-      const res = await authFetch('/api/mt5/connect-ea', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          loginNumber: eaLogin,
-          brokerName: eaBroker,
-          startingBalance: 0
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        
-        // Refresh accounts list
-        const accsRes = await authFetch('/api/accounts');
-        const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
-        
-        setShowAccountModal(false);
-        setSelectedAccountId(data.account.id);
-        setActiveTab('mt5');
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to create EA account');
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // Account Operations
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     const storedId = sessionStorage.getItem('auth_user_id') || user?.id || '';
     const storedEmail = sessionStorage.getItem('auth_email') || user?.email || '';
     console.log('[handleCreateAccount] auth check — id:', storedId, 'email:', storedEmail);
-    if (!newAccName || !newAccBroker || !newAccBalance) {
-      alert('Please fill in Account Name, Broker, and Starting Balance.');
+    if (!newAccName || !newAccBroker) {
+      alert('Please fill in Account Name and Broker/Prop Firm Name.');
+      return;
+    }
+    if (accountCreationMethod !== 'mt5' && !newAccBalance) {
+      alert('Please fill in Starting Balance.');
+      return;
+    }
+    if (accountCreationMethod === 'mt5' && newAccBalanceMode === 'manual' && !newAccBalance) {
+      alert('Please fill in Starting Balance or switch to Auto Calculate.');
       return;
     }
     setActionLoading(true);
@@ -1009,10 +1034,14 @@ export default function App() {
         body: JSON.stringify({
           name: newAccName,
           broker: newAccBroker,
-          platform: newAccPlatform,
+          platform: accountCreationMethod === 'mt5' ? 'MT5' : newAccPlatform,
           accountType: newAccType,
           currency: newAccCurrency,
-          startingBalance: newAccBalance
+          startingBalance: accountCreationMethod === 'mt5'
+            ? (newAccBalanceMode === 'manual' ? newAccBalance : undefined)
+            : newAccBalance,
+          isMt5Sync: accountCreationMethod === 'mt5',
+          ...(accountCreationMethod === 'mt5' ? { institutionType: newAccInstitutionType } : {})
         })
       });
       console.log('[handleCreateAccount] response status:', res.status);
@@ -1022,10 +1051,14 @@ export default function App() {
         setShowAccountModal(false);
         setNewAccName('');
         setNewAccBroker('');
+        setNewAccInstitutionType('Broker');
         if (data.account?.id) {
           setSelectedAccountId(data.account.id);
           persistSelectedAccount(data.account.id);
           await fetchAccountData(data.account.id);
+          if (accountCreationMethod === 'mt5') {
+            setActiveTab('mt5');
+          }
         } else {
           await fetchAccountData();
         }
@@ -1507,32 +1540,6 @@ export default function App() {
     e.target.value = '';
   };
 
-  // Simulated MT5 integration call
-  const handleTriggerSimulatedSync = async (symbol: string) => {
-    if (!selectedAccountId) return;
-    setActionLoading(true);
-    try {
-      const res = await authFetch('/api/mt5/connections/test-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId: selectedAccountId, symbol })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`MT5 Synchronization Success! Trade parsed:\n${data.trade.symbol} ${data.trade.type} at ${data.trade.entryPrice} with net P/L of $${data.trade.profit}`);
-        fetchTradesAndParams(selectedAccountId);
-        // Refresh accounts
-        const accsRes = await authFetch('/api/accounts');
-        const accsData = await accsRes.json();
-        setAccounts(accsData.accounts);
-      }
-    } catch (e) {
-      alert('Sync simulation failed.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // Pro Upgrade Trigger: redirect to Settings > Subscription for plan selection
   const handleUpgradeToPro = () => {
     setActiveTab('settings');
@@ -1865,9 +1872,12 @@ export default function App() {
   // MATHEMATICAL STATISTICS & METRICS ENGINE
   // ==========================================
 
-  const totalTradesCount = trades.length;
-  const wins = trades.filter(t => t.profit > 0);
-  const losses = trades.filter(t => t.profit <= 0);
+  const isTradingTrade = (t: Trade) => t.type !== 'Deposit' && t.type !== 'Withdrawal';
+  const tradingTrades = trades.filter(isTradingTrade);
+
+  const totalTradesCount = tradingTrades.length;
+  const wins = tradingTrades.filter(t => t.profit > 0);
+  const losses = tradingTrades.filter(t => t.profit <= 0);
   const winRate = totalTradesCount > 0 ? (wins.length / totalTradesCount) * 100 : 0;
   
   const sumWins = wins.reduce((sum, t) => sum + t.profit, 0);
@@ -1880,7 +1890,7 @@ export default function App() {
   const avgRR = averageLoss > 0 ? parseFloat((averageWin / averageLoss).toFixed(2)) : 0;
 
   // Winning / Losing streaks
-  const sortedByDate = [...trades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedByDate = [...tradingTrades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   let currentWinStreak = 0, maxWinStreak = 0;
   let currentLossStreak = 0, maxLossStreak = 0;
   for (const t of sortedByDate) {
@@ -1906,7 +1916,7 @@ export default function App() {
     : 0;
 
   // Today's cumulative metrics for Guard scanner
-  const todayTrades = trades.filter(t => {
+  const todayTrades = tradingTrades.filter(t => {
     if (!t.date) return false;
     const tradeDate = new Date(t.date);
     const today = new Date();
@@ -1934,7 +1944,7 @@ export default function App() {
 
   // 2. Bar Chart: Profit by Symbol
   const symbolMap: { [key: string]: number } = {};
-  trades.forEach(t => {
+  tradingTrades.forEach(t => {
     symbolMap[t.symbol] = (symbolMap[t.symbol] || 0) + t.profit;
   });
   const symbolChartData = Object.keys(symbolMap).map(sym => ({
@@ -1945,19 +1955,39 @@ export default function App() {
   // 3. Pie Chart: Sessions
   // Map trades to trading sessions (simulated based on timestamp hour, or mock)
   const sessionData = [
-    { name: 'London Session', value: trades.filter((_, idx) => idx % 3 === 0).length, color: '#2563eb' },
-    { name: 'New York Session', value: trades.filter((_, idx) => idx % 3 === 1).length, color: '#10b981' },
-    { name: 'Asian Session', value: trades.filter((_, idx) => idx % 3 === 2).length, color: '#f59e0b' }
+    { name: 'London Session', value: tradingTrades.filter((_, idx) => idx % 3 === 0).length, color: '#2563eb' },
+    { name: 'New York Session', value: tradingTrades.filter((_, idx) => idx % 3 === 1).length, color: '#10b981' },
+    { name: 'Asian Session', value: tradingTrades.filter((_, idx) => idx % 3 === 2).length, color: '#f59e0b' }
   ].filter(d => d.value > 0);
 
   // 4. Best & Worst Trades
-  const sortedTradesByProfit = [...trades].sort((a, b) => b.profit - a.profit);
+  const sortedTradesByProfit = [...tradingTrades].sort((a, b) => b.profit - a.profit);
   const bestTrade = sortedTradesByProfit.length > 0 ? sortedTradesByProfit[0] : null;
   const worstTrade = sortedTradesByProfit.length > 0 ? sortedTradesByProfit[sortedTradesByProfit.length - 1] : null;
 
+  // 4b. Best & Worst Days (based on daily net P&L)
+  const getLocalDayKey = (dateInput: string | Date) => {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const dailyNetMap: { [key: string]: { net: number; count: number } } = {};
+  tradingTrades.forEach(t => {
+    const dKey = getLocalDayKey(t.date);
+    if (!dKey) return;
+    if (!dailyNetMap[dKey]) dailyNetMap[dKey] = { net: 0, count: 0 };
+    dailyNetMap[dKey].net += t.profit + (t.commission || 0) + (t.swap || 0);
+    dailyNetMap[dKey].count += 1;
+  });
+  const sortedDaysByNet = Object.keys(dailyNetMap)
+    .map(dKey => ({ dayKey: dKey, net: parseFloat(dailyNetMap[dKey].net.toFixed(2)), count: dailyNetMap[dKey].count }))
+    .sort((a, b) => b.net - a.net);
+  const bestDay = sortedDaysByNet.length > 0 ? sortedDaysByNet[0] : null;
+  const worstDay = sortedDaysByNet.length > 0 ? sortedDaysByNet[sortedDaysByNet.length - 1] : null;
+
   // 5. Monthly P&L Chart Data
   const monthlyMap: { [key: string]: number } = {};
-  trades.forEach(t => {
+  tradingTrades.forEach(t => {
     try {
       const d = new Date(t.date);
       if (!isNaN(d.getTime())) {
@@ -2091,7 +2121,8 @@ export default function App() {
     const ExcelJS = mod.default || mod;
     const range = getExportRange();
     const inRange = filterTradesByRange(range);
-    const stats = computeExportStats(inRange);
+    const tradingInRange = inRange.filter(isTradingTrade);
+    const stats = computeExportStats(tradingInRange);
 
     const NAVY = 'FF0F1E36';
     const BLUE = 'FF2F5B8E';
@@ -2199,7 +2230,7 @@ export default function App() {
 
     const net = stats.netProfit;
     const summaryRows: { label: string; value: number; numFmt: string; color?: string; bold?: boolean }[] = [
-      { label: 'Total Trades', value: inRange.length, numFmt: '0' },
+      { label: 'Total Trades', value: tradingInRange.length, numFmt: '0' },
       { label: 'No. of Winning Trades', value: stats.wins.length, numFmt: '0' },
       { label: 'No. of Losing Trades', value: stats.losses.length, numFmt: '0' },
       { label: 'Win Rate (%)', value: stats.winRate, numFmt: '0.0' },
@@ -2352,7 +2383,8 @@ export default function App() {
     const logoDataUrl = await loadBrandLogoDataUrl();
     const range = getExportRange();
     const inRange = filterTradesByRange(range);
-    const stats = computeExportStats(inRange);
+    const tradingInRange = inRange.filter(isTradingTrade);
+    const stats = computeExportStats(tradingInRange);
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
@@ -2394,7 +2426,7 @@ export default function App() {
     autoTable(doc, {
       head: [['Performance Summary', '']],
       body: [
-        ['Total Number of Trades', String(inRange.length)],
+        ['Total Number of Trades', String(tradingInRange.length)],
         ['Number of Winning Trades', String(stats.wins.length)],
         ['Number of Losing Trades', String(stats.losses.length)],
         ['Win Rate (%)', `${stats.winRate.toFixed(2)}%`],
@@ -2891,6 +2923,29 @@ export default function App() {
               {!sidebarCollapsed && 'Calendar'}
             </button>
 
+            <div
+              className={`rounded-lg bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 p-[1.5px] transition ${
+                sidebarCollapsed ? 'inline-flex' : 'w-full'
+              } ${
+                activeTab === 'fxnews'
+                  ? 'shadow-[0_0_16px_rgba(99,102,241,0.45)]'
+                  : 'shadow-[0_0_10px_rgba(99,102,241,0.18)] hover:shadow-[0_0_14px_rgba(99,102,241,0.4)]'
+              }`}
+              title="FX News & Economic Calendar"
+            >
+              <button
+                onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
+                className={`text-xs font-semibold transition flex items-center rounded-[7px] ${
+                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+                } ${
+                  activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'bg-[#FBFBFA] text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
+                {!sidebarCollapsed && 'FX News'}
+              </button>
+            </div>
+
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
               title="MT5 Automation"
@@ -3015,6 +3070,7 @@ export default function App() {
                  activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
+                 activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
                  activeTab === 'mt5' ? 'MT5 Automation' :
                  activeTab === 'tools' ? 'Tools' :
@@ -3026,9 +3082,10 @@ export default function App() {
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
-                 activeTab === 'settings' ? 'Configure portfolio guard, MT5 automation link, and co-pilot preferences.' :
-                 activeTab === 'mt5' ? 'Connect your MetaTrader terminal for real-time synchronization.' :
+                 activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
+                 activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
                  activeTab === 'tools' ? 'Precision calculators to plan your trades with confidence.' :
+                 activeTab === 'fxnews' ? 'Stay updated with the latest market-moving forex news and economic events.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
@@ -3075,15 +3132,23 @@ export default function App() {
         </div>
 
         {/* Global Drawdown Risk alert strip if active */}
-        {activeAccount && maxDrawdownPercentage > 0 && (
+        {activeAccount && maxDrawdownPercentage > 0 && dismissedDrawdownAccount !== activeAccount.id && (
           <div className="bg-amber-50 border border-amber-200 text-amber-950 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <strong className="text-xs font-bold block">Portfolio Drawdown Active</strong>
               <p className="text-xs text-amber-800/90 leading-relaxed mt-0.5">
                 Your portfolio is currently down <span className="font-extrabold">{maxDrawdownPercentage}%</span> from its starting balance. Drawdown guard is monitoring executions.
               </p>
             </div>
+            <button
+              onClick={() => setDismissedDrawdownAccount(activeAccount.id)}
+              className="text-amber-500 hover:text-amber-700 hover:bg-amber-100 rounded-lg p-1.5 transition flex-shrink-0"
+              aria-label="Dismiss drawdown warning"
+              title="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
@@ -3101,6 +3166,9 @@ export default function App() {
               winsCount={wins.length}
               totalTradesCount={totalTradesCount}
             />
+
+            {/* Next high-impact economic event → jumps to Economic Calendar */}
+            <NextEventCard onOpenCalendar={openEconomicCalendar} />
 
             {/* Main Visualizations Grid */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3361,12 +3429,6 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* MT5 Sync Refresh button */}
-                  {activeAccount?.id?.startsWith('acc_mt5_ea_') && (
-                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg flex items-center gap-1">
-                      <Radio className="h-2.5 w-2.5 animate-pulse" /> MT5 EA Account
-                    </span>
-                  )}
                   <button
                     onClick={refreshTrades}
                     disabled={tradesRefreshing}
@@ -3480,6 +3542,11 @@ export default function App() {
           <TradingCalendar trades={trades} currency={activeAccount?.currency || 'USD'} />
         )}
 
+        {/* 3b. FX NEWS & ECONOMIC CALENDAR VIEW */}
+        {activeTab === 'fxnews' && (
+          <FXNews initialTab={fxNewsInitialTab} />
+        )}
+
         {/* 4. PORTFOLIO ACCOUNTS VIEW */}
         {activeTab === 'accounts' && (
           <div className="space-y-6">
@@ -3500,7 +3567,7 @@ export default function App() {
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-extrabold text-slate-900 text-sm">{acc.name}</h4>
-                          <span className="text-[10px] text-slate-400 block font-semibold">{acc.broker} • {acc.platform}</span>
+                          <span className="text-[10px] text-slate-400 block font-semibold">{acc.broker} • {acc.platform}{acc.institutionType ? ` • ${acc.institutionType}` : ''}</span>
                         </div>
                         <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
                           acc.accountType === 'Live' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
@@ -3841,7 +3908,107 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </section>
 
+            {/* Best & Worst Day Statistics (based on daily net P&L) */}
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Best Day Card */}
+              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">Best Day</h4>
+                      <p className="text-[10px] text-slate-400">Most profitable day by net P&L</p>
+                    </div>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                  </div>
+                  {bestDay && bestDay.net > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xl font-black text-emerald-600">
+                          +{formatValue(bestDay.net)}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-50 text-slate-600 rounded">
+                          {new Date(`${bestDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-xs pt-2 border-t border-slate-50">
+                        <div>
+                          <span className="text-slate-400 font-medium block">Weekday</span>
+                          <span className="font-bold text-slate-800">{new Date(`${bestDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Date</span>
+                          <span className="font-bold text-slate-800">{new Date(`${bestDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Net P&L</span>
+                          <span className="font-bold text-emerald-600">+{formatValue(bestDay.net)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Trades</span>
+                          <span className="font-bold text-slate-800">{bestDay.count}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 py-6 text-center">
+                      No profitable trading days recorded.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Worst Day Card */}
+              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">Worst Day</h4>
+                      <p className="text-[10px] text-slate-400">Day with the largest net loss</p>
+                    </div>
+                    <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                  </div>
+                  {worstDay && worstDay.net < 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xl font-black text-rose-600">
+                          {formatValue(worstDay.net)}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-50 text-slate-600 rounded">
+                          {new Date(`${worstDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-xs pt-2 border-t border-slate-50">
+                        <div>
+                          <span className="text-slate-400 font-medium block">Weekday</span>
+                          <span className="font-bold text-slate-800">{new Date(`${worstDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Date</span>
+                          <span className="font-bold text-slate-800">{new Date(`${worstDay.dayKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Net P&L</span>
+                          <span className="font-bold text-rose-600">{formatValue(worstDay.net)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Trades</span>
+                          <span className="font-bold text-slate-800">{worstDay.count}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 py-6 text-center">
+                      No losing trading days recorded.
+                    </div>
+                  )}
+                </div>
+              </div>
             </section>
           </div>
         )}
@@ -4169,7 +4336,7 @@ export default function App() {
                       <ul className="mt-4 space-y-2">
                         {[
                           'Unlimited trade journaling',
-                          'MT5 auto-sync (EA)',
+                          'MT5 paste import tools',
                           'AI Mentor coaching',
                           'Performance analytics',
                           'Risk Guard alerts',
@@ -4321,7 +4488,7 @@ export default function App() {
                                 required
                                 value={bugTitle}
                                 onChange={(e) => setBugTitle(e.target.value)}
-                                placeholder="e.g. Broken MT5 feed"
+                                placeholder="e.g. Chart does not load"
                                 className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2 w-full font-semibold focus:outline-hidden focus:ring-1 focus:ring-slate-900"
                               />
                             </div>
@@ -4506,15 +4673,29 @@ export default function App() {
                         <div>
                           <strong className="text-sm font-black text-slate-900 dark:text-white block">Getting Started Tips</strong>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                            Create a portfolio first, then log trades manually or sync your MT5 account from the MT5 Automation tab.
+                            Create a portfolio first, then log trades manually or paste them in from your MT5/MT4 terminal report.
                           </p>
                         </div>
-                        <button
-                          onClick={() => setActiveTab('mt5')}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg transition flex items-center justify-center gap-1.5"
-                        >
-                          <Radio className="h-3.5 w-3.5" /> Explore MT5 Sync
-                        </button>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-500/10 dark:to-blue-500/5 border border-sky-100 dark:border-sky-500/20 rounded-xl p-5 space-y-3 md:col-span-2">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center shrink-0">
+                            <Terminal className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <strong className="text-sm font-black text-slate-900 dark:text-white block">MT5 Sync Tour</strong>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                              Replay the tour that walks you through the MT5 Sync window and automatic trade syncing.
+                            </p>
+                          </div>
+                          <button
+                            onClick={startMT5Tour}
+                            className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg transition flex items-center justify-center gap-1.5"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> Show MT5 Sync Tour
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4762,17 +4943,11 @@ export default function App() {
         )}
 
         {/* 5. MT5 AUTOMATION VIEW */}
-        {activeTab === 'mt5' && activeAccount && (
-          <MT5Instructions 
-            account={activeAccount} 
-            onTriggerSimulatedSync={handleTriggerSimulatedSync}
-            isSyncing={actionLoading}
-            onSyncSuccess={async (newAccountId) => {
-              await fetchAccountData();
-              if (newAccountId && typeof newAccountId === 'string') {
-                setSelectedAccountId(newAccountId);
-              }
-            }}
+        {activeTab === 'mt5' && user && (
+          <MT5Automation
+            account={activeAccount || null}
+            authFetch={authFetch}
+            onRefresh={fetchAccountData}
           />
         )}
 
@@ -4918,13 +5093,6 @@ export default function App() {
                   <p className="text-[11px] text-slate-400">Choose how you want to connect and log trades.</p>
                 </div>
                 <div className="grid gap-3">
-                  <button onClick={() => setAccountCreationMethod('mt5')} className="border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
-                     <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Activity className="w-5 h-5"/></div>
-                     <div>
-                       <div className="font-bold text-slate-800 text-sm">MT5 Auto-Sync (Recommended)</div>
-                       <div className="text-[11px] text-slate-500">Automatically synchronize live trades from MetaTrader 5 using our Expert Advisor.</div>
-                     </div>
-                  </button>
                   <button onClick={() => setAccountCreationMethod('manual')} className="border-2 border-slate-100 hover:border-slate-300 hover:bg-slate-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
                      <div className="bg-slate-100 p-2 rounded-lg text-slate-600"><Edit3 className="w-5 h-5"/></div>
                      <div>
@@ -4932,63 +5100,29 @@ export default function App() {
                        <div className="text-[11px] text-slate-500">Create an empty portfolio to manually log your trades one-by-one.</div>
                      </div>
                   </button>
+                  <button onClick={() => setAccountCreationMethod('mt5')} className="border-2 border-slate-100 hover:border-slate-300 hover:bg-slate-50 rounded-xl p-4 text-left transition flex gap-3 items-center">
+                     <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Terminal className="w-5 h-5"/></div>
+                     <div>
+                       <div className="font-bold text-slate-800 text-sm">MT5 Sync Account</div>
+                       <div className="text-[11px] text-slate-500">Connect a unique MT5 Expert Advisor to sync your trades automatically in real time.</div>
+                     </div>
+                  </button>
                 </div>
               </div>
             )}
 
-            {accountCreationMethod === 'mt5' && (
-              <form onSubmit={handleCreateEaAccount} className="space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <button type="button" onClick={() => setAccountCreationMethod('select')} className="text-slate-400 hover:text-slate-700 text-xs font-semibold">← Back</button>
-                </div>
-                <div>
-                  <h3 className="font-bold text-indigo-900 text-base flex items-center gap-2"><Lock className="h-4 w-4" /> Connect MT5 EA Sync</h3>
-                  <p className="text-[11px] text-indigo-800/80">We will provision a new trading account and unique API token specifically for your MT5 Expert Advisor.</p>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">MT5 Login Number</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. 5591240"
-                    value={eaLogin}
-                    onChange={(e) => setEaLogin(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Broker Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. ICMarketsSC-MT5-2"
-                    value={eaBroker}
-                    onChange={(e) => setEaBroker(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full font-mono font-semibold"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition flex items-center justify-center gap-1.5 mt-2"
-                >
-                  {actionLoading ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    "Generate MT5 Token & Account"
-                  )}
-                </button>
-              </form>
-            )}
-
-            {accountCreationMethod === 'manual' && (
+            {(accountCreationMethod === 'manual' || accountCreationMethod === 'mt5') && (
               <form onSubmit={handleCreateAccount} className="space-y-4">
                 <div className="flex items-center gap-2 mb-2">
                   <button type="button" onClick={() => setAccountCreationMethod('select')} className="text-slate-400 hover:text-slate-700 text-xs font-semibold">← Back</button>
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Register Manual Portfolio</h3>
-                  <p className="text-[11px] text-slate-400">Configure parameters for manual logs or automated Expert integrations.</p>
+                  <h3 className="font-bold text-slate-900 text-base">{accountCreationMethod === 'mt5' ? 'Create MT5 Sync Account' : 'Register Manual Portfolio'}</h3>
+                  <p className="text-[11px] text-slate-400">
+                    {accountCreationMethod === 'mt5'
+                      ? "We'll generate a unique MT5 Expert Advisor for this account and walk you through connecting it after creation."
+                      : 'Configure parameters for manual logs or automated Expert integrations.'}
+                  </p>
                 </div>
 
                 <div>
@@ -5003,19 +5137,59 @@ export default function App() {
                   />
                 </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Broker Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newAccBroker}
-                  onChange={(e) => setNewAccBroker(e.target.value)}
-                  placeholder="IC Markets"
-                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              {accountCreationMethod === 'mt5' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">Account Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewAccInstitutionType('Broker')}
+                        className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccInstitutionType === 'Broker' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                      >
+                        <div className="font-bold">Broker Account</div>
+                        <div className="text-[10px] mt-0.5 opacity-80">Retail or broker-funded account</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewAccInstitutionType('Prop Firm')}
+                        className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccInstitutionType === 'Prop Firm' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                      >
+                        <div className="font-bold">Prop Firm Account</div>
+                        <div className="text-[10px] mt-0.5 opacity-80">Proprietary trading firm account</div>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      {newAccInstitutionType === 'Broker' ? 'Broker Name' : 'Prop Firm Name'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newAccBroker}
+                      onChange={(e) => setNewAccBroker(e.target.value)}
+                      placeholder={newAccInstitutionType === 'Broker' ? 'IC Markets' : 'FTMO'}
+                      className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Broker Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAccBroker}
+                    onChange={(e) => setNewAccBroker(e.target.value)}
+                    placeholder="IC Markets"
+                    className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
+                {accountCreationMethod !== 'mt5' && (
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">Trading Platform</label>
                   <select
@@ -5029,8 +5203,9 @@ export default function App() {
                     <option value="DXtrade">DXtrade</option>
                   </select>
                 </div>
+                )}
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Account Type</label>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">{accountCreationMethod === 'mt5' ? 'Portfolio Mode' : 'Account Type'}</label>
                   <select
                     value={newAccType}
                     onChange={(e: any) => setNewAccType(e.target.value)}
@@ -5041,6 +5216,42 @@ export default function App() {
                   </select>
                 </div>
               </div>
+
+              {accountCreationMethod === 'mt5' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Initial Balance</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewAccBalanceMode('auto')}
+                      className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'auto' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                    >
+                      <div className="font-bold">Auto Calculate</div>
+                      <div className="text-[10px] mt-0.5 opacity-80">Initial Balance = your first deposit in MT5 history</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewAccBalanceMode('manual')}
+                      className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'manual' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
+                    >
+                      <div className="font-bold">Enter Manually</div>
+                      <div className="text-[10px] mt-0.5 opacity-80">Provide your own starting balance</div>
+                    </button>
+                  </div>
+                  {newAccBalanceMode === 'manual' && (
+                    <div className="mt-3">
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">Starting Balance</label>
+                      <input
+                        type="number"
+                        required
+                        value={newAccBalance}
+                        onChange={(e) => setNewAccBalance(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -5059,6 +5270,7 @@ export default function App() {
                     <option value="CAD">CAD ($)</option>
                   </select>
                 </div>
+                {accountCreationMethod !== 'mt5' && (
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">Starting Balance</label>
                   <input
@@ -5069,6 +5281,7 @@ export default function App() {
                     className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
                   />
                 </div>
+                )}
               </div>
 
               <button
@@ -5076,7 +5289,7 @@ export default function App() {
                 disabled={actionLoading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
               >
-                {actionLoading ? 'Provisioning Account...' : 'Create Portfolio Account'}
+                {actionLoading ? 'Provisioning Account...' : (accountCreationMethod === 'mt5' ? 'Create MT5 Sync Account' : 'Create Portfolio Account')}
               </button>
             </form>
             )}
@@ -5608,7 +5821,7 @@ export default function App() {
                   onChange={(e: any) => setTicketCategory(e.target.value)}
                   className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
                 >
-                  <option value="MT5 Sync">MT5 Synchronization EA</option>
+                  <option value="Other">General Support Query</option>
                   <option value="Billing">Billing & Subscription</option>
                   <option value="Feature Request">Feature Request</option>
                   <option value="Bug">Technical Bug Report</option>
@@ -5661,6 +5874,19 @@ export default function App() {
           onBack={backGuidedTourStep}
           onSkip={completeGuidedTour}
           onFinish={completeGuidedTour}
+        />
+      )}
+
+      {/* One-time MT5 Sync tour */}
+      {showMT5Tour && user && (
+        <GuidedTour
+          variant="mt5"
+          step={mt5TourStep}
+          accountCreated={accounts.length > 0}
+          onNext={nextMT5TourStep}
+          onBack={backMT5TourStep}
+          onSkip={completeMT5Tour}
+          onFinish={completeMT5Tour}
         />
       )}
 
