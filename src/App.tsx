@@ -2968,7 +2968,7 @@ export default function App() {
                 activeTab === 'tools' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Wrench className="h-4 w-4 text-slate-500" />
+              <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600' : 'text-emerald-500'}`} />
               {!sidebarCollapsed && 'Tools'}
             </button>
 
