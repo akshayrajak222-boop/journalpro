@@ -2648,8 +2648,28 @@ export default function App() {
     return (
       <LoginPage
         isSupabaseConfigured={isSupabaseConfigured}
-        onLoginSuccess={() => {
-          window.location.href = '/dashboard';
+        onLoginSuccess={async () => {
+          // Re-trigger bootstrapSession to fetch user details and accounts dynamically
+          const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id');
+          const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email');
+          if (storedUserId || storedEmail) {
+            try {
+              const headers: Record<string, string> = {};
+              if (storedUserId) headers['x-auth-user-id'] = storedUserId;
+              if (storedEmail) headers['x-auth-email'] = storedEmail;
+              const res = await fetch('/api/auth/me', { headers });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.user) {
+                  setUser(data.user);
+                  await fetchAccountData();
+                }
+              }
+            } catch (e) {
+              console.error('Error fetching user post-login:', e);
+            }
+          }
+          navigate('/dashboard', { replace: true });
         }}
         authFetch={authFetch}
       />
