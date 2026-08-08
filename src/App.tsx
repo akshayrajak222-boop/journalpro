@@ -2936,13 +2936,23 @@ export default function App() {
               <button
                 onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
                 className={`text-xs font-semibold transition flex items-center rounded-[7px] ${
-                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+                  sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
                 } ${
                   activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'bg-[#FBFBFA] text-slate-700 hover:text-slate-900'
                 }`}
               >
-                <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
-                {!sidebarCollapsed && 'FX News'}
+                <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                  <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
+                  {!sidebarCollapsed && 'FX News'}
+                </span>
+                {!sidebarCollapsed && (
+                  <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                    NEW
+                  </span>
+                )}
+                {sidebarCollapsed && (
+                  <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+                )}
               </button>
             </div>
 
@@ -2963,13 +2973,23 @@ export default function App() {
               onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
               title="Tools"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
               } ${
                 activeTab === 'tools' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600' : 'text-emerald-500'}`} />
-              {!sidebarCollapsed && 'Tools'}
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600' : 'text-emerald-500'}`} />
+                {!sidebarCollapsed && 'Tools'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+              )}
             </button>
 
             <button
