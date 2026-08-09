@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Download,
   RefreshCw,
@@ -12,7 +12,13 @@ import {
   ShieldCheck,
   Plus,
   Copy,
-  FileCode2
+  FileCode2,
+  Loader2,
+  Unplug,
+  ArrowRight,
+  ArrowDownRight,
+  CircleDollarSign,
+  XCircle
 } from 'lucide-react';
 import { TradingAccount } from '../types';
 
@@ -22,7 +28,91 @@ interface MT5AutomationProps {
   onRefresh: () => void;
 }
 
-function timeAgo(iso?: string): string {
+interface MT5OpenPosition {
+  positionId: number;
+  ticket: number;
+  symbol: string;
+  side: string;
+  volume: number;
+  openTime: string;
+  openPrice: number;
+  sl: number | null;
+  tp: number | null;
+  profit: number;
+  currentPrice: number | null;
+}
+
+interface MT5PendingOrder {
+  orderId: number;
+  symbol: string;
+  type: string;
+  volume: number;
+  openPrice: number;
+  sl: number | null;
+  tp: number | null;
+  state: string;
+}
+
+interface MT5MoneyFlow {
+  ticket: number;
+  flowType: string;
+  amount: number;
+  currency: string;
+  time: string;
+}
+
+interface MT5ConnectionError {
+  errorCode: string;
+  errorMessage: string;
+  occurredAt: string;
+  resolvedAt: string | null;
+}
+
+interface MT5Status {
+  accountId: string;
+  status: string;
+  eaStatus: string;
+  lastSyncTime: string | null;
+  lastHeartbeatAt: string | null;
+  lastDealId: number;
+  syncTradeCount: number;
+  startingBalance: number;
+  currentBalance: number;
+  equity: number;
+  terminalLogin: string | null;
+  terminalServer: string | null;
+  openPositions: MT5OpenPosition[];
+  pendingOrders: MT5PendingOrder[];
+  moneyFlows: MT5MoneyFlow[];
+  lastErrors: MT5ConnectionError[];
+}
+
+type Phase =
+  | 'Not Started'
+  | 'Collecting'
+  | 'EA Ready'
+  | 'Validating'
+  | 'Connected'
+  | 'Syncing'
+  | 'Synced'
+  | 'Error'
+  | 'Disconnected';
+
+const ERROR_COPY: Record<string, string> = {
+  EA_AUTH_FAILED: 'This EA file no longer works. Download a fresh copy from your account page.',
+  EA_TOKEN_REVOKED: 'This account was disconnected. Reconnect to generate a fresh EA.',
+  EA_LOGIN_MISMATCH: 'The EA is logged into a different MT5 account than expected. Log in with the correct account and reattach the EA.',
+  EA_SERVER_MISMATCH: 'The MT5 server name does not match the one recorded for this portfolio. Check the broker server name and reconnect.',
+  INVALID_TIMESTAMP: 'Security check failed due to a clock or replay issue. Download a fresh copy of your EA.',
+  SIGNATURE_MISMATCH: 'Security check failed. Download a fresh copy of your EA.',
+  ACCOUNT_NOT_FOUND: 'This EA belongs to a different account. Download the EA from the correct account page.',
+  INVALID_PAYLOAD: 'The EA sent an invalid update. It will retry automatically.',
+  RATE_LIMITED: 'Sync is temporarily throttled. It will retry shortly.',
+  MT5_OFFLINE: 'MT5 is not connected to the broker. Reconnect MT5 and keep the EA attached to a chart.',
+  E_CONNECTION_LOST: 'MT5 cannot reach the server. Check the WebRequest allow-list and your internet connection.'
+};
+
+function timeAgo(iso?: string | null): string {
   if (!iso) return 'Never';
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 0) return 'Just now';
@@ -34,17 +124,56 @@ function timeAgo(iso?: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function formatMoney(n: number, currency = 'USD'): string {
+  if (typeof n !== 'number' || isNaN(n)) return '—';
+  return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatPrice(n: number | null | undefined): string {
+  if (typeof n !== 'number' || isNaN(n)) return '—';
+  return n.toFixed(n > 1000 ? 0 : n > 1 ? 3 : 5);
+}
+
+function friendlyError(error: MT5ConnectionError | undefined): string {
+  if (!error) return 'Something went wrong with the MT5 sync. Please retry.';
+  return ERROR_COPY[error.errorCode] || error.errorMessage || 'Something went wrong with the MT5 sync. Please retry.';
+}
+
 export default function MT5Automation({ account, authFetch, onRefresh }: MT5AutomationProps) {
   const [downloading, setDownloading] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState('');
   const [downloadedName, setDownloadedName] = useState('');
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
   const [eaCopied, setEaCopied] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [status, setStatus] = useState<MT5Status | null>(null);
 
   const host = typeof window !== 'undefined' ? window.location.host : 'www.fxjournalpro.com';
   const apiUrl = `${window.location.protocol}//${host}/api/mt5`;
+
+  const pollStatus = useCallback(async () => {
+    if (!account) return;
+    try {
+      const res = await authFetch(`/api/mt5/${account.id}/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data);
+        setError('');
+      }
+    } catch {
+      // keep last known status on transient failures
+    }
+  }, [account, authFetch]);
+
+  useEffect(() => {
+    if (!account) return;
+    pollStatus();
+    const id = setInterval(pollStatus, 5000);
+    return () => clearInterval(id);
+  }, [account, pollStatus]);
 
   async function handleDownload() {
     if (!account) return;
@@ -122,6 +251,31 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
     }
   }
 
+  async function handleDisconnect() {
+    if (!account) return;
+    setDisconnecting(true);
+    setError('');
+    try {
+      const res = await authFetch(`/api/mt5/${account.id}/disconnect`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || 'Disconnect failed. Please try again.');
+        return;
+      }
+      setShowDisconnectConfirm(false);
+      setDownloadedName('');
+      setStatus(null);
+      onRefresh();
+    } catch (e) {
+      setError('Disconnect failed. Please try again.');
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
   async function copyUrl() {
     try {
       await navigator.clipboard.writeText(apiUrl);
@@ -130,6 +284,21 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
     } catch (e) {
       setCopied(false);
     }
+  }
+
+  function derivePhase(): Phase {
+    if (downloading || copying || resetting) return 'Collecting';
+    if (status?.status === 'Disconnected' || status?.eaStatus === 'Disconnected') return 'Disconnected';
+    const unresolved = (status?.lastErrors || []).filter((e) => !e.resolvedAt);
+    if (unresolved.length > 0 && status) return 'Error';
+    const heartbeatAt = status?.lastHeartbeatAt;
+    const fresh = heartbeatAt ? Date.now() - new Date(heartbeatAt).getTime() < 120000 : false;
+    if (status?.eaStatus === 'Connected' || fresh) {
+      return status && status.syncTradeCount > 0 ? 'Synced' : 'Syncing';
+    }
+    if (downloadedName) return 'Validating';
+    if (status?.lastSyncTime) return 'Disconnected';
+    return 'Not Started';
   }
 
   if (!account) {
@@ -152,7 +321,33 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
     );
   }
 
-  const connected = account.eaStatus === 'Connected';
+  const phase = derivePhase();
+  const connected = phase === 'Synced' || phase === 'Syncing';
+  const phaseIcon = connected
+    ? Wifi
+    : phase === 'Error'
+      ? XCircle
+      : phase === 'Disconnected'
+        ? WifiOff
+        : phase === 'Validating'
+          ? Loader2
+          : Terminal;
+  const PhaseIcon = phaseIcon;
+
+  const phaseLabel =
+    phase === 'Synced' ? 'Connected' : phase === 'Syncing' ? 'Syncing' : phase;
+  const phaseColor =
+    phase === 'Synced'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : phase === 'Syncing'
+        ? 'text-amber-600 dark:text-amber-400'
+        : phase === 'Error'
+          ? 'text-rose-600 dark:text-rose-400'
+          : phase === 'Disconnected'
+            ? 'text-slate-500 dark:text-slate-400'
+            : 'text-indigo-600 dark:text-indigo-400';
+
+  const latestError = (status?.lastErrors || []).filter((e) => !e.resolvedAt)[0];
 
   return (
     <div className="space-y-5">
@@ -160,37 +355,117 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
           <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-2">
-            {connected ? <Wifi className="h-3.5 w-3.5 text-emerald-500" /> : <WifiOff className="h-3.5 w-3.5 text-slate-400" />}
+            <PhaseIcon className={`h-3.5 w-3.5 ${phase === 'Syncing' ? 'animate-pulse' : ''} ${connected ? 'text-emerald-500' : phase === 'Error' ? 'text-rose-500' : 'text-slate-400'}`} />
             Connection
           </div>
-          <div className={`text-lg font-black ${connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>
-            {connected ? 'Connected' : account.eaStatus || 'Not Connected'}
-          </div>
+          <div className={`text-lg font-black ${phaseColor}`}>{phaseLabel}</div>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
           <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-2">
             <Clock className="h-3.5 w-3.5" /> Last Sync
           </div>
-          <div className="text-lg font-black text-slate-800 dark:text-white">{timeAgo(account.eaLastSyncTime)}</div>
+          <div className="text-lg font-black text-slate-800 dark:text-white">
+            {timeAgo(status?.lastSyncTime || account.eaLastSyncTime)}
+          </div>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
           <div className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-2">Synced Trades</div>
-          <div className="text-lg font-black text-slate-800 dark:text-white">{account.eaSyncTradeCount ?? '—'}</div>
+          <div className="text-lg font-black text-slate-800 dark:text-white">
+            {status?.syncTradeCount ?? account.eaSyncTradeCount ?? '—'}
+          </div>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
           <div className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-2">MT5 Account</div>
           <div className="text-lg font-black text-slate-800 dark:text-white truncate">
-            {account.eaTerminalLogin ? `#${account.eaTerminalLogin}` : 'Not reported'}
+            {status?.terminalLogin || account.eaTerminalLogin ? `#${status?.terminalLogin || account.eaTerminalLogin}` : 'Not reported'}
           </div>
-          {account.eaTerminalServer && (
-            <div className="text-[10px] text-slate-400 truncate">{account.eaTerminalServer}</div>
+          {(status?.terminalServer || account.eaTerminalServer) && (
+            <div className="text-[10px] text-slate-400 truncate">{status?.terminalServer || account.eaTerminalServer}</div>
           )}
         </div>
       </div>
 
+      {/* Connection state banner */}
+      {phase === 'Validating' && (
+        <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-xl px-4 py-3">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <div>
+            Waiting for MT5… Compile the EA (F7), attach it to a chart, and allow automated trading. The server is listening
+            for the first connection. This page refreshes automatically.
+          </div>
+        </div>
+      )}
+      {phase === 'Syncing' && (
+        <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl px-4 py-3">
+          <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
+          <div className="flex-1">
+            Connected — importing your trade history{status && status.lastDealId > 0 ? ` (last deal #${status.lastDealId})` : ''}. First sync can take a few minutes for large histories.
+          </div>
+          <div className="w-32 h-1.5 rounded-full bg-amber-200 dark:bg-amber-500/30 overflow-hidden shrink-0">
+            <div className="h-full w-1/2 bg-amber-500 animate-pulse rounded-full" />
+          </div>
+        </div>
+      )}
+      {phase === 'Error' && (
+        <div className="flex items-start gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs font-semibold rounded-xl px-4 py-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            {friendlyError(latestError)}
+            {latestError && (
+              <div className="mt-1 font-mono text-[10px] opacity-70">{latestError.errorCode} · {timeAgo(latestError.occurredAt)}</div>
+            )}
+          </div>
+          <button onClick={() => onRefresh()} className="shrink-0 inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition">
+            <RefreshCw className="h-3 w-3" /> Retry
+          </button>
+        </div>
+      )}
+      {phase === 'Disconnected' && (
+        <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl px-4 py-3">
+          <WifiOff className="h-4 w-4 shrink-0" />
+          <div className="flex-1">
+            This account's MT5 sync is disconnected. The EA token was revoked, so the old EA file will stop working.
+            Download a fresh copy to reconnect.
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs font-semibold rounded-xl px-4 py-3">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        </div>
+      )}
+
+      {/* Disconnect confirm */}
+      {showDisconnectConfirm && (
+        <div className="rounded-2xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500" />
+            <div className="flex-1">
+              <h4 className="text-sm font-black text-rose-700 dark:text-rose-300">Disconnect this MT5 account?</h4>
+              <p className="text-xs text-rose-600/80 dark:text-rose-300/80 mt-1 leading-relaxed">
+                The EA authentication token will be <strong>permanently revoked</strong>. The old EA file in your
+                terminal will immediately stop syncing. To reconnect later, you'll download a fresh EA with a new token.
+                No trading data is deleted.
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                  className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
+                >
+                  {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+                  {disconnecting ? 'Disconnecting…' : 'Yes, Disconnect'}
+                </button>
+                <button
+                  onClick={() => setShowDisconnectConfirm(false)}
+                  className="border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-bold px-4 py-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -214,7 +489,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               disabled={downloading}
               className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-3 rounded-xl transition disabled:opacity-50"
             >
-              <Download className="h-4 w-4" />
+              {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {downloading ? 'Generating…' : 'Download EA (.mq5)'}
             </button>
             <button
@@ -226,9 +501,17 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               {copying ? 'Copying…' : 'Copy EA Code'}
             </button>
             <button
+              onClick={() => setShowDisconnectConfirm(true)}
+              disabled={disconnecting || phase === 'Disconnected'}
+              className="flex items-center justify-center gap-2 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-600 dark:text-rose-300 text-xs font-bold py-3 rounded-xl transition disabled:opacity-50"
+            >
+              <Unplug className="h-4 w-4" />
+              Disconnect
+            </button>
+            <button
               onClick={handleReset}
               disabled={resetting}
-              className="flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold py-3 rounded-xl transition disabled:opacity-50 sm:col-span-2"
+              className="flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold py-3 rounded-xl transition disabled:opacity-50"
             >
               <KeyRound className="h-4 w-4" />
               {resetting ? 'Resetting…' : 'Reset Token'}
@@ -249,12 +532,22 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
             </div>
           )}
 
-          {!downloadedName && account.eaStatus === 'Connected' && (
+          {phase === 'Synced' && (
             <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-xl px-4 py-3">
               <Wifi className="h-4 w-4 shrink-0" />
               This account is connected via its EA. New trades sync automatically.
             </div>
           )}
+
+          {/* Read-only disclaimer (1 of 2) */}
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-500" />
+            <span>
+              <strong className="text-slate-600 dark:text-slate-300">Read-only by design.</strong> This EA contains zero
+              trading functions — it cannot open, modify, or close positions. It only reads your account and reports it
+              to your journal. Your MT5 Investor Password is never entered or stored anywhere on this site.
+            </span>
+          </div>
         </div>
 
         {/* Right: install steps */}
@@ -288,17 +581,137 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               <span className="h-6 w-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 text-xs font-black flex items-center justify-center shrink-0">3</span>
               <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 <strong>Attach it to any chart</strong> and allow automated trading. The EA authenticates instantly,
-                imports your full history, then stays connected for real-time sync. Refresh this page to see the live status.
+                imports your full history, then stays connected for real-time sync. This page updates automatically —
+                no manual refresh needed.
               </div>
             </li>
           </ol>
           <div className="mt-5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
             Keep this EA attached to a chart (any symbol/timeframe) to keep the sync running. It never places trades —
-            it only reads your history and reports it to your journal.
+            it only reads your history and reports it to your journal. <strong className="text-slate-600 dark:text-slate-300">(Read-only disclaimer 2 of 2)</strong>
           </div>
         </div>
       </div>
+
+      {/* Live sync status */}
+      {(connected || status?.lastSyncTime) && status && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-slate-900 dark:text-white text-sm">Live Sync Status</h3>
+            <button onClick={pollStatus} className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+              <RefreshCw className={`h-3.5 w-3.5 ${phase === 'Syncing' ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Equity</div>
+              <div className="text-sm font-black text-slate-800 dark:text-white">{formatMoney(status.equity)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Balance</div>
+              <div className="text-sm font-black text-slate-800 dark:text-white">{formatMoney(status.currentBalance)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Open Positions</div>
+              <div className="text-sm font-black text-slate-800 dark:text-white">{status.openPositions.length}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Pending Orders</div>
+              <div className="text-sm font-black text-slate-800 dark:text-white">{status.pendingOrders.length}</div>
+            </div>
+          </div>
+
+          {status.openPositions.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Open Positions</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
+                      <th className="pb-2 font-bold">Symbol</th>
+                      <th className="pb-2 font-bold">Side</th>
+                      <th className="pb-2 font-bold">Volume</th>
+                      <th className="pb-2 font-bold">Open</th>
+                      <th className="pb-2 font-bold">Current</th>
+                      <th className="pb-2 font-bold text-right">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {status.openPositions.map((p) => (
+                      <tr key={p.positionId}>
+                        <td className="py-2 font-bold text-slate-700 dark:text-slate-200">{p.symbol}</td>
+                        <td className={`py-2 font-bold ${p.side === 'Buy' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{p.side}</td>
+                        <td className="py-2 text-slate-500">{p.volume}</td>
+                        <td className="py-2 text-slate-500">{formatPrice(p.openPrice)}</td>
+                        <td className="py-2 text-slate-500">{formatPrice(p.currentPrice)}</td>
+                        <td className={`py-2 text-right font-bold ${p.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {p.profit >= 0 ? '+' : ''}{formatMoney(p.profit)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {status.pendingOrders.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Pending Orders</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
+                      <th className="pb-2 font-bold">Symbol</th>
+                      <th className="pb-2 font-bold">Type</th>
+                      <th className="pb-2 font-bold">Volume</th>
+                      <th className="pb-2 font-bold">Price</th>
+                      <th className="pb-2 font-bold">State</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {status.pendingOrders.map((o) => (
+                      <tr key={o.orderId}>
+                        <td className="py-2 font-bold text-slate-700 dark:text-slate-200">{o.symbol}</td>
+                        <td className="py-2 text-slate-500">{o.type}</td>
+                        <td className="py-2 text-slate-500">{o.volume}</td>
+                        <td className="py-2 text-slate-500">{formatPrice(o.openPrice)}</td>
+                        <td className="py-2 text-slate-500">{o.state}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {status.moneyFlows.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Deposits &amp; Withdrawals</h4>
+              <div className="flex flex-wrap gap-2">
+                {status.moneyFlows.slice(0, 12).map((f) => (
+                  <div key={f.ticket} className="inline-flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-3 py-1.5 text-xs">
+                    {f.flowType === 'WITHDRAWAL' ? (
+                      <ArrowDownRight className="h-3.5 w-3.5 text-rose-500" />
+                    ) : f.flowType === 'DEPOSIT' ? (
+                      <ArrowRight className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <CircleDollarSign className="h-3.5 w-3.5 text-amber-500" />
+                    )}
+                    <span className="font-black text-slate-700 dark:text-slate-200">{f.flowType}</span>
+                    <span className={`font-bold ${f.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {f.amount >= 0 ? '+' : ''}{formatMoney(f.amount, f.currency)}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{timeAgo(f.time)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
