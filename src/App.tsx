@@ -6,8 +6,8 @@ import {
   DollarSign, Plus, CheckCircle2, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
-  Terminal, Globe, Bell, CreditCard, Info, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, X, Newspaper
+  Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
+  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -36,6 +36,7 @@ import { TraderRankCard } from './components/TraderRankCard';
 import LegalFooter from './components/LegalFooter';
 import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
+import TradingTools from './components/TradingTools';
 
 async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
   const fflate = await import('fflate');
@@ -2647,8 +2648,28 @@ export default function App() {
     return (
       <LoginPage
         isSupabaseConfigured={isSupabaseConfigured}
-        onLoginSuccess={() => {
-          window.location.href = '/dashboard';
+        onLoginSuccess={async () => {
+          // Re-trigger bootstrapSession to fetch user details and accounts dynamically
+          const storedUserId = sessionStorage.getItem('auth_user_id') || localStorage.getItem('auth_user_id');
+          const storedEmail = sessionStorage.getItem('auth_email') || localStorage.getItem('auth_email');
+          if (storedUserId || storedEmail) {
+            try {
+              const headers: Record<string, string> = {};
+              if (storedUserId) headers['x-auth-user-id'] = storedUserId;
+              if (storedEmail) headers['x-auth-email'] = storedEmail;
+              const res = await fetch('/api/auth/me', { headers });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.user) {
+                  setUser(data.user);
+                  await fetchAccountData();
+                }
+              }
+            } catch (e) {
+              console.error('Error fetching user post-login:', e);
+            }
+          }
+          navigate('/dashboard', { replace: true });
         }}
         authFetch={authFetch}
       />
@@ -2922,28 +2943,28 @@ export default function App() {
               {!sidebarCollapsed && 'Calendar'}
             </button>
 
-            <div
-              className={`rounded-lg bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 p-[1.5px] transition ${
-                sidebarCollapsed ? 'inline-flex' : 'w-full'
-              } ${
-                activeTab === 'fxnews'
-                  ? 'shadow-[0_0_16px_rgba(99,102,241,0.45)]'
-                  : 'shadow-[0_0_10px_rgba(99,102,241,0.18)] hover:shadow-[0_0_14px_rgba(99,102,241,0.4)]'
-              }`}
+            <button
+              onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News & Economic Calendar"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
             >
-              <button
-                onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
-                className={`text-xs font-semibold transition flex items-center rounded-[7px] ${
-                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
-                } ${
-                  activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'bg-[#FBFBFA] text-slate-700 hover:text-slate-900'
-                }`}
-              >
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
                 <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
                 {!sidebarCollapsed && 'FX News'}
-              </button>
-            </div>
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+              )}
+            </button>
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
@@ -2956,6 +2977,29 @@ export default function App() {
             >
               <Terminal className="h-4 w-4 text-slate-500" />
               {!sidebarCollapsed && 'MT5 Automation'}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
+              title="Tools"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'tools' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600' : 'text-emerald-500'}`} />
+                {!sidebarCollapsed && 'Tools'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+              )}
             </button>
 
             <button
@@ -3059,6 +3103,7 @@ export default function App() {
                  activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
                  activeTab === 'mt5' ? 'MT5 Automation' :
+                 activeTab === 'tools' ? 'Tools' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
               <p className="text-xs text-slate-400 mt-1">
@@ -3067,9 +3112,10 @@ export default function App() {
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
-                 activeTab === 'fxnews' ? 'Stay updated with the latest market-moving forex news and economic events.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
                  activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
+                 activeTab === 'tools' ? 'Precision calculators to plan your trades with confidence.' :
+                 activeTab === 'fxnews' ? 'Stay updated with the latest market-moving forex news and economic events.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
@@ -4947,6 +4993,11 @@ export default function App() {
         {/* 7. ADMIN PANEL VIEW */}
         {activeTab === 'admin' && (
           <AdminPanel onPublishAnnouncement={fetchAccountData} />
+        )}
+
+        {/* 8. TOOLS VIEW */}
+        {activeTab === 'tools' && (
+          <TradingTools />
         )}
 
         {/* Site footer with legal links */}
