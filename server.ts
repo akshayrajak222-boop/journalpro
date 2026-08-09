@@ -3210,6 +3210,9 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     const lastErrors = Array.isArray(db.mt5ConnectionErrors)
       ? db.mt5ConnectionErrors.filter((e: any) => e.accountId === account.id).slice(-5)
       : [];
+    const snapshots = Array.isArray(db.mt5Snapshots)
+      ? db.mt5Snapshots.filter((s: any) => s.accountId === account.id).slice(-500)
+      : [];
 
     res.json({
       accountId: account.id,
@@ -3227,7 +3230,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       openPositions,
       pendingOrders,
       moneyFlows,
-      lastErrors
+      lastErrors,
+      snapshots
     });
   });
 

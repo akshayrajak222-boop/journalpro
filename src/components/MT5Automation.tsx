@@ -18,8 +18,19 @@ import {
   ArrowRight,
   ArrowDownRight,
   CircleDollarSign,
-  XCircle
+  XCircle,
+  TrendingUp,
+  Landmark
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from 'recharts';
 import { TradingAccount } from '../types';
 
 interface MT5AutomationProps {
@@ -68,6 +79,18 @@ interface MT5ConnectionError {
   resolvedAt: string | null;
 }
 
+interface MT5Snapshot {
+  accountId: string;
+  balance: number;
+  equity: number;
+  margin: number | null;
+  marginFree: number | null;
+  marginLevel: number | null;
+  currency: string | null;
+  leverage: number | null;
+  capturedAt: string;
+}
+
 interface MT5Status {
   accountId: string;
   status: string;
@@ -85,6 +108,7 @@ interface MT5Status {
   pendingOrders: MT5PendingOrder[];
   moneyFlows: MT5MoneyFlow[];
   lastErrors: MT5ConnectionError[];
+  snapshots: MT5Snapshot[];
 }
 
 type Phase =
@@ -132,6 +156,20 @@ function formatMoney(n: number, currency = 'USD'): string {
 function formatPrice(n: number | null | undefined): string {
   if (typeof n !== 'number' || isNaN(n)) return '—';
   return n.toFixed(n > 1000 ? 0 : n > 1 ? 3 : 5);
+}
+
+function formatAxisTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatChartMoney(n: number): string {
+  if (typeof n !== 'number' || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (abs >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toFixed(0);
 }
 
 function friendlyError(error: MT5ConnectionError | undefined): string {
@@ -348,6 +386,28 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
             : 'text-indigo-600 dark:text-indigo-400';
 
   const latestError = (status?.lastErrors || []).filter((e) => !e.resolvedAt)[0];
+
+  const currency = status?.moneyFlows?.[0]?.currency || account.currency || 'USD';
+  const totalDeposits = (status?.moneyFlows || [])
+    .filter((f) => f.flowType === 'DEPOSIT')
+    .reduce((a, f) => a + Math.abs(f.amount), 0);
+  const totalWithdrawals = (status?.moneyFlows || [])
+    .filter((f) => f.flowType === 'WITHDRAWAL')
+    .reduce((a, f) => a + Math.abs(f.amount), 0);
+  const floatingPnl = (status?.openPositions || []).reduce((a, p) => a + (p.profit || 0), 0);
+  const netPnl = (status && status.equity > 0 ? status.equity : 0) - (status?.startingBalance || 0);
+
+  let chartData = (status?.snapshots || []).map((s) => ({
+    time: s.capturedAt,
+    label: formatAxisTime(s.capturedAt),
+    equity: s.equity,
+    balance: s.balance
+  }));
+  const maxChartPoints = 120;
+  if (chartData.length > maxChartPoints) {
+    const k = Math.ceil(chartData.length / maxChartPoints);
+    chartData = chartData.filter((_, i) => i % k === 0);
+  }
 
   return (
     <div className="space-y-5">
@@ -710,6 +770,86 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Performance dashboard */}
+      {((status?.snapshots || []).length > 0 || (status?.moneyFlows || []).length > 0 || (status?.openPositions || []).length > 0) && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-indigo-500" />
+            <h3 className="font-black text-slate-900 dark:text-white text-sm">Performance</h3>
+          </div>
+
+          {chartData.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">Equity Curve</h4>
+                <div className="flex items-center gap-3 text-[10px] font-bold">
+                  <span className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                    <span className="h-2 w-2 rounded-full bg-indigo-500" /> Equity
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                    <span className="h-2 w-2 rounded-full bg-slate-400" /> Balance
+                  </span>
+                </div>
+              </div>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-800" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} minTickGap={40} stroke="currentColor" className="text-slate-400" />
+                    <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={48} domain={['auto', 'auto']} tickFormatter={formatChartMoney} stroke="currentColor" className="text-slate-400" />
+                    <Tooltip
+                      contentStyle={{ borderRadius: 12, fontSize: 12, background: '#ffffff', border: '1px solid #e2e8f0', color: '#0f172a' }}
+                      labelStyle={{ fontWeight: 700 }}
+                      formatter={(value) => [formatMoney(Number(value), currency), undefined]}
+                      labelFormatter={(label) => `Time: ${label}`}
+                    />
+                    <Area type="monotone" dataKey="balance" name="Balance" stroke="#94a3b8" strokeWidth={1.5} dot={false} fill="none" />
+                    <Area type="monotone" dataKey="equity" name="Equity" stroke="#6366f1" strokeWidth={2} dot={false} fill="url(#equityFill)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Net P&amp;L</div>
+              <div className={`text-sm font-black ${netPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {netPnl >= 0 ? '+' : ''}{formatMoney(netPnl, currency)}
+              </div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Starting Balance</div>
+              <div className="text-sm font-black text-slate-800 dark:text-white">{formatMoney(status?.startingBalance || 0, currency)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Deposits</div>
+              <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatMoney(totalDeposits, currency)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Withdrawals</div>
+              <div className="text-sm font-black text-rose-600 dark:text-rose-400">{formatMoney(totalWithdrawals, currency)}</div>
+            </div>
+          </div>
+
+          {status?.openPositions.length ? (
+            <div className="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-3 py-2.5 text-xs">
+              <Landmark className="h-4 w-4 shrink-0 text-indigo-500" />
+              <span className="font-bold text-slate-600 dark:text-slate-300">Floating P&amp;L on {status.openPositions.length} open position{status.openPositions.length === 1 ? '' : 's'}:</span>
+              <span className={`font-black ${floatingPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {floatingPnl >= 0 ? '+' : ''}{formatMoney(floatingPnl, currency)}
+              </span>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
