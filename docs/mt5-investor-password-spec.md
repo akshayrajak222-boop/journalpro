@@ -741,6 +741,131 @@ void OnTradeTransaction(..) { if (deal added) SyncDeals(lastDealId); }
 
 ## 20. Final Recommended Architecture
 
-**Adopt the enhanced EA (local investor-password auth) as the primary path**, because it satisfies the strongest security requirement — **the website never stores or transmits the MT5 Investor Password** — while reusing FJP's existing generated-EA, token, and cursor infrastructure. Add the **MetaApi cloud bridge** only as an optional secondary path for users who cannot run an EA, with the investor password protected by KMS envelope encryption.
+**Adopt the enhanced EA (local investor-password auth) as the primary path**, because it satisfies the strongest security requirement — **the website never stores or transmits the MT5 Investor Password** — while reusing FJP's existing generated-EA, token, and cursor infrastructure. For users who cannot run an EA, use the **cloud bridge** whose broker-connect component can be backed by either a **self-hosted Windows VPS worker** (preferred, see Appendix A) or the **MetaApi** managed service. Either way the investor password is protected by KMS envelope encryption at rest.
 
 The full stack: React connection UI → Express API (HMAC-signed EA endpoints, rate-limited, idempotent) → Supabase Postgres (account-scoped dedup keys, additive backward-compatible migrations, Phase-2 strict RLS) → MQL5 EA (read-only, no trading functions, 30s cadence, 90-day backfill). All changes are additive and feature-flagged so **existing users are never broken**, and a documented rollback path exists at every layer.
+
+---
+
+## Appendix A — Self-Hosted Windows VPS Sync (MetaApi Alternative)
+
+### A.1 Overview
+
+A self-hosted Windows VPS replaces MetaApi as the "connect to the broker" component of the cloud bridge. Everything else — the backend `/api/mt5/*` endpoints, HMAC auth, validation, dedup, schema, dashboards, and the migration strategy — is **unchanged**. The VPS runs real MT5 terminals, each logged in with the user's Investor (read-only) credentials, and the standard FJP EA agent uploads data to the existing API.
+
+### A.2 Architecture
+
+```
+FJP Backend                    Queue (Postgres)          VPS Worker (Windows)
+┌───────────────┐             ┌───────────────┐         ┌─────────────────────────────┐
+│ /api/mt5/cloud│─enqueue────►│ mt5_connect_  │─poll────►│ Worker daemon (Node/PowerShell)
+│ /connect      │             │ jobs          │ SKIP     │   │                        │
+│ /disconnect   │             │               │ LOCKED   │   ├─ MT5 terminal #1 (user A)┐
+│ status/audit  │◄─results────│ status fields │◄─────────│   │   └─ FJP EA agent ────────┤
+└───────┬───────┘             └───────────────┘         │   ├─ MT5 terminal #2 (user B) │
+        │                                               │   │   └─ FJP EA agent ────────┤
+        │  EA posts snapshots/positions/deals            │   └─ ... up to capacity ──────┤
+        └───────HTTPS───────►  /api/mt5/ea/* (unchanged) │                               │
+                                                         └─────────────────────────────┘
+                                                                     │ HTTPS (read-only)
+                                                                     ▼
+                                                               Broker servers
+```
+
+### A.3 Components on the VPS
+
+| Component | Responsibility |
+|---|---|
+| Worker daemon | Polls `mt5_connect_jobs`, provisions/tears down terminals, health-checks, reports status. Runs as a scheduled task (auto-start at boot). |
+| Terminal manager | Creates an isolated `/portable` MT5 data folder per account, launches `terminal64.exe`, attaches the EA, enables automated trading + WebRequest allow-list. |
+| FJP EA agent | The existing `eaTemplate.ts` logic (read-only reads + HMAC-signed POSTs to `/api/mt5/ea/*`). No trading functions. |
+| Session keeper | Keeps an interactive desktop session alive (auto-login Windows user) so MT5 GUI processes don't suspend. |
+| Golden image | A clean, version-pinned MT5 install copied per terminal so upgrades/corruption never affect running terminals. |
+
+### A.4 Per-account terminal lifecycle
+
+States: `Provisioned → LoggingIn → Attached → Syncing → Degraded → Removed`
+
+1. **Provision:** `mkdir <root>\terminals\<accountId>\` and copy the golden portable MT5.
+2. **Login:** see §A.5 (config pre-seed or `AccountLogin()` bootstrap).
+3. **Attach:** add FJP EA to a chart; `WebRequest` allow-list = FJP API host only; enable automated trading.
+4. **Sync:** EA pushes account/positions/orders/deals every 30s (cursor-based) to `/api/mt5/ea/*`.
+5. **Degrade/remove:** on heartbeat loss the worker restarts the terminal; on disconnect the worker kills the process, wipes the data folder + credentials, and frees the slot.
+
+### A.5 Auto-login methods (investor credentials)
+
+1. **Config pre-seed (fastest):** write login/server/password into the terminal's `config\common.ini` (and server list), then start `terminal64.exe /portable`. MT5 logs in on start.
+2. **Bootstrap `AccountLogin()` (recommended, resilient):** a tiny "LoginAgent" EA calls MQL5 `AccountLogin(login, password, server, timeout)` at `OnInit` (investor credentials are supported and stay read-only), verifies `AccountInfoInteger(ACCOUNT_LOGIN)`, then continues as the sync agent.
+
+> Notes: the broker **server name must match exactly**; investor passwords are accepted by `AccountLogin`; if the broker's build rejects programmatic login, fall back to config pre-seed.
+
+### A.6 Credential handling on the VPS
+
+- The worker never receives the raw password from the browser. The backend stores the encrypted blob (KMS envelope, §4.2) and the worker fetches a short-lived decrypted value over an authenticated internal channel, or decrypts locally with a VPS-held key.
+- Credentials live **only in memory** during login; the terminal's config file is wiped after a successful login if possible.
+- Passwords are **never logged**; logs keep `account_id` + event codes.
+- No main trading password is ever accepted or stored on the VPS.
+- Rotation: investor passwords are broker-issued and cannot be rotated by FJP programmatically. On suspicion or on user request, re-run the connect flow with a new password and overwrite the old blob (one-time use).
+
+### A.7 Job queue design
+
+```sql
+CREATE TABLE IF NOT EXISTS mt5_connect_jobs (
+  id TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
+  account_id TEXT NOT NULL REFERENCES trading_accounts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL CHECK (action IN ('CONNECT','DISCONNECT','RESYNC')),
+  payload TEXT,                    -- reference to encrypted credential blob (never the password)
+  status TEXT NOT NULL DEFAULT 'PENDING',  -- PENDING|CLAIMED|RUNNING|SUCCEEDED|FAILED
+  attempts INTEGER DEFAULT 0,
+  worker_id TEXT,
+  last_error TEXT,
+  claimed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_connect_jobs_poll ON mt5_connect_jobs(status, created_at);
+```
+
+- Workers claim a job with `SELECT ... FOR UPDATE SKIP LOCKED` so only one worker handles an account at a time.
+- At-least-once delivery; duplicate work is harmless because the EA endpoints are idempotent (account-scoped dedup).
+- A job stuck in `RUNNING` past its heartbeat timeout is released back to `PENDING` and re-queued.
+
+### A.8 Scaling & sizing
+
+- ~300–500 MB RAM per MT5 terminal → roughly **10–30 accounts per 8 GB VPS**.
+- Multiple VPS workers share the same queue; `worker_id` tracks which VPS owns which account.
+- Horizontal scaling = add VPS + run the same worker daemon; no app code changes.
+- Cost: one Windows VPS (~$15–40/mo) covers small scale; MetaApi's per-account pricing is cheaper than buying VPS capacity only at very low account counts.
+
+### A.9 Failure modes & recovery
+
+| Failure | Detection | Recovery |
+|---|---|---|
+| Terminal process crash | Worker health check + missing EA heartbeat | Restart terminal from golden image |
+| Broker blocks datacenter IP / login | Connect `FAILED` or EA auth error | Friendly error; broker allow-list guidance; retry with backoff |
+| MT5 auto-update breaks `/portable` | Version mismatch | Re-provision from pinned golden image |
+| VPS reboot | Job heartbeat timeout | Scheduled task relaunches worker + terminals; queue persists in Postgres |
+| Worker dies mid-job | `claimed_at` + heartbeat stale | Job released to `PENDING`, re-claimed by another worker |
+| Disk full / memory pressure | Metrics alerts | Auto-teardown least-recently-used idle terminals |
+
+### A.10 Security hardening for the VPS
+
+- [ ] Dedicated, non-admin service account for the worker
+- [ ] RDP restricted by IP + MFA; disable default admin
+- [ ] Windows Firewall: outbound HTTPS to FJP API + broker servers only; inbound RDP/WinRM locked down
+- [ ] BitLocker/DPAPI on the data volume holding terminal data
+- [ ] AppLocker / controlled folder access around `terminals\`
+- [ ] Endpoint monitoring + alerts on credential-file access
+- [ ] Credentials encrypted at rest; one-time use; wiped on teardown
+- [ ] Audit log of every connect/disconnect and credential access
+- [ ] Network egress allow-list (FJP API + broker hosts) — the worker cannot reach anything else
+
+### A.11 Ops notes
+
+- Feature-flag the VPS path; keep the EA-local path as the default.
+- Monitor: queue depth, terminal count per VPS, per-account heartbeat lag, error-rate dashboard.
+- Backups: terminal data folders are transient (the DB is the source of truth), so only queue + config need backup.
+- Rollback: stop the worker + flag off; the queue is inert and safe to leave.
+- MetaApi remains a drop-in alternative: implement the broker-connect behind an interface (`ICloudBridge`) with two adapters — `VpsWorker` and `MetaApiClient`.
+
