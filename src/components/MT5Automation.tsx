@@ -91,10 +91,23 @@ interface MT5Snapshot {
   capturedAt: string;
 }
 
+interface MT5ConnectJob {
+  id: string;
+  accountId: string;
+  action: string;
+  status: string;
+  attempts?: number;
+  lastError?: string | null;
+  updatedAt?: string;
+}
+
 interface MT5Status {
   accountId: string;
   status: string;
   eaStatus: string;
+  syncMethod: string;
+  cloudConnected: boolean;
+  connectJobs: MT5ConnectJob[];
   lastSyncTime: string | null;
   lastHeartbeatAt: string | null;
   lastDealId: number;
@@ -133,7 +146,9 @@ const ERROR_COPY: Record<string, string> = {
   INVALID_PAYLOAD: 'The EA sent an invalid update. It will retry automatically.',
   RATE_LIMITED: 'Sync is temporarily throttled. It will retry shortly.',
   MT5_OFFLINE: 'MT5 is not connected to the broker. Reconnect MT5 and keep the EA attached to a chart.',
-  E_CONNECTION_LOST: 'MT5 cannot reach the server. Check the WebRequest allow-list and your internet connection.'
+  E_CONNECTION_LOST: 'MT5 cannot reach the server. Check the WebRequest allow-list and your internet connection.',
+  CLOUD_NOT_CONFIGURED: 'Cloud sync (investor password) is not configured on this deployment yet. Use the EA method instead.',
+  INVALID_PASSWORD: 'The investor password was rejected. Check it and try again.'
 };
 
 function timeAgo(iso?: string | null): string {
@@ -188,6 +203,12 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   const [eaCopied, setEaCopied] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [status, setStatus] = useState<MT5Status | null>(null);
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const [cloudLogin, setCloudLogin] = useState('');
+  const [cloudServer, setCloudServer] = useState('');
+  const [cloudPassword, setCloudPassword] = useState('');
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState('');
 
   const host = typeof window !== 'undefined' ? window.location.host : 'www.fxjournalpro.com';
   const apiUrl = `${window.location.protocol}//${host}/api/mt5`;
@@ -324,8 +345,69 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
     }
   }
 
+  async function handleCloudConnect() {
+    if (!account) return;
+    setCloudBusy(true);
+    setCloudError('');
+    try {
+      const res = await authFetch('/api/mt5/cloud/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: account.id,
+          login: cloudLogin.trim(),
+          server: cloudServer.trim(),
+          investorPassword: cloudPassword
+        })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCloudError(friendlyError({ errorCode: d.code || 'SERVER_ERROR', errorMessage: d.error || 'Cloud connect failed.', occurredAt: new Date().toISOString(), resolvedAt: null }));
+        return;
+      }
+      setCloudPassword('');
+      setCloudOpen(false);
+      setCloudLogin('');
+      setCloudServer('');
+      onRefresh();
+    } catch (e) {
+      setCloudError('Cloud connect failed. Please try again.');
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  async function handleCloudDisconnect() {
+    if (!account) return;
+    setCloudBusy(true);
+    setCloudError('');
+    try {
+      const res = await authFetch('/api/mt5/cloud/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: account.id })
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setCloudError(d.error || 'Cloud disconnect failed. Please try again.');
+        return;
+      }
+      onRefresh();
+    } catch (e) {
+      setCloudError('Cloud disconnect failed. Please try again.');
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
   function derivePhase(): Phase {
     if (downloading || copying || resetting) return 'Collecting';
+    if (status?.syncMethod === 'CLOUD' && status.cloudConnected) {
+      if (status.status === 'Connected') return 'Synced';
+      if (status.status === 'Disconnected') return 'Disconnected';
+      if (status.status === 'Error') return 'Error';
+      return 'Validating';
+    }
     if (status?.status === 'Disconnected' || status?.eaStatus === 'Disconnected') return 'Disconnected';
     const unresolved = (status?.lastErrors || []).filter((e) => !e.resolvedAt);
     if (unresolved.length > 0 && status) return 'Error';
@@ -652,6 +734,148 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
             it only reads your history and reports it to your journal. <strong className="text-slate-600 dark:text-slate-300">(Read-only disclaimer 2 of 2)</strong>
           </div>
         </div>
+      </div>
+
+      {/* Cloud sync (investor password) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-slate-500" />
+            <h3 className="font-black text-slate-900 dark:text-white text-sm">Alternative: Cloud Sync with Investor Password</h3>
+          </div>
+          {status?.syncMethod === 'CLOUD' && status.cloudConnected ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2.5 py-1">
+              <Wifi className="h-3 w-3" /> Cloud connected
+            </span>
+          ) : (
+            <button
+              onClick={() => setCloudOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg transition"
+            >
+              {cloudOpen ? 'Cancel' : 'Use Investor Password'}
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          No EA installation needed — enter your broker login, server, and <strong>Investor (read-only) password</strong> and
+          our cloud sync connects to your account for you. The password is <strong>encrypted before storage</strong> and is never
+          stored in plaintext or shown again.
+        </p>
+
+        {cloudError && (
+          <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs font-semibold rounded-xl px-4 py-3">
+            <AlertTriangle className="h-4 w-4 shrink-0" /> {cloudError}
+          </div>
+        )}
+
+        {status?.syncMethod === 'CLOUD' && status.cloudConnected ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Sync Method</div>
+                <div className="text-sm font-black text-slate-800 dark:text-white">Cloud</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">MT5 Login</div>
+                <div className="text-sm font-black text-slate-800 dark:text-white truncate">{status.terminalLogin || account.eaTerminalLogin || '—'}</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Server</div>
+                <div className="text-sm font-black text-slate-800 dark:text-white truncate">{status.terminalServer || account.eaTerminalServer || '—'}</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Status</div>
+                <div className="text-sm font-black text-slate-800 dark:text-white">{status.status}</div>
+              </div>
+            </div>
+            {status.connectJobs && status.connectJobs.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {status.connectJobs.map((j) => (
+                  <div key={j.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-3 py-1.5 text-xs">
+                    <span className="font-black text-slate-700 dark:text-slate-200">{j.action}</span>
+                    <span className="text-slate-500">{j.status}</span>
+                    {j.lastError && <span className="text-rose-500 font-bold">{j.lastError}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCloudDisconnect}
+                disabled={cloudBusy}
+                className="inline-flex items-center gap-1.5 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-600 dark:text-rose-300 text-xs font-bold px-4 py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {cloudBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+                Disconnect Cloud Sync
+              </button>
+            </div>
+          </div>
+        ) : cloudOpen ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleCloudConnect(); }}
+            className="space-y-3"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5" htmlFor="cloudLogin">MT5 Login</label>
+                <input
+                  id="cloudLogin"
+                  type="text"
+                  value={cloudLogin}
+                  onChange={(e) => setCloudLogin(e.target.value)}
+                  required
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="e.g. 51012345"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-xs px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5" htmlFor="cloudServer">Broker Server</label>
+                <input
+                  id="cloudServer"
+                  type="text"
+                  value={cloudServer}
+                  onChange={(e) => setCloudServer(e.target.value)}
+                  required
+                  autoComplete="off"
+                  placeholder="e.g. ICMarkets-Demo"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-xs px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5" htmlFor="cloudPassword">Investor Password</label>
+              <input
+                id="cloudPassword"
+                type="password"
+                value={cloudPassword}
+                onChange={(e) => setCloudPassword(e.target.value)}
+                required
+                autoComplete="off"
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-xs px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/40"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={cloudBusy}
+              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-bold px-4 py-2.5 rounded-xl transition disabled:opacity-50"
+            >
+              {cloudBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {cloudBusy ? 'Connecting…' : 'Connect Cloud Sync'}
+            </button>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-500" />
+              <span>
+                Your Investor Password is encrypted with AES-256-GCM the moment you submit, never logged, and is only used
+                to establish the read-only connection. <strong className="text-slate-600 dark:text-slate-300">Use your Investor
+                password (read-only) — never your main trading password.</strong>
+              </span>
+            </div>
+          </form>
+        ) : null}
       </div>
 
       {/* Live sync status */}

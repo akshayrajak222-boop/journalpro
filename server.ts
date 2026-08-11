@@ -662,6 +662,87 @@ function addEaDeal(db: any, account: any, deal: any, userId: string | undefined)
   if (db.mt5DealsV2.length > 20000) db.mt5DealsV2 = db.mt5DealsV2.slice(-20000);
 }
 
+// ---- Cloud (investor-password) credential helpers ----------------------
+// The investor password is ONLY used by the cloud bridge path and is never
+// stored in plaintext. It is encrypted with AES-256-GCM under a random DEK;
+// the DEK is then wrapped (envelope) with a master key from the environment.
+// Everything is packed into `investorPasswordEnc` so the schema's three
+// columns remain sufficient.
+
+function cloudMasterKey(): Buffer | null {
+  const raw = process.env.MT5_CREDENTIAL_MASTER_KEY?.trim();
+  if (!raw) return null;
+  const hex = raw.length === 64 ? raw : sha256Hex(raw);
+  return Buffer.from(hex, 'hex');
+}
+
+function encryptInvestorPassword(plaintext: string): { enc: string; keyId: string } | null {
+  const master = cloudMasterKey();
+  if (!master) return null;
+  const dek = crypto.randomBytes(32);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', dek, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const wrapIv = crypto.randomBytes(12);
+  const wc = crypto.createCipheriv('aes-256-gcm', master, wrapIv);
+  const wct = Buffer.concat([wc.update(dek), wc.final()]);
+  const wt = wc.getAuthTag();
+  // layout: iv(12) + tag(16) + wrapIv(12) + wrapTag(16) + wrappedDEK(32) + ct
+  const payload = Buffer.concat([iv, tag, wrapIv, wt, wct, ct]);
+  const keyId = 'env:' + sha256Hex(master.toString('hex')).slice(0, 8);
+  return { enc: payload.toString('base64'), keyId };
+}
+
+function decryptInvestorPassword(account: any): string | null {
+  try {
+    const encB64 = account.investorPasswordEnc;
+    if (!encB64) return null;
+    const master = cloudMasterKey();
+    if (!master) return null;
+    const payload = Buffer.from(encB64, 'base64');
+    const iv = payload.subarray(0, 12);
+    const tag = payload.subarray(12, 28);
+    const wrapIv = payload.subarray(28, 40);
+    const wrapTag = payload.subarray(40, 56);
+    const wct = payload.subarray(56, 88);
+    const ct = payload.subarray(88);
+    const wd = crypto.createDecipheriv('aes-256-gcm', master, wrapIv);
+    wd.setAuthTag(wrapTag);
+    const dek = Buffer.concat([wd.update(wct), wd.final()]);
+    const d = crypto.createDecipheriv('aes-256-gcm', dek, iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(ct), d.final()]).toString('utf8');
+  } catch (e: any) {
+    console.error('[Cloud] decryptInvestorPassword failed:', e?.message || e);
+    return null;
+  }
+}
+
+function clearInvestorPassword(account: any) {
+  delete account.investorPasswordEnc;
+  delete account.passwordEncNonce;
+  delete account.passwordKmsKeyId;
+}
+
+// Append a PENDING connect job for the cloud/VPS worker queue
+function enqueueConnectJob(db: any, account: any, action: string): string {
+  if (!Array.isArray(db.mt5ConnectJobs)) db.mt5ConnectJobs = [];
+  const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+  db.mt5ConnectJobs.push({
+    id: jobId,
+    accountId: account.id,
+    userId: db.users?.[0]?.id,
+    action,
+    status: 'PENDING',
+    attempts: 0,
+    payload: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  return jobId;
+}
+
 // Strict payload schemas for EA endpoints (unknown fields rejected via .strict())
 const finiteNumber = () => z.number().finite();
 const positiveInt = () => z.number().int().positive();
@@ -781,6 +862,18 @@ const EaErrorSchema = z.object({
   message: boundedString(500).optional(),
   terminal: boundedString(200).optional(),
   ...legacyTokenField
+}).strict();
+
+// Cloud bridge (investor password) endpoints — user-authenticated
+const CloudConnectSchema = z.object({
+  accountId: boundedString(64),
+  login: boundedString(24).regex(/^\d{1,12}$/, 'MT5 login must be numeric'),
+  server: boundedString(64),
+  investorPassword: boundedString(256).min(1, 'Investor password is required')
+}).strict();
+
+const CloudDisconnectSchema = z.object({
+  accountId: boundedString(64)
 }).strict();
 
 // Parse and validate an EA body against a schema; on failure reply 400 and return null
@@ -1331,6 +1424,24 @@ async function saveDatabase(
       }));
       const { error: connErr } = await supabase.from('mt5_connection_errors').insert(errRows);
       if (connErr) console.error('[saveDatabase] mt5_connection_errors insert error:', connErr);
+    }
+    // Cloud/VPS connect jobs (upsert so worker status updates persist)
+    if (data.mt5ConnectJobs && data.mt5ConnectJobs.length > 0) {
+      const jobRows = data.mt5ConnectJobs.map((j: any) => ({
+        id: j.id,
+        account_id: j.accountId,
+        user_id: j.userId || uid,
+        action: j.action,
+        payload: j.payload || null,
+        status: j.status || 'PENDING',
+        attempts: j.attempts || 0,
+        worker_id: j.workerId || null,
+        last_error: j.lastError || null,
+        claimed_at: j.claimedAt || null,
+        updated_at: j.updatedAt || j.createdAt
+      }));
+      const { error: jobErr } = await supabase.from('mt5_connect_jobs').upsert(jobRows, { onConflict: 'id' });
+      if (jobErr) console.error('[saveDatabase] mt5_connect_jobs upsert error:', jobErr);
     }
   } catch(err) {
     console.error('[AxyFx SQL Save Error]', err);
@@ -3213,11 +3324,17 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     const snapshots = Array.isArray(db.mt5Snapshots)
       ? db.mt5Snapshots.filter((s: any) => s.accountId === account.id).slice(-500)
       : [];
+    const connectJobs = Array.isArray(db.mt5ConnectJobs)
+      ? db.mt5ConnectJobs.filter((j: any) => j.accountId === account.id).slice(-5)
+      : [];
 
     res.json({
       accountId: account.id,
       status: account.connectionStatus || account.eaStatus || 'Not Connected',
       eaStatus: account.eaStatus || 'Not Connected',
+      syncMethod: account.syncMethod || 'EA',
+      cloudConnected: !!account.investorPasswordEnc,
+      connectJobs,
       lastSyncTime: account.eaLastSyncTime || null,
       lastHeartbeatAt: account.lastHeartbeatAt || null,
       lastDealId: account.eaLastDealId || 0,
@@ -3233,6 +3350,73 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       lastErrors,
       snapshots
     });
+  });
+
+  // User-facing cloud connect: validate + encrypt the investor password and
+  // enqueue a CONNECT job for the cloud/VPS worker. The raw password is never
+  // stored — only the AES-256-GCM envelope. Fails closed if no master key is
+  // configured (no plaintext fallback).
+  // NOTE: registered before the /api/mt5/:accountId/... routes so `cloud` is
+  // never captured as an accountId.
+  app.post('/api/mt5/cloud/connect', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const body = validateEaBody(res, CloudConnectSchema, req.body || {});
+    if (!body) return;
+
+    const account = db.accounts.find((a: any) => a.id === body.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    const enc = encryptInvestorPassword(body.investorPassword);
+    if (!enc) {
+      return res.status(503).json({
+        error: 'Cloud sync is not configured on this deployment yet. Use the EA method instead.',
+        code: 'CLOUD_NOT_CONFIGURED'
+      });
+    }
+
+    account.investorPasswordEnc = enc.enc;
+    account.passwordEncNonce = '';
+    account.passwordKmsKeyId = enc.keyId;
+    account.mt5Login = body.login;
+    account.mt5Server = body.server;
+    account.syncMethod = 'CLOUD';
+    account.connectionStatus = 'Validating';
+    account.lastHeartbeatAt = undefined;
+    account.eaStatus = 'Not Connected';
+
+    const jobId = enqueueConnectJob(db, account, 'CONNECT');
+    logEaEvent(db, account, 'CLOUD_CONNECT_REQUESTED', 'info', 'Cloud connect requested; investor password stored encrypted');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, jobId, syncMethod: 'CLOUD', status: 'Validating' });
+  });
+
+  // User-facing cloud disconnect: remove the encrypted credential + enqueue DISCONNECT
+  app.post('/api/mt5/cloud/disconnect', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const body = validateEaBody(res, CloudDisconnectSchema, req.body || {});
+    if (!body) return;
+
+    const account = db.accounts.find((a: any) => a.id === body.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    clearInvestorPassword(account);
+    account.syncMethod = 'EA';
+    account.connectionStatus = 'Disconnected';
+    account.lastHeartbeatAt = undefined;
+    account.disconnectedAt = new Date().toISOString();
+
+    enqueueConnectJob(db, account, 'DISCONNECT');
+    logEaEvent(db, account, 'CLOUD_DISCONNECT', 'warn', 'Cloud sync disconnected; encrypted credentials removed');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, status: 'Disconnected' });
   });
 
   // User-facing disconnect: revoke the EA token and mark the account disconnected
