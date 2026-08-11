@@ -39,7 +39,7 @@ html {
 }
 
 .ticker-track {
-  animation: ticker-scroll 32s linear infinite;
+  animation: ticker-scroll 60s linear infinite;
   will-change: transform;
 }
 .ticker-track:hover { animation-play-state: paused; }

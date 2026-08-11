@@ -97,6 +97,9 @@ interface MT5ConnectJob {
   action: string;
   status: string;
   attempts?: number;
+  statusMessage?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
   lastError?: string | null;
   updatedAt?: string;
 }
@@ -107,6 +110,7 @@ interface MT5Status {
   eaStatus: string;
   syncMethod: string;
   cloudConnected: boolean;
+  workerConfigured?: boolean;
   connectJobs: MT5ConnectJob[];
   lastSyncTime: string | null;
   lastHeartbeatAt: string | null;
@@ -148,7 +152,18 @@ const ERROR_COPY: Record<string, string> = {
   MT5_OFFLINE: 'MT5 is not connected to the broker. Reconnect MT5 and keep the EA attached to a chart.',
   E_CONNECTION_LOST: 'MT5 cannot reach the server. Check the WebRequest allow-list and your internet connection.',
   CLOUD_NOT_CONFIGURED: 'Cloud sync (investor password) is not configured on this deployment yet. Use the EA method instead.',
-  INVALID_PASSWORD: 'The investor password was rejected. Check it and try again.'
+  CLOUD_WORKER_UNAVAILABLE: 'Cloud sync has no broker worker connected (META_API_TOKEN is missing on the server). Use the EA method, which needs no extra setup.',
+  INVALID_PASSWORD: 'The investor password was rejected. Check it and try again.',
+  E_AUTH: 'The investor password was rejected by the broker. Use the read-only Investor password (not your main password) and check the broker server name.',
+  E_SRV_NOT_FOUND: 'The broker server could not be found. Check the exact server name shown in MetaTrader (Help → About).',
+  E_SERVER_TIMEZONE: 'The broker server timezone could not be detected. Cloud provisioning may need manual setup in the MetaApi dashboard.',
+  E_RESOURCE_SLOTS: 'The MetaApi plan has no free resource slots left. Free up a slot in the MetaApi dashboard, then reconnect.',
+  E_MAIN_SERVERS: 'The cloud terminal could not reach the broker. Wait a minute and try again.',
+  E_ACCOUNT_NOT_FOUND: 'The MetaTrader account was not found on this broker. Double-check the login number and server.',
+  CLOUD_TIMEOUT: 'Cloud sync timed out while connecting. Starting the cloud terminal can take a few minutes — try again.',
+  CLOUD_SYNC_FAILED: 'Cloud sync hit an unexpected error. Please try again in a minute.',
+  CLOUD_SYNC_LOST: 'The cloud connection was lost. Reconnect to re-provision the terminal.',
+  CLOUD_CREDENTIALS: 'The stored investor credentials could not be decrypted. Reconnect to re-enter the password.'
 };
 
 function timeAgo(iso?: string | null): string {
@@ -468,6 +483,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
             : 'text-indigo-600 dark:text-indigo-400';
 
   const latestError = (status?.lastErrors || []).filter((e) => !e.resolvedAt)[0];
+  const latestCloudJob = (status?.connectJobs || []).filter((j) => j.action === 'CONNECT').slice(-1)[0];
 
   const currency = status?.moneyFlows?.[0]?.currency || account.currency || 'USD';
   const totalDeposits = (status?.moneyFlows || [])
@@ -528,7 +544,18 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
       </div>
 
       {/* Connection state banner */}
-      {phase === 'Validating' && (
+      {phase === 'Validating' && status?.syncMethod === 'CLOUD' && status.cloudConnected && (
+        <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-xl px-4 py-3">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <div className="flex-1">
+            {latestCloudJob?.statusMessage || 'Provisioning your cloud terminal… this can take a few minutes. The page refreshes automatically.'}
+          </div>
+          {!status.workerConfigured && (
+            <span className="shrink-0 font-mono text-[10px] opacity-80">worker offline</span>
+          )}
+        </div>
+      )}
+      {phase === 'Validating' && !(status?.syncMethod === 'CLOUD' && status.cloudConnected) && (
         <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-xl px-4 py-3">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
           <div>
@@ -794,8 +821,13 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
                 {status.connectJobs.map((j) => (
                   <div key={j.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-3 py-1.5 text-xs">
                     <span className="font-black text-slate-700 dark:text-slate-200">{j.action}</span>
-                    <span className="text-slate-500">{j.status}</span>
-                    {j.lastError && <span className="text-rose-500 font-bold">{j.lastError}</span>}
+                    <span className={`font-bold ${j.status === 'FAILED' ? 'text-rose-500' : j.status === 'CONNECTED' || j.status === 'DONE' ? 'text-emerald-600' : 'text-indigo-500'}`}>{j.status}</span>
+                    {j.statusMessage && <span className="text-slate-500">{j.statusMessage}</span>}
+                    {(j.errorCode || j.errorMessage) && (
+                      <span className="text-rose-500 font-bold" title={j.errorMessage || ''}>
+                        {j.errorCode || 'error'}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
