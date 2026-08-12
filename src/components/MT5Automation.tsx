@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   Plus,
   Copy,
-  FileCode2
+  FileCode2,
+  Play,
+  X
 } from 'lucide-react';
 import { TradingAccount } from '../types';
 
@@ -42,6 +44,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
   const [eaCopied, setEaCopied] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
 
   const host = typeof window !== 'undefined' ? window.location.host : 'www.fxjournalpro.com';
   const apiUrl = `${window.location.protocol}//${host}/api/mt5`;
@@ -194,6 +197,32 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
         </div>
       )}
 
+      {/* Tutorial Video Section (Compact Preview) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 flex flex-col sm:flex-row items-center gap-6">
+        <div 
+          onClick={() => setShowVideo(true)}
+          className="relative w-full sm:w-[400px] aspect-video rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 cursor-pointer group shrink-0"
+        >
+          <img 
+            src="https://img.youtube.com/vi/iZR4SxV2Uls/maxresdefault.jpg" 
+            alt="Video Thumbnail" 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+            <div className="h-12 w-12 rounded-full bg-white text-indigo-600 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+              <Play className="h-5 w-5 ml-1" />
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2 text-center sm:text-left">
+          <h3 className="font-black text-slate-900 dark:text-white text-lg">How to Connect MT5 with EA</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 font-medium leading-relaxed">
+            Follow this step-by-step video to connect your MT5 account with the FX Journal Pro EA and start syncing your trades automatically.
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Left: EA setup */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
@@ -299,6 +328,34 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
           </div>
         </div>
       </div>
+
+      {/* Video Modal */}
+      {showVideo && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"
+            onClick={() => setShowVideo(false)}
+          ></div>
+          <div className="relative z-10 w-full max-w-5xl bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/10">
+            <button 
+              onClick={() => setShowVideo(false)}
+              className="absolute top-4 right-4 z-20 h-10 w-10 bg-black/50 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors border border-white/20"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="w-full aspect-video bg-black">
+              <iframe 
+                className="w-full h-full"
+                src="https://www.youtube.com/embed/iZR4SxV2Uls?autoplay=1" 
+                title="How to Connect MT5 with EA"
+                frameBorder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                allowFullScreen
+              ></iframe>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
