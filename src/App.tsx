@@ -187,6 +187,8 @@ export default function App() {
   const [tradeEmotion, setTradeEmotion] = useState<'Calm' | 'Excited' | 'Anxious' | 'FOMO' | 'Greedy' | 'Revenge'>('Calm');
   const [tradeNotes, setTradeNotes] = useState('');
   const [showNoteField, setShowNoteField] = useState(false);
+  const [showStrategyField, setShowStrategyField] = useState(false);
+  const [showEmotionField, setShowEmotionField] = useState(false);
   const [tradeScreenshot, setTradeScreenshot] = useState('');
   const [tradeTags, setTradeTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
@@ -1175,6 +1177,8 @@ export default function App() {
       setTradeEmotion(trade.emotion || 'Calm');
       setTradeNotes(trade.notes || '');
       setShowNoteField(!!(trade.notes && trade.notes.trim().length > 0));
+      setShowStrategyField(!!(trade.strategy && trade.strategy.trim().length > 0 && trade.strategy !== 'Unspecified'));
+      setShowEmotionField(!!(trade.emotion && trade.emotion !== 'Calm'));
       setTradeScreenshot(trade.screenshot || '');
       setTradeTags(trade.tags || []);
     } else {
@@ -1195,6 +1199,8 @@ export default function App() {
       setTradeEmotion('Calm');
       setTradeNotes('');
       setShowNoteField(false);
+      setShowStrategyField(false);
+      setShowEmotionField(false);
       setTradeScreenshot('');
       setTradeTags([]);
     }
@@ -5523,30 +5529,105 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Optional Note — collapsible */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowNoteField(prev => !prev)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors duration-200 group"
-                >
-                  <span className={`w-5 h-5 rounded-full border border-slate-200 group-hover:border-indigo-400 flex items-center justify-center transition-all duration-200 ${showNoteField ? 'bg-indigo-600 border-indigo-600 text-white rotate-45' : 'bg-white text-slate-400'}`}>
-                    <Plus className="h-3 w-3" />
-                  </span>
-                  {showNoteField ? 'Remove note' : 'Add a note'}
-                </button>
+              {/* Optional extras — Strategy, Emotion, Note */}
+              <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100">
 
-                {showNoteField && (
-                  <div className="mt-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <textarea
-                      rows={3}
-                      value={tradeNotes}
-                      onChange={(e) => setTradeNotes(e.target.value)}
-                      placeholder="Any thoughts, observations, or lessons from this trade..."
-                      className="bg-slate-50/80 border border-slate-200 text-sm text-slate-700 rounded-xl p-3 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none placeholder:text-slate-400"
-                    />
-                  </div>
-                )}
+                {/* Strategy */}
+                <div className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowStrategyField(prev => !prev)}
+                    className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors duration-200 group w-full text-left"
+                  >
+                    <span className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-200 flex-shrink-0 ${
+                      showStrategyField ? 'bg-indigo-600 border-indigo-600 text-white rotate-45' : 'border-slate-200 group-hover:border-indigo-400 bg-white text-slate-400'
+                    }`}>
+                      <Plus className="h-3 w-3" />
+                    </span>
+                    <span>{showStrategyField ? 'Remove strategy' : 'Add strategy'}</span>
+                    {showStrategyField && tradeStrategy && tradeStrategy !== 'Order Block Rejection' && (
+                      <span className="ml-auto text-indigo-500 font-semibold truncate max-w-[120px]">{tradeStrategy}</span>
+                    )}
+                  </button>
+                  {showStrategyField && (
+                    <div className="mt-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <input
+                        type="text"
+                        value={tradeStrategy}
+                        onChange={(e) => setTradeStrategy(e.target.value)}
+                        placeholder="e.g. Order Block, Breakout, Trend Follow…"
+                        className="bg-slate-50/80 border border-slate-200 text-sm text-slate-700 rounded-xl p-2.5 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Emotion */}
+                <div className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEmotionField(prev => !prev)}
+                    className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors duration-200 group w-full text-left"
+                  >
+                    <span className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-200 flex-shrink-0 ${
+                      showEmotionField ? 'bg-indigo-600 border-indigo-600 text-white rotate-45' : 'border-slate-200 group-hover:border-indigo-400 bg-white text-slate-400'
+                    }`}>
+                      <Plus className="h-3 w-3" />
+                    </span>
+                    <span>{showEmotionField ? 'Remove emotion' : 'Add emotion / mindset'}</span>
+                    {showEmotionField && (
+                      <span className="ml-auto text-indigo-500 font-semibold">{tradeEmotion}</span>
+                    )}
+                  </button>
+                  {showEmotionField && (
+                    <div className="mt-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex flex-wrap gap-2">
+                        {(['Calm', 'Excited', 'Anxious', 'FOMO', 'Greedy', 'Revenge'] as const).map(e => (
+                          <button
+                            key={e}
+                            type="button"
+                            onClick={() => setTradeEmotion(e)}
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-150 ${
+                              tradeEmotion === e
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600'
+                            }`}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Note */}
+                <div className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowNoteField(prev => !prev)}
+                    className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors duration-200 group w-full text-left"
+                  >
+                    <span className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-200 flex-shrink-0 ${
+                      showNoteField ? 'bg-indigo-600 border-indigo-600 text-white rotate-45' : 'border-slate-200 group-hover:border-indigo-400 bg-white text-slate-400'
+                    }`}>
+                      <Plus className="h-3 w-3" />
+                    </span>
+                    <span>{showNoteField ? 'Remove note' : 'Add a note'}</span>
+                  </button>
+                  {showNoteField && (
+                    <div className="mt-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <textarea
+                        rows={3}
+                        value={tradeNotes}
+                        onChange={(e) => setTradeNotes(e.target.value)}
+                        placeholder="Any thoughts, observations, or lessons from this trade…"
+                        className="bg-slate-50/80 border border-slate-200 text-sm text-slate-700 rounded-xl p-3 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none placeholder:text-slate-400"
+                      />
+                    </div>
+                  )}
+                </div>
+
               </div>
 
               {/* Action Button */}
