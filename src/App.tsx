@@ -187,6 +187,8 @@ export default function App() {
   const [tradeEmotion, setTradeEmotion] = useState<'Calm' | 'Excited' | 'Anxious' | 'FOMO' | 'Greedy' | 'Revenge'>('Calm');
   const [tradeNotes, setTradeNotes] = useState('');
   const [showNoteField, setShowNoteField] = useState(false);
+  const [showEmotionField, setShowEmotionField] = useState(false);
+  const [showStrategyField, setShowStrategyField] = useState(false);
   const [tradeScreenshot, setTradeScreenshot] = useState('');
   const [tradeTags, setTradeTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
@@ -1175,6 +1177,8 @@ export default function App() {
       setTradeEmotion(trade.emotion || 'Calm');
       setTradeNotes(trade.notes || '');
       setShowNoteField(!!(trade.notes && trade.notes.trim().length > 0));
+      setShowEmotionField(!!(trade.emotion && trade.emotion !== 'Calm'));
+      setShowStrategyField(!!(trade.strategy && trade.strategy.trim().length > 0 && trade.strategy !== 'Unspecified'));
       setTradeScreenshot(trade.screenshot || '');
       setTradeTags(trade.tags || []);
     } else {
@@ -1195,6 +1199,8 @@ export default function App() {
       setTradeEmotion('Calm');
       setTradeNotes('');
       setShowNoteField(false);
+      setShowEmotionField(false);
+      setShowStrategyField(false);
       setTradeScreenshot('');
       setTradeTags([]);
     }
@@ -3522,7 +3528,6 @@ export default function App() {
                       <th className="py-3">Lot Size</th>
                       <th className="py-3">Entry & Exit Price</th>
                       <th className="py-3">Emotion State</th>
-                      <th className="py-3">Strategy Framework</th>
                       <th className="py-3">Net Profit</th>
                       <th className="py-3 text-right pr-4">Action</th>
                     </tr>
@@ -3559,7 +3564,6 @@ export default function App() {
                             {t.emotion || 'Calm'}
                           </span>
                         </td>
-                        <td className="py-3 text-slate-600">{t.strategy || 'Unspecified'}</td>
                         <td className="py-3">
                           <span className={`font-extrabold ${t.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {t.profit >= 0 ? '+' : ''}{formatValue(t.profit)}
@@ -5523,30 +5527,78 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Optional Note — collapsible */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowNoteField(prev => !prev)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors duration-200 group"
-                >
-                  <span className={`w-5 h-5 rounded-full border border-slate-200 group-hover:border-indigo-400 flex items-center justify-center transition-all duration-200 ${showNoteField ? 'bg-indigo-600 border-indigo-600 text-white rotate-45' : 'bg-white text-slate-400'}`}>
-                    <Plus className="h-3 w-3" />
-                  </span>
-                  {showNoteField ? 'Remove note' : 'Add a note'}
-                </button>
+              {/* Optional extras — horizontal chip row */}
+              <div className="space-y-3">
 
+                {/* Toggle chips row */}
+                <div className="flex items-center gap-2 flex-wrap">
+
+                  {/* + Note */}
+                  <button
+                    type="button"
+                    onClick={() => setShowNoteField(prev => !prev)}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-200 ${
+                      showNoteField
+                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-400 hover:text-indigo-600'
+                    }`}
+                  >
+                    <Plus className={`h-3 w-3 transition-transform duration-200 ${showNoteField ? 'rotate-45' : ''}`} />
+                    Note
+                  </button>
+
+                  {/* + Emotion */}
+                  <button
+                    type="button"
+                    onClick={() => setShowEmotionField(prev => !prev)}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-200 ${
+                      showEmotionField
+                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-400 hover:text-indigo-600'
+                    }`}
+                  >
+                    <Plus className={`h-3 w-3 transition-transform duration-200 ${showEmotionField ? 'rotate-45' : ''}`} />
+                    Emotion
+                    {showEmotionField && <span className="opacity-70 font-normal">· {tradeEmotion}</span>}
+                  </button>
+
+                </div>
+
+                {/* Expanded: Note */}
                 {showNoteField && (
-                  <div className="mt-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                     <textarea
                       rows={3}
                       value={tradeNotes}
                       onChange={(e) => setTradeNotes(e.target.value)}
-                      placeholder="Any thoughts, observations, or lessons from this trade..."
+                      placeholder="Any thoughts, observations, or lessons from this trade…"
                       className="bg-slate-50/80 border border-slate-200 text-sm text-slate-700 rounded-xl p-3 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none placeholder:text-slate-400"
                     />
                   </div>
                 )}
+
+                {/* Expanded: Emotion */}
+                {showEmotionField && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex flex-wrap gap-2">
+                      {(['Calm', 'Excited', 'Anxious', 'FOMO', 'Greedy', 'Revenge'] as const).map(e => (
+                        <button
+                          key={e}
+                          type="button"
+                          onClick={() => setTradeEmotion(e)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-150 ${
+                            tradeEmotion === e
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600'
+                          }`}
+                        >
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* Action Button */}
