@@ -23,7 +23,10 @@ import {
   Landmark,
   Play,
   X,
-  Crown
+  Crown,
+  Eye,
+  Bot,
+  Info
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -228,6 +231,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [showVideo, setShowVideo] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'ea' | 'investor'>('ea');
 
   useEffect(() => {
@@ -650,31 +654,52 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
           </div>
         </div>
       )}
-      {/* Tabs */}
-      <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl max-w-md mx-auto mb-6">
-        <button
-          onClick={() => setActiveTab('investor')}
-          className={`flex-1 py-2 text-center text-xs font-black rounded-lg transition-all ${
-            activeTab === 'investor'
-              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          <span className="inline-flex items-center gap-1.5 justify-center">
-            <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500/10 shrink-0" />
-            Investor Password Method
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('ea')}
-          className={`flex-1 py-2 text-center text-xs font-black rounded-lg transition-all ${
-            activeTab === 'ea'
-              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          MT5 EA Method
-        </button>
+      {/* Method Selection Cards */}
+      <div className="space-y-4 mb-8">
+        <h3 className="text-center font-black text-slate-900 dark:text-white text-base tracking-tight">
+          Choose Your MT5 Connection Method
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+          {/* Card 1: Investor Password */}
+          <div
+            onClick={() => setActiveTab('investor')}
+            className={`cursor-pointer rounded-2xl border p-5 flex items-center gap-4 transition-all duration-200 ${
+              activeTab === 'investor'
+                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-600/20'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50'
+            }`}
+          >
+            <div className="h-10 w-10 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+              <Eye className="h-5 w-5" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-black text-slate-900 dark:text-white text-sm">
+                Investor Password
+              </h4>
+              <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500/10 shrink-0" />
+            </div>
+          </div>
+
+          {/* Card 2: MT5 EA */}
+          <div
+            onClick={() => setActiveTab('ea')}
+            className={`cursor-pointer rounded-2xl border p-5 flex items-center gap-4 transition-all duration-200 ${
+              activeTab === 'ea'
+                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-600/20'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50'
+            }`}
+          >
+            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 flex items-center justify-center shrink-0">
+              <Bot className="h-5 w-5" />
+            </div>
+            <h4 className="font-black text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
+              MT5 EA
+              <span className="font-bold text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/10">
+                FREE
+              </span>
+            </h4>
+          </div>
+        </div>
       </div>
 
       {activeTab === 'ea' && (
@@ -822,13 +847,8 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               </div>
             </li>
           </ol>
-          <div className="mt-5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-            Keep this EA attached to a chart (any symbol/timeframe) to keep the sync running. It never places trades —
-            it only reads your history and reports it to your journal. <strong className="text-slate-600 dark:text-slate-300">(Read-only disclaimer 2 of 2)</strong>
           </div>
         </div>
-      </div>
         </>
       )}
 
@@ -837,19 +857,12 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-slate-500" />
-            <h3 className="font-black text-slate-900 dark:text-white text-sm">Alternative: Cloud Sync with Investor Password</h3>
+            <h3 className="font-black text-slate-900 dark:text-white text-sm">Cloud Sync with Investor Password</h3>
           </div>
-          {status?.syncMethod === 'CLOUD' && status.cloudConnected ? (
+          {status?.syncMethod === 'CLOUD' && status.cloudConnected && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2.5 py-1">
               <Wifi className="h-3 w-3" /> Cloud connected
             </span>
-          ) : (
-            <button
-              onClick={() => setCloudOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg transition"
-            >
-              {cloudOpen ? 'Cancel' : 'Use Investor Password'}
-            </button>
           )}
         </div>
 
@@ -912,7 +925,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               </button>
             </div>
           </div>
-        ) : cloudOpen ? (
+        ) : (
           <form
             onSubmit={(e) => { e.preventDefault(); handleCloudConnect(); }}
             className="space-y-3"
@@ -947,7 +960,17 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               </div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5" htmlFor="cloudPassword">Investor Password</label>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400" htmlFor="cloudPassword">Investor Password</label>
+                <button
+                  type="button"
+                  onClick={() => setShowInfoModal(true)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition shrink-0"
+                  title="How to find Investor Password"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <input
                 id="cloudPassword"
                 type="password"
@@ -976,7 +999,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               </span>
             </div>
           </form>
-        ) : null}
+        )}
       </div>
       )}
 
@@ -1202,6 +1225,56 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                 allowFullScreen
               ></iframe>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Investor Password Info Modal */}
+      {showInfoModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"
+            onClick={() => setShowInfoModal(false)}
+          ></div>
+          <div className="relative z-10 w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <button 
+              onClick={() => setShowInfoModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition"
+              title="Close modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="space-y-4">
+              <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 dark:text-white text-base">How to Find Your MT5 Investor Password</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  An Investor Password provides read-only access to your account. Here is how to find or reset it in MetaTrader 5:
+                </p>
+              </div>
+              <ol className="space-y-3 text-xs text-slate-600 dark:text-slate-300 list-decimal pl-4 leading-relaxed">
+                <li>
+                  Open <strong>MetaTrader 5</strong> and log in to your account.
+                </li>
+                <li>
+                  Go to the <strong>Navigator</strong> window (usually on the left side).
+                </li>
+                <li>
+                  Right-click your account number and select <strong>Change Password</strong>.
+                </li>
+                <li>
+                  Choose <strong>Change investor (read-only) password</strong>.
+                </li>
+                <li>
+                  Enter your current main password, then set and confirm your new investor password.
+                </li>
+              </ol>
+              <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-300 p-3 rounded-xl text-[11px] font-medium leading-relaxed">
+                <strong>Security Notice:</strong> Always use your investor password. Never enter your main trading password to protect your funds.
+              </div>
             </div>
           </div>
         </div>
