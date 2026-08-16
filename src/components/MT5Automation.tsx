@@ -22,7 +22,8 @@ import {
   TrendingUp,
   Landmark,
   Play,
-  X
+  X,
+  Crown
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -227,6 +228,15 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [showVideo, setShowVideo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'ea' | 'investor'>('ea');
+
+  useEffect(() => {
+    if (status?.syncMethod === 'CLOUD') {
+      setActiveTab('investor');
+    } else if (status?.syncMethod === 'EA') {
+      setActiveTab('ea');
+    }
+  }, [status?.syncMethod]);
 
   const host = typeof window !== 'undefined' ? window.location.host : 'www.fxjournalpro.com';
   const apiUrl = `${window.location.protocol}//${host}/api/mt5`;
@@ -640,8 +650,36 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
           </div>
         </div>
       )}
+      {/* Tabs */}
+      <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl max-w-md mx-auto mb-6">
+        <button
+          onClick={() => setActiveTab('investor')}
+          className={`flex-1 py-2 text-center text-xs font-black rounded-lg transition-all ${
+            activeTab === 'investor'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <span className="inline-flex items-center gap-1.5 justify-center">
+            <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500/10 shrink-0" />
+            Investor Password Method
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('ea')}
+          className={`flex-1 py-2 text-center text-xs font-black rounded-lg transition-all ${
+            activeTab === 'ea'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          MT5 EA Method
+        </button>
+      </div>
 
-      {/* Tutorial Video Section (Compact Preview) */}
+      {activeTab === 'ea' && (
+        <>
+          {/* Tutorial Video Section (Compact Preview) */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 flex flex-col sm:flex-row items-center gap-6">
         <div 
           onClick={() => setShowVideo(true)}
@@ -791,9 +829,11 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
           </div>
         </div>
       </div>
+        </>
+      )}
 
-      {/* Cloud sync (investor password) */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+      {activeTab === 'investor' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-slate-500" />
@@ -938,6 +978,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
           </form>
         ) : null}
       </div>
+      )}
 
       {/* Live sync status */}
       {(connected || status?.lastSyncTime) && status && (
