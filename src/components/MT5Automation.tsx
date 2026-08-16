@@ -792,7 +792,6 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
         </div>
       </div>
 
-<<<<<<< HEAD
       {/* Cloud sync (investor password) */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
@@ -1164,8 +1163,6 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
               ></iframe>
             </div>
           </div>
-        </div>
-      )}
         </div>
       )}
     </div>
