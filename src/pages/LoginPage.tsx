@@ -376,7 +376,7 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
   const buttonPrimary = "w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold text-sm rounded-xl py-3 transition shadow-lg shadow-blue-600/20 disabled:opacity-50";
 
   return (
-    <div className="min-h-screen bg-[#060913] text-slate-200 font-sans antialiased overflow-x-hidden">
+    <div className="relative min-h-screen bg-[#060913] text-slate-200 font-sans antialiased overflow-x-hidden">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[700px] bg-blue-600/[0.08] rounded-full blur-[160px] pointer-events-none" />
       <div className="absolute top-[40%] right-[-10%] w-[500px] h-[500px] bg-violet-600/[0.05] rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute top-[60%] left-[-10%] w-[500px] h-[500px] bg-cyan-500/[0.05] rounded-full blur-[140px] pointer-events-none" />
@@ -395,8 +395,8 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
           </nav>
           <div className="flex items-center gap-3">
             <button onClick={() => openAuthModal('login')} className="hidden sm:inline-flex text-sm font-semibold text-slate-300 hover:text-white transition-colors">Sign In</button>
-            <button onClick={() => openAuthModal('register')} className="text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-full px-4 py-2 transition shadow-lg shadow-blue-600/20">
-              Get Started Free
+            <button onClick={() => openAuthModal('register')} className="text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-full px-3 py-1.5 sm:px-4 sm:py-2 transition shadow-lg shadow-blue-600/25 shrink-0">
+              Get Started<span className="hidden sm:inline"> Free</span>
             </button>
           </div>
         </div>
@@ -615,13 +615,13 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
               {[
                 { icon: RefreshCw, label: 'Auto Sync', value: 'Real-time' },
                 { icon: Layers, label: 'Accounts', value: 'Unlimited' },
                 { icon: ShieldCheck, label: 'Security', value: 'Read-only' },
               ].map((s) => (
-                <div key={s.label} className="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 text-center">
+                <div key={s.label} className="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-2.5 sm:p-4 text-center">
                   <s.icon className="h-4 w-4 text-cyan-400 mx-auto mb-2" />
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">{s.label}</p>
                   <p className="text-xs font-bold text-white mt-0.5">{s.value}</p>
@@ -971,8 +971,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
               })()}
             </div>
             {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
-            <div className="flex justify-center my-2">
-              <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+            <div className="flex justify-center my-2 w-full overflow-hidden">
+              <div className="scale-[0.85] min-[380px]:scale-100 origin-center shrink-0">
+                <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+              </div>
             </div>
             <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured)} className={buttonPrimary}>
               {actionLoading ? 'Creating Account...' : 'Create Account'}
@@ -1002,8 +1004,10 @@ export default function LoginPage({ isSupabaseConfigured, onLoginSuccess, authFe
               </div>
             </div>
             {authError && <div className="bg-red-500/10 text-red-300 text-sm rounded-xl p-3 border border-red-500/20">{authError}</div>}
-            <div className="flex justify-center my-2">
-              <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+            <div className="flex justify-center my-2 w-full overflow-hidden">
+              <div className="scale-[0.85] min-[380px]:scale-100 origin-center shrink-0">
+                <Turnstile siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} onSuccess={(token) => setTurnstileToken(token)} />
+              </div>
             </div>
             <button type="submit" disabled={actionLoading || (!turnstileToken && isSupabaseConfigured)} className={buttonPrimary}>
               {actionLoading ? 'Signing in...' : 'Sign in'}
@@ -1068,7 +1072,7 @@ function AuthModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: ()
       <div role="dialog" aria-modal="true" className="relative w-full max-w-md my-8 sm:my-0 animate-fade-up" onClick={(e) => e.stopPropagation()}>
         <div className="relative">
           <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 via-violet-600/10 to-cyan-600/20 rounded-2xl blur-xl opacity-60"></div>
-          <div className="relative bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/[0.12] rounded-2xl p-6 sm:p-7 shadow-2xl shadow-black/40">
+          <div className="relative bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/[0.12] rounded-2xl p-5 sm:p-7 shadow-2xl shadow-black/40">
             <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
             <button type="button" onClick={onClose} aria-label="Close sign in dialog" className="absolute right-4 top-4 text-slate-400 hover:text-white transition-colors">
               <X className="h-5 w-5" />

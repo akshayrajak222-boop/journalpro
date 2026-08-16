@@ -134,7 +134,7 @@ export default function FXNewsPreview() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-white/[0.08] mb-5">
+        <div className="flex items-center gap-1 border-b border-white/[0.08] mb-5 overflow-x-auto whitespace-nowrap scrollbar-none">
           {([
             { id: 'news', label: 'Latest FX News', icon: Newspaper },
             { id: 'calendar', label: 'Economic Calendar', icon: CalendarRange },
@@ -142,7 +142,7 @@ export default function FXNewsPreview() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition ${
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition shrink-0 ${
                 tab === t.id
                   ? 'border-blue-500 text-blue-400'
                   : 'border-transparent text-slate-500 hover:text-slate-300'
