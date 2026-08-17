@@ -3234,10 +3234,10 @@ export default function App() {
             <NextEventCard onOpenCalendar={openEconomicCalendar} />
 
             {/* Main Visualizations Grid */}
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="space-y-6">
               
-              {/* Equity Curve Area Chart */}
-              <div className="lg:col-span-2 bg-white border border-slate-100 rounded-xl p-6 shadow-xs">
+              {/* Equity Curve Area Chart - Widescreen Layout */}
+              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between mb-4">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">Portfolio Growth Curve</h3>
@@ -3274,119 +3274,282 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Quick Risk Auditor status inside Dashboard */}
-              <div className="lg:col-span-1 bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-sm">Portfolio Guard Rules</h3>
-                      <p className="text-[10px] text-slate-400">Drawdown status and protection systems</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePortfolioGuard(!isPortfolioGuardOn)}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full border uppercase tracking-wider cursor-pointer transition hover:opacity-80 ${
-                        isPortfolioGuardOn 
-                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
-                          : 'text-slate-600 bg-slate-100 border-slate-200 hover:bg-slate-200'
-                      }`}
-                      title={isPortfolioGuardOn ? 'Click to turn Portfolio Guard OFF' : 'Click to turn Portfolio Guard ON'}
-                    >
-                      {isPortfolioGuardOn ? 'Active' : 'Disabled'}
-                    </button>
-                  </div>
+              {/* Status Speedometers and Risk Guard Grid */}
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Risk-Reward Abstract Professional Balance Beam Card */}
+                {(() => {
+                  const rrVal = avgRR || 0;
+                  // Balanced at 1:1, right side (reward) tilts down if > 1.
+                  const maxTilt = 10; // Keep tilt subtle and sophisticated
+                  const tiltAngle = Math.min(Math.max((rrVal - 1) * 4, -maxTilt), maxTilt);
                   
-                  {isPortfolioGuardOn ? (
-                    <div className="space-y-3">
-                      {/* Daily Loss Guard */}
-                      {(() => {
-                        const limit = riskSettings?.dailyLossLimit || 500;
-                        const breached = todayLoss >= limit;
-                        return (
-                          <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
-                            breached 
-                              ? 'bg-rose-50/50 border border-rose-100' 
-                              : 'bg-emerald-50/50 border border-emerald-100'
-                          }`}>
-                            <div className={`font-bold flex items-center justify-between ${
-                              breached ? 'text-rose-950' : 'text-emerald-950'
-                            }`}>
-                              <span>Daily Loss Guard</span>
-                              <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
-                                breached 
-                                  ? 'text-rose-600 bg-white border-rose-200' 
-                                  : 'text-emerald-600 bg-white border-emerald-200'
-                              }`}>
-                                {breached ? 'Breached' : 'Active'}
-                              </span>
-                            </div>
-                            <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
-                              {breached 
-                                ? `Today's cumulative loss is ${formatValue(todayLoss)}, exceeding your limit of ${formatValue(limit)}!`
-                                : `Today's loss is ${formatValue(todayLoss)} (Limit: ${formatValue(limit)}). Safe.`
-                              }
-                            </p>
-                          </div>
-                        );
-                      })()}
+                  const angleRad = (tiltAngle * Math.PI) / 180;
+                  const pivotX = 110;
+                  const pivotY = 45;
+                  const beamHalfLength = 85;
+                  
+                  const xL = pivotX - beamHalfLength * Math.cos(angleRad);
+                  const yL = pivotY - beamHalfLength * Math.sin(angleRad);
+                  const xR = pivotX + beamHalfLength * Math.cos(angleRad);
+                  const yR = pivotY + beamHalfLength * Math.sin(angleRad);
 
-                      {/* Overtrading Scanner */}
-                      {(() => {
-                        const limit = riskSettings?.maxTradesPerDay || 5;
-                        const breached = todayTradesCount >= limit;
-                        return (
-                          <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
-                            breached 
-                              ? 'bg-rose-50/50 border border-rose-100' 
-                              : 'bg-emerald-50/50 border border-emerald-100'
-                          }`}>
-                            <div className={`font-bold flex items-center justify-between ${
-                              breached ? 'text-rose-950' : 'text-emerald-950'
-                            }`}>
-                              <span>Overtrading Scanner</span>
-                              <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
-                                breached 
-                                  ? 'text-rose-600 bg-white border-rose-200' 
-                                  : 'text-emerald-600 bg-white border-emerald-200'
-                              }`}>
-                                {breached ? 'Breached' : 'Active'}
-                              </span>
-                            </div>
-                            <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
-                              {breached 
-                                ? `Executed ${todayTradesCount} trades today, breaching your limit of ${limit}!`
-                                : `Executed ${todayTradesCount} of ${limit} maximum daily positions. Safe.`
-                              }
-                            </p>
-                          </div>
-                        );
-                      })()}
-
-                      {riskSettings && (
-                        <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg text-xs">
-                          <div className="font-bold text-blue-950">Risk-Per-Trade Cap</div>
-                          <p className="text-blue-700/80 mt-0.5">Maximum limit set to {riskSettings.riskPerTradeLimit}% per position.</p>
+                  return (
+                    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm">Risk : Reward</h3>
+                          <p className="text-[10px] text-slate-400">Average risk-to-reward ratio of executions</p>
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl text-center space-y-2 my-2">
-                      <div className="inline-flex p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 mb-1">
-                        <ShieldOff className="h-5 w-5 text-slate-400" />
+                        <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full ${
+                          rrVal < 1.0 ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                          rrVal < 1.5 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                          rrVal < 2.5 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                          'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                        }`}>
+                          {rrVal < 1.0 ? 'Low' : rrVal < 1.5 ? 'Moderate' : rrVal < 2.5 ? 'Good' : 'Excellent'}
+                        </span>
                       </div>
-                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Portfolio Guard Rules Disabled</h4>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-xs mx-auto">
-                        Portfolio guard rules and risk limits are currently disabled. Toggle ON to enable active drawdown protection and discipline limits.
-                      </p>
-                    </div>
-                  )}
-                </div>
 
-                <button onClick={() => { setActiveTab('settings'); setSettingsTab('risk'); }} className="w-full text-center py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg transition mt-4">
-                  Configure Guard Limits
-                </button>
-              </div>
-            </section>
+                      {/* Prominent Center/Top Ratio */}
+                      <div className="text-center mt-6">
+                        <span className="text-4xl font-black text-slate-800 font-mono tracking-tight">
+                          1 : {rrVal.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* SVG Professional Abstract Balance Beam Illustration */}
+                      <div className="relative w-full flex justify-center my-6 flex-1 items-center">
+                        <svg width="220" height="70" viewBox="0 0 220 70" className="overflow-visible">
+                          
+                          {/* Reference Baseline (1:1 perfect balance indication) */}
+                          <line x1="25" y1={pivotY} x2="195" y2={pivotY} className="stroke-slate-200" strokeWidth="1" strokeDasharray="3 3" />
+                          
+                          {/* Minimalist Center Pivot Base */}
+                          <path d={`M ${pivotX} ${pivotY} L ${pivotX + 6} ${pivotY + 25} L ${pivotX - 6} ${pivotY + 25} Z`} className="fill-slate-50 stroke-slate-300" strokeWidth="1" strokeLinejoin="round" />
+                          <circle cx={pivotX} cy={pivotY} r="2.5" className="fill-slate-400" />
+                          
+                          {/* Tilted Precision Beam */}
+                          <line x1={xL} y1={yL} x2={xR} y2={yR} className="stroke-slate-400" strokeWidth="1.5" strokeLinecap="round" />
+                          
+                          {/* Left Side: Risk 1R (Abstract Node) */}
+                          <circle cx={xL} cy={yL} r="5" className="fill-white stroke-rose-500" strokeWidth="2" />
+                          
+                          {/* Right Side: Reward (Abstract Node) */}
+                          <circle cx={xR} cy={yR} r="5" className="fill-white stroke-emerald-500" strokeWidth="2" />
+                        </svg>
+                      </div>
+
+                      {/* Small Labels Risk 1R vs Reward 2.5R */}
+                      <div className="border-t border-slate-50 pt-3 flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                          Risk 1R
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Reward {rrVal.toFixed(1)}R
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Win Rate Donut Chart Card */}
+                {(() => {
+                  const wrVal = winRate || 0;
+                  const wrPercentage = Math.min(Math.max(wrVal / 100, 0), 1);
+                  const strokeWidth = 8;
+                  const radius = 45;
+                  const circumference = 2 * Math.PI * radius; // ~282.74
+                  const strokeDashoffset = circumference - (wrPercentage * circumference);
+
+                  return (
+                    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Win Rate</h3>
+                        <p className="text-[10px] text-slate-400">Ratio of winning trades to total executions</p>
+                      </div>
+
+                      <div className="relative w-full flex flex-col items-center justify-center my-2">
+                        <div className="relative w-32 h-32 flex items-center justify-center">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 110 110">
+                            <defs>
+                              <linearGradient id="winRateRingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#3b82f6" />
+                                <stop offset="100%" stopColor="#10b981" />
+                              </linearGradient>
+                            </defs>
+                            {/* Background circle track */}
+                            <circle
+                              cx="55"
+                              cy="55"
+                              r={radius}
+                              fill="none"
+                              stroke="#f1f5f9"
+                              strokeWidth={strokeWidth}
+                            />
+                            {/* Active progress circular ring */}
+                            <circle
+                              cx="55"
+                              cy="55"
+                              r={radius}
+                              fill="none"
+                              stroke="url(#winRateRingGradient)"
+                              strokeWidth={strokeWidth}
+                              strokeDasharray={circumference}
+                              strokeDashoffset={strokeDashoffset}
+                              strokeLinecap="round"
+                              className="transition-all duration-500 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-2xl font-black text-slate-800 font-mono tracking-tight">{wrVal.toFixed(1)}%</span>
+                            <span className={`text-[8px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded-md mt-1 ${
+                              winRate < 40 ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                              winRate < 50 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                              winRate < 65 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                              'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                            }`}>
+                              {winRate < 40 ? 'Low' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good' : 'Excellent'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full grid grid-cols-2 gap-4 text-center border-t border-slate-50 pt-3">
+                        <div className="flex flex-col items-center">
+                          <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Wins</span>
+                          </div>
+                          <span className="text-xs font-extrabold text-slate-700 mt-0.5">{wins.length}</span>
+                        </div>
+                        <div className="flex flex-col items-center border-l border-slate-100">
+                          <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Losses</span>
+                          </div>
+                          <span className="text-xs font-extrabold text-slate-700 mt-0.5">{losses.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Quick Risk Auditor status inside Dashboard */}
+                <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Portfolio Guard Rules</h3>
+                        <p className="text-[10px] text-slate-400">Drawdown status and protection systems</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePortfolioGuard(!isPortfolioGuardOn)}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full border uppercase tracking-wider cursor-pointer transition hover:opacity-80 ${
+                          isPortfolioGuardOn 
+                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                            : 'text-slate-600 bg-slate-100 border-slate-200 hover:bg-slate-200'
+                        }`}
+                        title={isPortfolioGuardOn ? 'Click to turn Portfolio Guard OFF' : 'Click to turn Portfolio Guard ON'}
+                      >
+                        {isPortfolioGuardOn ? 'Active' : 'Disabled'}
+                      </button>
+                    </div>
+                    
+                    {isPortfolioGuardOn ? (
+                      <div className="space-y-3">
+                        {/* Daily Loss Guard */}
+                        {(() => {
+                          const limit = riskSettings?.dailyLossLimit || 500;
+                          const breached = todayLoss >= limit;
+                          return (
+                            <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
+                              breached 
+                                ? 'bg-rose-50/50 border border-rose-100' 
+                                : 'bg-emerald-50/50 border border-emerald-100'
+                            }`}>
+                              <div className={`font-bold flex items-center justify-between ${
+                                breached ? 'text-rose-950' : 'text-emerald-950'
+                              }`}>
+                                <span>Daily Loss Guard</span>
+                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                  breached 
+                                    ? 'text-rose-600 bg-white border-rose-200' 
+                                    : 'text-emerald-600 bg-white border-emerald-200'
+                                }`}>
+                                  {breached ? 'Breached' : 'Active'}
+                                </span>
+                              </div>
+                              <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
+                                {breached 
+                                  ? `Today's cumulative loss is ${formatValue(todayLoss)}, exceeding your limit of ${formatValue(limit)}!`
+                                  : `Today's loss is ${formatValue(todayLoss)} (Limit: ${formatValue(limit)}). Safe.`
+                                }
+                              </p>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Overtrading Scanner */}
+                        {(() => {
+                          const limit = riskSettings?.maxTradesPerDay || 5;
+                          const breached = todayTradesCount >= limit;
+                          return (
+                            <div className={`p-3 rounded-lg text-xs transition-colors duration-200 ${
+                              breached 
+                                ? 'bg-rose-50/50 border border-rose-100' 
+                                : 'bg-emerald-50/50 border border-emerald-100'
+                            }`}>
+                              <div className={`font-bold flex items-center justify-between ${
+                                breached ? 'text-rose-950' : 'text-emerald-950'
+                              }`}>
+                                <span>Overtrading Scanner</span>
+                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                  breached 
+                                    ? 'text-rose-600 bg-white border-rose-200' 
+                                    : 'text-emerald-600 bg-white border-emerald-200'
+                                }`}>
+                                  {breached ? 'Breached' : 'Active'}
+                                </span>
+                              </div>
+                              <p className={`mt-1 ${breached ? 'text-rose-700/80' : 'text-emerald-700/80'}`}>
+                                {breached 
+                                  ? `Executed ${todayTradesCount} trades today, breaching your limit of ${limit}!`
+                                  : `Executed ${todayTradesCount} of ${limit} maximum daily positions. Safe.`
+                                }
+                              </p>
+                            </div>
+                          );
+                        })()}
+
+                        {riskSettings && (
+                          <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg text-xs">
+                            <div className="font-bold text-blue-950">Risk-Per-Trade Cap</div>
+                            <p className="text-blue-700/80 mt-0.5">Maximum limit set to {riskSettings.riskPerTradeLimit}% per position.</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl text-center space-y-2 my-2">
+                        <div className="inline-flex p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 mb-1">
+                          <ShieldOff className="h-5 w-5 text-slate-400" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Portfolio Guard Rules Disabled</h4>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-xs mx-auto">
+                          Portfolio guard rules and risk limits are currently disabled. Toggle ON to enable active drawdown protection and discipline limits.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button onClick={() => { setActiveTab('settings'); setSettingsTab('risk'); }} className="w-full text-center py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg transition mt-4">
+                    Configure Guard Limits
+                  </button>
+                </div>
+              </section>
+            </div>
 
             {/* Recent Executions Log Row */}
             <section className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs overflow-hidden">
