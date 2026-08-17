@@ -322,53 +322,51 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                       
                       let cBg = "bg-slate-100 dark:bg-slate-800";
                       let cText = "text-slate-400 dark:text-slate-500 font-medium";
-                      let indicator = null;
                       
                       if (dData) {
-                        indicator = <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-yellow-400 rounded-full"></span>;
                         if (dData.netProfit > 0) {
                           const ratio = yearlyStats?.maxDailyProfit ? dData.netProfit / yearlyStats.maxDailyProfit : 1;
                           if (ratio > 0.8) {
-                            cBg = "bg-emerald-600 dark:bg-emerald-500";
-                            cText = "text-white font-bold";
+                            cBg = "!bg-emerald-600 dark:!bg-emerald-500";
+                            cText = "!text-white font-bold";
                           } else if (ratio > 0.6) {
-                            cBg = "bg-emerald-500 dark:bg-emerald-600";
-                            cText = "text-white font-bold";
+                            cBg = "!bg-emerald-500 dark:!bg-emerald-600";
+                            cText = "!text-white font-bold";
                           } else if (ratio > 0.4) {
-                            cBg = "bg-emerald-400 dark:bg-emerald-700";
-                            cText = "text-emerald-950 dark:text-emerald-50 font-bold";
+                            cBg = "!bg-emerald-400 dark:!bg-emerald-700";
+                            cText = "!text-emerald-950 dark:!text-emerald-50 font-bold";
                           } else if (ratio > 0.2) {
-                            cBg = "bg-emerald-300 dark:bg-emerald-800";
-                            cText = "text-emerald-900 dark:text-emerald-100 font-semibold";
+                            cBg = "!bg-emerald-300 dark:!bg-emerald-800";
+                            cText = "!text-emerald-900 dark:!text-emerald-100 font-semibold";
                           } else {
-                            cBg = "bg-emerald-200 dark:bg-emerald-900";
-                            cText = "text-emerald-800 dark:text-emerald-200 font-semibold";
+                            cBg = "!bg-emerald-200 dark:!bg-emerald-900";
+                            cText = "!text-emerald-800 dark:!text-emerald-200 font-semibold";
                           }
                         } else if (dData.netProfit < 0) {
-                          const ratio = yearlyStats?.maxDailyLoss ? dData.netProfit / yearlyStats.maxDailyLoss : 1;
-                          if (ratio > 0.8) {
-                            cBg = "bg-rose-600 dark:bg-rose-500";
-                            cText = "text-white font-bold";
-                          } else if (ratio > 0.6) {
-                            cBg = "bg-rose-500 dark:bg-rose-600";
-                            cText = "text-white font-bold";
-                          } else if (ratio > 0.4) {
-                            cBg = "bg-rose-400 dark:bg-rose-700";
-                            cText = "text-rose-950 dark:text-rose-50 font-bold";
-                          } else if (ratio > 0.2) {
-                            cBg = "bg-rose-300 dark:bg-rose-800";
-                            cText = "text-rose-900 dark:text-rose-100 font-semibold";
+                          const lossRatio = yearlyStats?.maxDailyLoss ? dData.netProfit / yearlyStats.maxDailyLoss : 1;
+                          if (lossRatio > 0.8) {
+                            cBg = "!bg-rose-600 dark:!bg-rose-500";
+                            cText = "!text-white font-bold";
+                          } else if (lossRatio > 0.6) {
+                            cBg = "!bg-rose-500 dark:!bg-rose-600";
+                            cText = "!text-white font-bold";
+                          } else if (lossRatio > 0.4) {
+                            cBg = "!bg-rose-400 dark:!bg-rose-700";
+                            cText = "!text-rose-950 dark:!text-rose-50 font-bold";
+                          } else if (lossRatio > 0.2) {
+                            cBg = "!bg-rose-300 dark:!bg-rose-800";
+                            cText = "!text-rose-900 dark:!text-rose-100 font-semibold";
                           } else {
-                            cBg = "bg-rose-200 dark:bg-rose-900";
-                            cText = "text-rose-800 dark:text-rose-200 font-semibold";
+                            cBg = "!bg-rose-200 dark:!bg-rose-900";
+                            cText = "!text-rose-800 dark:!text-rose-200 font-semibold";
                           }
                         }
                       }
                       
                       return (
-                        <button
+                        <div
                           key={`c-${cell.day}`} 
-                          className={`relative aspect-square flex items-center justify-center rounded-[3px] text-[10px] ${cBg} ${cText} transition-all hover:scale-110 hover:z-10`}
+                          className={`cursor-pointer aspect-square flex items-center justify-center rounded-[3px] text-[10px] ${cBg} ${cText} transition-all hover:scale-110 hover:z-10`}
                           title={dData ? `${fDay}: ${formatValue(dData.netProfit)}` : fDay}
                           onClick={() => {
                             setViewMode('month');
@@ -377,8 +375,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                           }}
                         >
                           {cell.day}
-                          {indicator}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -391,17 +388,17 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
           <div className="flex items-center justify-center sm:justify-end gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-2 font-medium">
             <span>High Loss</span>
             <div className="flex gap-0.5">
-              <div className="w-3 h-3 rounded-[2px] bg-rose-600 dark:bg-rose-500"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-rose-500 dark:bg-rose-600"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-rose-400 dark:bg-rose-700"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-rose-300 dark:bg-rose-800"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-rose-200 dark:bg-rose-900"></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#dc2626' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#ef4444' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fb7185' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fda4af' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fecdd3' }}></div>
               <div className="w-3 h-3 rounded-[2px] bg-slate-100 dark:bg-slate-800 mx-1"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-emerald-200 dark:bg-emerald-900"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-emerald-300 dark:bg-emerald-800"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-emerald-400 dark:bg-emerald-700"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-emerald-500 dark:bg-emerald-600"></div>
-              <div className="w-3 h-3 rounded-[2px] bg-emerald-600 dark:bg-emerald-500"></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#a7f3d0' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#6ee7b7' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#34d399' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#22c55e' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#16a34a' }}></div>
             </div>
             <span>High Profit</span>
           </div>
