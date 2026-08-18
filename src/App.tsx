@@ -3354,82 +3354,68 @@ export default function App() {
                   );
                 })()}
 
-                {/* Win Rate Donut Chart Card */}
+                {/* Win Rate Arc Chart Card */}
                 {(() => {
                   const wrVal = winRate || 0;
                   const wrPercentage = Math.min(Math.max(wrVal / 100, 0), 1);
-                  const strokeWidth = 8;
-                  const radius = 45;
-                  const circumference = 2 * Math.PI * radius; // ~282.74
+                  const radius = 40;
+                  const circumference = Math.PI * radius; // ~125.66
                   const strokeDashoffset = circumference - (wrPercentage * circumference);
 
                   return (
-                    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-sm">Win Rate</h3>
-                        <p className="text-[10px] text-slate-400">Ratio of winning trades to total executions</p>
+                    <div className="bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-900/50">
+                      <div className="flex items-center gap-1.5 relative z-10">
+                        <h3 className="font-medium text-slate-400 text-sm tracking-wide">Win / Loss Rate</h3>
+                        <button 
+                          onClick={() => alert("Win Rate is calculated as:\n(Total Winning Trades ÷ Total Executed Trades) × 100")} 
+                          title="How is Win Rate calculated?"
+                          className="hover:scale-110 transition-transform"
+                        >
+                          <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer" />
+                        </button>
                       </div>
 
-                      <div className="relative w-full flex flex-col items-center justify-center my-2">
-                        <div className="relative w-32 h-32 flex items-center justify-center">
-                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 110 110">
-                            <defs>
-                              <linearGradient id="winRateRingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="#3b82f6" />
-                                <stop offset="100%" stopColor="#10b981" />
-                              </linearGradient>
-                            </defs>
-                            {/* Background circle track */}
-                            <circle
-                              cx="55"
-                              cy="55"
-                              r={radius}
-                              fill="none"
-                              stroke="#f1f5f9"
-                              strokeWidth={strokeWidth}
+                      <div className="relative w-full flex-1 flex flex-col items-center justify-center mt-8">
+                        <div className="relative w-64 h-36 flex items-end justify-center overflow-visible">
+                          <svg className="w-full h-full overflow-visible" viewBox="0 0 100 55">
+                            {/* Background Track */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke="#333342"
+                              strokeWidth="8" 
+                              strokeLinecap="round" 
                             />
-                            {/* Active progress circular ring */}
-                            <circle
-                              cx="55"
-                              cy="55"
-                              r={radius}
-                              fill="none"
-                              stroke="url(#winRateRingGradient)"
-                              strokeWidth={strokeWidth}
+                            {/* Active Progress */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke={winRate < 50 ? "#ff6b6b" : "#4a84ff"}
+                              strokeWidth="8" 
+                              strokeLinecap="round"
                               strokeDasharray={circumference}
                               strokeDashoffset={strokeDashoffset}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                            {/* Dots overlay */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke="#ffffff"
+                              strokeWidth="2.5" 
                               strokeLinecap="round"
-                              className="transition-all duration-500 ease-out"
+                              strokeDasharray={`0 ${circumference / 8}`}
                             />
                           </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-2xl font-black text-slate-800 font-mono tracking-tight">{wrVal.toFixed(1)}%</span>
-                            <span className={`text-[8px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded-md mt-1 ${
-                              winRate < 40 ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                              winRate < 50 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                              winRate < 65 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                              'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                            }`}>
-                              {winRate < 40 ? 'Low' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good' : 'Excellent'}
+
+                          <div className="absolute flex flex-col items-center justify-end pb-3 gap-2 z-10">
+                            <span className="bg-[#18181b] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg border border-slate-800">
+                              {winRate < 40 ? 'Needs Work' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good!' : 'Excellent!'}
+                            </span>
+                            <span className="bg-[#18181b] text-slate-400 text-xs font-medium px-5 py-2 rounded-full shadow-lg border border-slate-800 flex items-center gap-1.5">
+                              <span className="text-white font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
                             </span>
                           </div>
-                        </div>
-                      </div>
-
-                      <div className="w-full grid grid-cols-2 gap-4 text-center border-t border-slate-50 pt-3">
-                        <div className="flex flex-col items-center">
-                          <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Wins</span>
-                          </div>
-                          <span className="text-xs font-extrabold text-slate-700 mt-0.5">{wins.length}</span>
-                        </div>
-                        <div className="flex flex-col items-center border-l border-slate-100">
-                          <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Losses</span>
-                          </div>
-                          <span className="text-xs font-extrabold text-slate-700 mt-0.5">{losses.length}</span>
                         </div>
                       </div>
                     </div>

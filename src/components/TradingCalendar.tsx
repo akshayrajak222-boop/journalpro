@@ -13,7 +13,6 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[] | null>(null);
   const [selectedDayString, setSelectedDayString] = useState<string | null>(null);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -85,7 +84,6 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
 
   // Yearly stats calculation
   const yearlyStats = React.useMemo(() => {
-    if (viewMode !== 'year') return null;
 
     const monthlyProfits = new Array(12).fill(0);
     const weeklyProfits: { [week: string]: number } = {};
@@ -154,7 +152,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
       maxDailyProfit,
       maxDailyLoss
     };
-  }, [viewMode, year, tradesByDay, monthNames]);
+  }, [year, tradesByDay, monthNames]);
 
   // Compile calendar cells
   const cells = [];
@@ -209,42 +207,28 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
         
         {/* Navigation */}
         <div className="flex items-center gap-3 mt-4 md:mt-0">
-          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 mr-2 border border-slate-200 dark:border-slate-700">
-            <button 
-              onClick={() => setViewMode('month')} 
-              className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewMode === 'month' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-            >
-              Month
-            </button>
-            <button 
-              onClick={() => setViewMode('year')} 
-              className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewMode === 'year' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-            >
-              Year
-            </button>
-          </div>
           <button 
-            onClick={viewMode === 'month' ? handlePrevMonth : () => setCurrentDate(new Date(year - 1, month, 1))}
+            onClick={handlePrevMonth}
             className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
           >
             <ChevronLeft className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
           </button>
           <span className="font-black text-slate-900 dark:text-white min-w-[120px] text-center text-sm md:text-base tracking-tight trading-calendar-month">
-            {viewMode === 'month' ? `${monthNames[month]} ${year}` : year}
+            {monthNames[month]} {year}
           </span>
           <button 
-            onClick={viewMode === 'month' ? handleNextMonth : () => setCurrentDate(new Date(year + 1, month, 1))}
+            onClick={handleNextMonth}
             className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
           >
             <ChevronRight className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
           </button>
         </div>
       </div>
-
-      {viewMode === 'year' ? (
-        <div className="space-y-6">
-          {/* Year Stats Row */}
+      <div className="space-y-10">
+{/* Year Stats Row */}
           {yearlyStats && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 uppercase tracking-wider">Income Section</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="bg-white/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-3 shadow-sm">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider block mb-1">Best Month</span>
@@ -285,125 +269,12 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
                 </div>
               </div>
             </div>
-          )}
-          
-          {/* 12 Months Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {monthNames.map((mName, mIdx) => {
-              // Convert to Monday start for the exact layout in the screenshot
-              const fdom = (new Date(year, mIdx, 1).getDay() + 6) % 7;
-              const dim = new Date(year, mIdx + 1, 0).getDate();
-              const mCells = [];
-              for (let i = 0; i < fdom; i++) mCells.push({ isPad: true, day: 0 });
-              for (let i = 1; i <= dim; i++) mCells.push({ isPad: false, day: i });
+          </div>
+        )}
 
-              return (
-                <div key={mName} className="flex flex-col bg-transparent">
-                  {/* Month Header */}
-                  <div className="mb-2 pl-1">
-                    <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-300 tracking-wide">{mName.substring(0, 3)}</span>
-                  </div>
-                  
-                  {/* Grid */}
-                  <div className="grid grid-cols-7 gap-1">
-                    {/* Days Header */}
-                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-                      <div key={`d-${i}`} className="text-[9px] font-medium text-slate-400 dark:text-slate-500/70 text-center mb-1">{d}</div>
-                    ))}
-                    
-                    {/* Days */}
-                    {mCells.map((cell, idx) => {
-                      if (cell.isPad) {
-                        return <div key={`pad-${idx}`} className="aspect-square"></div>;
-                      }
-                      
-                      const fDay = `${year}-${String(mIdx + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
-                      const dData = tradesByDay[fDay];
-                      
-                      let cBg = "bg-slate-100 dark:bg-slate-800";
-                      let cText = "text-slate-400 dark:text-slate-500 font-medium";
-                      
-                      if (dData) {
-                        if (dData.netProfit > 0) {
-                          const ratio = yearlyStats?.maxDailyProfit ? dData.netProfit / yearlyStats.maxDailyProfit : 1;
-                          if (ratio > 0.8) {
-                            cBg = "!bg-emerald-600 dark:!bg-emerald-500";
-                            cText = "!text-white font-bold";
-                          } else if (ratio > 0.6) {
-                            cBg = "!bg-emerald-500 dark:!bg-emerald-600";
-                            cText = "!text-white font-bold";
-                          } else if (ratio > 0.4) {
-                            cBg = "!bg-emerald-400 dark:!bg-emerald-700";
-                            cText = "!text-emerald-950 dark:!text-emerald-50 font-bold";
-                          } else if (ratio > 0.2) {
-                            cBg = "!bg-emerald-300 dark:!bg-emerald-800";
-                            cText = "!text-emerald-900 dark:!text-emerald-100 font-semibold";
-                          } else {
-                            cBg = "!bg-emerald-200 dark:!bg-emerald-900";
-                            cText = "!text-emerald-800 dark:!text-emerald-200 font-semibold";
-                          }
-                        } else if (dData.netProfit < 0) {
-                          const lossRatio = yearlyStats?.maxDailyLoss ? dData.netProfit / yearlyStats.maxDailyLoss : 1;
-                          if (lossRatio > 0.8) {
-                            cBg = "!bg-rose-600 dark:!bg-rose-500";
-                            cText = "!text-white font-bold";
-                          } else if (lossRatio > 0.6) {
-                            cBg = "!bg-rose-500 dark:!bg-rose-600";
-                            cText = "!text-white font-bold";
-                          } else if (lossRatio > 0.4) {
-                            cBg = "!bg-rose-400 dark:!bg-rose-700";
-                            cText = "!text-rose-950 dark:!text-rose-50 font-bold";
-                          } else if (lossRatio > 0.2) {
-                            cBg = "!bg-rose-300 dark:!bg-rose-800";
-                            cText = "!text-rose-900 dark:!text-rose-100 font-semibold";
-                          } else {
-                            cBg = "!bg-rose-200 dark:!bg-rose-900";
-                            cText = "!text-rose-800 dark:!text-rose-200 font-semibold";
-                          }
-                        }
-                      }
-                      
-                      return (
-                        <div
-                          key={`c-${cell.day}`} 
-                          className={`cursor-pointer aspect-square flex items-center justify-center rounded-[3px] text-[10px] ${cBg} ${cText} transition-all hover:scale-110 hover:z-10`}
-                          title={dData ? `${fDay}: ${formatValue(dData.netProfit)}` : fDay}
-                          onClick={() => {
-                            setViewMode('month');
-                            setCurrentDate(new Date(year, mIdx, 1));
-                            setTimeout(() => handleDayClick(cell.day), 10);
-                          }}
-                        >
-                          {cell.day}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Legend */}
-          <div className="flex items-center justify-center sm:justify-end gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-2 font-medium">
-            <span>High Loss</span>
-            <div className="flex gap-0.5">
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#dc2626' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#ef4444' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fb7185' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fda4af' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fecdd3' }}></div>
-              <div className="w-3 h-3 rounded-[2px] bg-slate-100 dark:bg-slate-800 mx-1"></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#a7f3d0' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#6ee7b7' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#34d399' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#22c55e' }}></div>
-              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#16a34a' }}></div>
-            </div>
-            <span>High Profit</span>
-          </div>
-        </div>
-      ) : (
+                  {/* Monthly Calendar Grid */}
+        <div>
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 uppercase tracking-wider">Monthly Calendar</h3>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Calendar Grid */}
         <div className="lg:col-span-3">
@@ -540,8 +411,126 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
             )}
           </div>
         </div>
+        </div>
+        <div className="pt-8 border-t border-slate-100 dark:border-slate-800/80 mt-10">
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 uppercase tracking-wider">Year at a Glance</h3>
+{/* 12 Months Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {monthNames.map((mName, mIdx) => {
+              // Convert to Monday start for the exact layout in the screenshot
+              const fdom = (new Date(year, mIdx, 1).getDay() + 6) % 7;
+              const dim = new Date(year, mIdx + 1, 0).getDate();
+              const mCells = [];
+              for (let i = 0; i < fdom; i++) mCells.push({ isPad: true, day: 0 });
+              for (let i = 1; i <= dim; i++) mCells.push({ isPad: false, day: i });
+
+              return (
+                <div key={mName} className="flex flex-col bg-transparent">
+                  {/* Month Header */}
+                  <div className="mb-2 pl-1">
+                    <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-300 tracking-wide">{mName.substring(0, 3)}</span>
+                  </div>
+                  
+                  {/* Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {/* Days Header */}
+                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                      <div key={`d-${i}`} className="text-[9px] font-medium text-slate-400 dark:text-slate-500/70 text-center mb-1">{d}</div>
+                    ))}
+                    
+                    {/* Days */}
+                    {mCells.map((cell, idx) => {
+                      if (cell.isPad) {
+                        return <div key={`pad-${idx}`} className="aspect-square"></div>;
+                      }
+                      
+                      const fDay = `${year}-${String(mIdx + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
+                      const dData = tradesByDay[fDay];
+                      
+                      let cBg = "bg-slate-100 dark:bg-slate-800";
+                      let cText = "text-slate-400 dark:text-slate-500 font-medium";
+                      
+                      if (dData) {
+                        if (dData.netProfit > 0) {
+                          const ratio = yearlyStats?.maxDailyProfit ? dData.netProfit / yearlyStats.maxDailyProfit : 1;
+                          if (ratio > 0.8) {
+                            cBg = "!bg-emerald-600 dark:!bg-emerald-500";
+                            cText = "!text-white font-bold";
+                          } else if (ratio > 0.6) {
+                            cBg = "!bg-emerald-500 dark:!bg-emerald-600";
+                            cText = "!text-white font-bold";
+                          } else if (ratio > 0.4) {
+                            cBg = "!bg-emerald-400 dark:!bg-emerald-700";
+                            cText = "!text-emerald-950 dark:!text-emerald-50 font-bold";
+                          } else if (ratio > 0.2) {
+                            cBg = "!bg-emerald-300 dark:!bg-emerald-800";
+                            cText = "!text-emerald-900 dark:!text-emerald-100 font-semibold";
+                          } else {
+                            cBg = "!bg-emerald-200 dark:!bg-emerald-900";
+                            cText = "!text-emerald-800 dark:!text-emerald-200 font-semibold";
+                          }
+                        } else if (dData.netProfit < 0) {
+                          const lossRatio = yearlyStats?.maxDailyLoss ? dData.netProfit / yearlyStats.maxDailyLoss : 1;
+                          if (lossRatio > 0.8) {
+                            cBg = "!bg-rose-600 dark:!bg-rose-500";
+                            cText = "!text-white font-bold";
+                          } else if (lossRatio > 0.6) {
+                            cBg = "!bg-rose-500 dark:!bg-rose-600";
+                            cText = "!text-white font-bold";
+                          } else if (lossRatio > 0.4) {
+                            cBg = "!bg-rose-400 dark:!bg-rose-700";
+                            cText = "!text-rose-950 dark:!text-rose-50 font-bold";
+                          } else if (lossRatio > 0.2) {
+                            cBg = "!bg-rose-300 dark:!bg-rose-800";
+                            cText = "!text-rose-900 dark:!text-rose-100 font-semibold";
+                          } else {
+                            cBg = "!bg-rose-200 dark:!bg-rose-900";
+                            cText = "!text-rose-800 dark:!text-rose-200 font-semibold";
+                          }
+                        }
+                      }
+                      
+                      return (
+                        <div
+                          key={`c-${cell.day}`} 
+                          className={`cursor-pointer aspect-square flex items-center justify-center rounded-[3px] text-[10px] ${cBg} ${cText} transition-all hover:scale-110 hover:z-10`}
+                          title={dData ? `${fDay}: ${formatValue(dData.netProfit)}` : fDay}
+                          onClick={() => {
+                            setCurrentDate(new Date(year, mIdx, 1));
+                            setTimeout(() => handleDayClick(cell.day), 10);
+                          }}
+                        >
+                          {cell.day}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Legend */}
+          <div className="flex items-center justify-center sm:justify-end gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-2 font-medium">
+            <span>High Loss</span>
+            <div className="flex gap-0.5">
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#dc2626' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#ef4444' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fb7185' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fda4af' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#fecdd3' }}></div>
+              <div className="w-3 h-3 rounded-[2px] bg-slate-100 dark:bg-slate-800 mx-1"></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#a7f3d0' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#6ee7b7' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#34d399' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#22c55e' }}></div>
+              <div className="w-3 h-3 rounded-[2px]" style={{ backgroundColor: '#16a34a' }}></div>
+            </div>
+            <span>High Profit</span>
+          </div>
+        </div>
+        </div>
       </div>
-      )}
     </div>
   );
 }
