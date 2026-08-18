@@ -38,6 +38,7 @@ import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
 
+
 async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
   const fflate = await import('fflate');
   const files = fflate.unzipSync(xlsxArray);
@@ -3235,10 +3236,15 @@ export default function App() {
 
             {/* Main Visualizations Grid */}
             <div className="space-y-6">
+
+
+
               
-              {/* Equity Curve Area Chart - Widescreen Layout */}
-              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between mb-4">
+              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  {/* Equity Curve Area Chart - Widescreen Layout */}
+              <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col h-80">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between mb-4 flex-shrink-0">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">Portfolio Growth Curve</h3>
                     <p className="text-[10px] text-slate-400">Equity changes tracked trade-by-trade</p>
@@ -3249,7 +3255,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <div className="h-64">
+                <div className="flex-1 w-full min-h-0 -mt-2">
                   {totalTradesCount > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={equityCurveData}>
@@ -3273,156 +3279,10 @@ export default function App() {
                   )}
                 </div>
               </div>
-
-              {/* Status Speedometers and Risk Guard Grid */}
-              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Risk-Reward Abstract Professional Balance Beam Card */}
-                {(() => {
-                  const rrVal = avgRR || 0;
-                  // Balanced at 1:1, right side (reward) tilts down if > 1.
-                  const maxTilt = 10; // Keep tilt subtle and sophisticated
-                  const tiltAngle = Math.min(Math.max((rrVal - 1) * 4, -maxTilt), maxTilt);
-                  
-                  const angleRad = (tiltAngle * Math.PI) / 180;
-                  const pivotX = 110;
-                  const pivotY = 45;
-                  const beamHalfLength = 85;
-                  
-                  const xL = pivotX - beamHalfLength * Math.cos(angleRad);
-                  const yL = pivotY - beamHalfLength * Math.sin(angleRad);
-                  const xR = pivotX + beamHalfLength * Math.cos(angleRad);
-                  const yR = pivotY + beamHalfLength * Math.sin(angleRad);
-
-                  return (
-                    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-bold text-slate-900 text-sm">Risk : Reward</h3>
-                          <p className="text-[10px] text-slate-400">Average risk-to-reward ratio of executions</p>
-                        </div>
-                        <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full ${
-                          rrVal < 1.0 ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                          rrVal < 1.5 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                          rrVal < 2.5 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                          'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                        }`}>
-                          {rrVal < 1.0 ? 'Low' : rrVal < 1.5 ? 'Moderate' : rrVal < 2.5 ? 'Good' : 'Excellent'}
-                        </span>
-                      </div>
-
-                      {/* Prominent Center/Top Ratio */}
-                      <div className="text-center mt-6">
-                        <span className="text-4xl font-black text-slate-800 font-mono tracking-tight">
-                          1 : {rrVal.toFixed(2)}
-                        </span>
-                      </div>
-
-                      {/* SVG Professional Abstract Balance Beam Illustration */}
-                      <div className="relative w-full flex justify-center my-6 flex-1 items-center">
-                        <svg width="220" height="70" viewBox="0 0 220 70" className="overflow-visible">
-                          
-                          {/* Reference Baseline (1:1 perfect balance indication) */}
-                          <line x1="25" y1={pivotY} x2="195" y2={pivotY} className="stroke-slate-200" strokeWidth="1" strokeDasharray="3 3" />
-                          
-                          {/* Minimalist Center Pivot Base */}
-                          <path d={`M ${pivotX} ${pivotY} L ${pivotX + 6} ${pivotY + 25} L ${pivotX - 6} ${pivotY + 25} Z`} className="fill-slate-50 stroke-slate-300" strokeWidth="1" strokeLinejoin="round" />
-                          <circle cx={pivotX} cy={pivotY} r="2.5" className="fill-slate-400" />
-                          
-                          {/* Tilted Precision Beam */}
-                          <line x1={xL} y1={yL} x2={xR} y2={yR} className="stroke-slate-400" strokeWidth="1.5" strokeLinecap="round" />
-                          
-                          {/* Left Side: Risk 1R (Abstract Node) */}
-                          <circle cx={xL} cy={yL} r="5" className="fill-white stroke-rose-500" strokeWidth="2" />
-                          
-                          {/* Right Side: Reward (Abstract Node) */}
-                          <circle cx={xR} cy={yR} r="5" className="fill-white stroke-emerald-500" strokeWidth="2" />
-                        </svg>
-                      </div>
-
-                      {/* Small Labels Risk 1R vs Reward 2.5R */}
-                      <div className="border-t border-slate-50 pt-3 flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                          Risk 1R
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          Reward {rrVal.toFixed(1)}R
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Win Rate Arc Chart Card */}
-                {(() => {
-                  const wrVal = winRate || 0;
-                  const wrPercentage = Math.min(Math.max(wrVal / 100, 0), 1);
-                  const radius = 40;
-                  const circumference = Math.PI * radius; // ~125.66
-                  const strokeDashoffset = circumference - (wrPercentage * circumference);
-
-                  return (
-                    <div className="bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-900/50">
-                      <div className="flex items-center gap-1.5 relative z-10">
-                        <h3 className="font-medium text-slate-400 text-sm tracking-wide">Win / Loss Rate</h3>
-                        <button 
-                          onClick={() => alert("Win Rate is calculated as:\n(Total Winning Trades ÷ Total Executed Trades) × 100")} 
-                          title="How is Win Rate calculated?"
-                          className="hover:scale-110 transition-transform"
-                        >
-                          <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer" />
-                        </button>
-                      </div>
-
-                      <div className="relative w-full flex-1 flex flex-col items-center justify-center mt-8">
-                        <div className="relative w-64 h-36 flex items-end justify-center overflow-visible">
-                          <svg className="w-full h-full overflow-visible" viewBox="0 0 100 55">
-                            {/* Background Track */}
-                            <path 
-                              d="M 10 50 A 40 40 0 0 1 90 50" 
-                              fill="none" 
-                              stroke="#333342"
-                              strokeWidth="8" 
-                              strokeLinecap="round" 
-                            />
-                            {/* Active Progress */}
-                            <path 
-                              d="M 10 50 A 40 40 0 0 1 90 50" 
-                              fill="none" 
-                              stroke={winRate < 50 ? "#ff6b6b" : "#4a84ff"}
-                              strokeWidth="8" 
-                              strokeLinecap="round"
-                              strokeDasharray={circumference}
-                              strokeDashoffset={strokeDashoffset}
-                              className="transition-all duration-1000 ease-out"
-                            />
-                            {/* Dots overlay */}
-                            <path 
-                              d="M 10 50 A 40 40 0 0 1 90 50" 
-                              fill="none" 
-                              stroke="#ffffff"
-                              strokeWidth="2.5" 
-                              strokeLinecap="round"
-                              strokeDasharray={`0 ${circumference / 8}`}
-                            />
-                          </svg>
-
-                          <div className="absolute flex flex-col items-center justify-end pb-3 gap-2 z-10">
-                            <span className="bg-[#18181b] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg border border-slate-800">
-                              {winRate < 40 ? 'Needs Work' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good!' : 'Excellent!'}
-                            </span>
-                            <span className="bg-[#18181b] text-slate-400 text-xs font-medium px-5 py-2 rounded-full shadow-lg border border-slate-800 flex items-center gap-1.5">
-                              <span className="text-white font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Quick Risk Auditor status inside Dashboard */}
+                </div>
+                
+                <div className="lg:col-span-1">
+                  {/* Quick Risk Auditor status inside Dashboard */}
                 <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -3534,7 +3394,223 @@ export default function App() {
                     Configure Guard Limits
                   </button>
                 </div>
+                </div>
               </section>
+
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Risk-Reward Abstract Professional Balance Beam Card */}
+                {(() => {
+                  const rrVal = avgRR || 0;
+                  // Balanced at 1:1, right side (reward) tilts down if > 1.
+                  const maxTilt = 10; // Keep tilt subtle and sophisticated
+                  const tiltAngle = Math.min(Math.max((rrVal - 1) * 4, -maxTilt), maxTilt);
+                  
+                  const angleRad = (tiltAngle * Math.PI) / 180;
+                  const pivotX = 110;
+                  const pivotY = 45;
+                  const beamHalfLength = 85;
+                  
+                  const xL = pivotX - beamHalfLength * Math.cos(angleRad);
+                  const yL = pivotY - beamHalfLength * Math.sin(angleRad);
+                  const xR = pivotX + beamHalfLength * Math.cos(angleRad);
+                  const yR = pivotY + beamHalfLength * Math.sin(angleRad);
+
+                  return (
+                    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm">Risk : Reward</h3>
+                          <p className="text-[10px] text-slate-400">Average risk-to-reward ratio of executions</p>
+                        </div>
+                        <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full ${
+                          rrVal < 1.0 ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                          rrVal < 1.5 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                          rrVal < 2.5 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                          'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                        }`}>
+                          {rrVal < 1.0 ? 'Low' : rrVal < 1.5 ? 'Moderate' : rrVal < 2.5 ? 'Good' : 'Excellent'}
+                        </span>
+                      </div>
+
+                      {/* Prominent Center/Top Ratio */}
+                      <div className="text-center mt-6">
+                        <span className="text-4xl font-black text-slate-800 font-mono tracking-tight">
+                          1 : {rrVal.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* SVG Professional Abstract Balance Beam Illustration */}
+                      <div className="relative w-full flex justify-center my-6 flex-1 items-center">
+                        <svg width="220" height="70" viewBox="0 0 220 70" className="overflow-visible">
+                          
+                          {/* Reference Baseline (1:1 perfect balance indication) */}
+                          <line x1="25" y1={pivotY} x2="195" y2={pivotY} className="stroke-slate-200" strokeWidth="1" strokeDasharray="3 3" />
+                          
+                          {/* Minimalist Center Pivot Base */}
+                          <path d={`M ${pivotX} ${pivotY} L ${pivotX + 6} ${pivotY + 25} L ${pivotX - 6} ${pivotY + 25} Z`} className="fill-slate-50 stroke-slate-300" strokeWidth="1" strokeLinejoin="round" />
+                          <circle cx={pivotX} cy={pivotY} r="2.5" className="fill-slate-400" />
+                          
+                          {/* Tilted Precision Beam */}
+                          <line x1={xL} y1={yL} x2={xR} y2={yR} className="stroke-slate-400" strokeWidth="1.5" strokeLinecap="round" />
+                          
+                          {/* Left Side: Risk 1R (Abstract Node) */}
+                          <circle cx={xL} cy={yL} r="5" className="fill-white stroke-rose-500" strokeWidth="2" />
+                          
+                          {/* Right Side: Reward (Abstract Node) */}
+                          <circle cx={xR} cy={yR} r="5" className="fill-white stroke-emerald-500" strokeWidth="2" />
+                        </svg>
+                      </div>
+
+                      {/* Small Labels Risk 1R vs Reward 2.5R */}
+                      <div className="border-t border-slate-50 pt-3 flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                          Risk 1R
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Reward {rrVal.toFixed(1)}R
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Win Rate Arc Chart Card */}
+                {(() => {
+                  const wrVal = winRate || 0;
+                  const wrPercentage = Math.min(Math.max(wrVal / 100, 0), 1);
+                  const radius = 40;
+                  const circumference = Math.PI * radius; // ~125.66
+                  const strokeDashoffset = circumference - (wrPercentage * circumference);
+
+                  return (
+                    <div className="bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-900/50">
+                      <div className="flex items-center gap-1.5 relative z-10">
+                        <h3 className="font-medium text-slate-400 text-sm tracking-wide">Win / Loss Rate</h3>
+                        <button 
+                          onClick={() => alert("Win Rate is calculated as:\n(Total Winning Trades ÷ Total Executed Trades) × 100")} 
+                          title="How is Win Rate calculated?"
+                          className="hover:scale-110 transition-transform"
+                        >
+                          <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer" />
+                        </button>
+                      </div>
+
+                      <div className="relative w-full flex-1 flex flex-col items-center justify-center mt-8">
+                        <div className="relative w-64 h-36 flex items-end justify-center overflow-visible">
+                          <svg className="w-full h-full overflow-visible" viewBox="0 0 100 55">
+                            {/* Background Track */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke="#333342"
+                              strokeWidth="8" 
+                              strokeLinecap="round" 
+                            />
+                            {/* Active Progress */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke={winRate < 50 ? "#ff6b6b" : "#4a84ff"}
+                              strokeWidth="8" 
+                              strokeLinecap="round"
+                              strokeDasharray={circumference}
+                              strokeDashoffset={strokeDashoffset}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                            {/* Dots overlay */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke="#ffffff"
+                              strokeWidth="2.5" 
+                              strokeLinecap="round"
+                              strokeDasharray={`0 ${circumference / 8}`}
+                            />
+                          </svg>
+
+                          <div className="absolute flex flex-col items-center justify-end pb-3 gap-2 z-10">
+                            <span className="bg-[#18181b] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg border border-slate-800">
+                              {winRate < 40 ? 'Needs Work' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good!' : 'Excellent!'}
+                            </span>
+                            <span className="bg-[#18181b] text-slate-400 text-xs font-medium px-5 py-2 rounded-full shadow-lg border border-slate-800 flex items-center gap-1.5">
+                              <span className="text-white font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* Winning vs Losing Trades Donut Chart */}
+                <div className="bg-white dark:bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-200 dark:border-slate-900/50">
+                  <div className="flex items-center justify-between relative z-10">
+                    <div>
+                      <h3 className="font-medium text-slate-500 dark:text-slate-400 text-sm tracking-wide">Win / Loss Ratio</h3>
+                      <p className="text-[10px] text-slate-400">Total executions split by outcome</p>
+                    </div>
+                  </div>
+                  
+                  <div className="relative w-full flex-1 flex items-center justify-center mt-2">
+                    {totalTradesCount > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: "Winning Trades", value: wins.length, color: "#10b981" },
+                              { name: "Losing Trades", value: losses.length, color: "#ef4444" }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={65}
+                            outerRadius={85}
+                            paddingAngle={5}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {
+                              [{ color: "#10b981" }, { color: "#ef4444" }].map((entry, index) => (
+                                <Cell key={"cell-"+index} fill={entry.color} />
+                              ))
+                            }
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
+                            itemStyle={{ fontWeight: "bold" }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-xs text-slate-400 text-center">No trades logged</div>
+                    )}
+                    
+                    {totalTradesCount > 0 && (
+                      <div className="absolute flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter">
+                          {totalTradesCount}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                          Trades
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between items-center mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{wins.length} Wins</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{losses.length} Losses</span>
+                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
+                    </div>
+                  </div>
+                </div>
+
+              </section>
+
             </div>
 
             {/* Recent Executions Log Row */}
@@ -3860,6 +3936,9 @@ export default function App() {
         {/* 5. PERFORMANCE ANALYTICS VIEW */}
         {activeTab === 'analytics' && (
           <div className="space-y-8">
+            
+            
+            
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               {/* Equity Curve Area Chart */}
@@ -3933,6 +4012,220 @@ export default function App() {
                 </div>
               </div>
             </section>
+
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Risk-Reward Abstract Professional Balance Beam Card */}
+                {(() => {
+                  const rrVal = avgRR || 0;
+                  // Balanced at 1:1, right side (reward) tilts down if > 1.
+                  const maxTilt = 10; // Keep tilt subtle and sophisticated
+                  const tiltAngle = Math.min(Math.max((rrVal - 1) * 4, -maxTilt), maxTilt);
+                  
+                  const angleRad = (tiltAngle * Math.PI) / 180;
+                  const pivotX = 110;
+                  const pivotY = 45;
+                  const beamHalfLength = 85;
+                  
+                  const xL = pivotX - beamHalfLength * Math.cos(angleRad);
+                  const yL = pivotY - beamHalfLength * Math.sin(angleRad);
+                  const xR = pivotX + beamHalfLength * Math.cos(angleRad);
+                  const yR = pivotY + beamHalfLength * Math.sin(angleRad);
+
+                  return (
+                    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-xs flex flex-col justify-between h-80">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm">Risk : Reward</h3>
+                          <p className="text-[10px] text-slate-400">Average risk-to-reward ratio of executions</p>
+                        </div>
+                        <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full ${
+                          rrVal < 1.0 ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                          rrVal < 1.5 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                          rrVal < 2.5 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                          'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                        }`}>
+                          {rrVal < 1.0 ? 'Low' : rrVal < 1.5 ? 'Moderate' : rrVal < 2.5 ? 'Good' : 'Excellent'}
+                        </span>
+                      </div>
+
+                      {/* Prominent Center/Top Ratio */}
+                      <div className="text-center mt-6">
+                        <span className="text-4xl font-black text-slate-800 font-mono tracking-tight">
+                          1 : {rrVal.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* SVG Professional Abstract Balance Beam Illustration */}
+                      <div className="relative w-full flex justify-center my-6 flex-1 items-center">
+                        <svg width="220" height="70" viewBox="0 0 220 70" className="overflow-visible">
+                          
+                          {/* Reference Baseline (1:1 perfect balance indication) */}
+                          <line x1="25" y1={pivotY} x2="195" y2={pivotY} className="stroke-slate-200" strokeWidth="1" strokeDasharray="3 3" />
+                          
+                          {/* Minimalist Center Pivot Base */}
+                          <path d={`M ${pivotX} ${pivotY} L ${pivotX + 6} ${pivotY + 25} L ${pivotX - 6} ${pivotY + 25} Z`} className="fill-slate-50 stroke-slate-300" strokeWidth="1" strokeLinejoin="round" />
+                          <circle cx={pivotX} cy={pivotY} r="2.5" className="fill-slate-400" />
+                          
+                          {/* Tilted Precision Beam */}
+                          <line x1={xL} y1={yL} x2={xR} y2={yR} className="stroke-slate-400" strokeWidth="1.5" strokeLinecap="round" />
+                          
+                          {/* Left Side: Risk 1R (Abstract Node) */}
+                          <circle cx={xL} cy={yL} r="5" className="fill-white stroke-rose-500" strokeWidth="2" />
+                          
+                          {/* Right Side: Reward (Abstract Node) */}
+                          <circle cx={xR} cy={yR} r="5" className="fill-white stroke-emerald-500" strokeWidth="2" />
+                        </svg>
+                      </div>
+
+                      {/* Small Labels Risk 1R vs Reward 2.5R */}
+                      <div className="border-t border-slate-50 pt-3 flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                          Risk 1R
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Reward {rrVal.toFixed(1)}R
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Win Rate Arc Chart Card */}
+                {(() => {
+                  const wrVal = winRate || 0;
+                  const wrPercentage = Math.min(Math.max(wrVal / 100, 0), 1);
+                  const radius = 40;
+                  const circumference = Math.PI * radius; // ~125.66
+                  const strokeDashoffset = circumference - (wrPercentage * circumference);
+
+                  return (
+                    <div className="bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-900/50">
+                      <div className="flex items-center gap-1.5 relative z-10">
+                        <h3 className="font-medium text-slate-400 text-sm tracking-wide">Win / Loss Rate</h3>
+                        <button 
+                          onClick={() => alert("Win Rate is calculated as:\n(Total Winning Trades ÷ Total Executed Trades) × 100")} 
+                          title="How is Win Rate calculated?"
+                          className="hover:scale-110 transition-transform"
+                        >
+                          <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer" />
+                        </button>
+                      </div>
+
+                      <div className="relative w-full flex-1 flex flex-col items-center justify-center mt-8">
+                        <div className="relative w-64 h-36 flex items-end justify-center overflow-visible">
+                          <svg className="w-full h-full overflow-visible" viewBox="0 0 100 55">
+                            {/* Background Track */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke="#333342"
+                              strokeWidth="8" 
+                              strokeLinecap="round" 
+                            />
+                            {/* Active Progress */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke={winRate < 50 ? "#ff6b6b" : "#4a84ff"}
+                              strokeWidth="8" 
+                              strokeLinecap="round"
+                              strokeDasharray={circumference}
+                              strokeDashoffset={strokeDashoffset}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                            {/* Dots overlay */}
+                            <path 
+                              d="M 10 50 A 40 40 0 0 1 90 50" 
+                              fill="none" 
+                              stroke="#ffffff"
+                              strokeWidth="2.5" 
+                              strokeLinecap="round"
+                              strokeDasharray={`0 ${circumference / 8}`}
+                            />
+                          </svg>
+
+                          <div className="absolute flex flex-col items-center justify-end pb-3 gap-2 z-10">
+                            <span className="bg-[#18181b] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg border border-slate-800">
+                              {winRate < 40 ? 'Needs Work' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good!' : 'Excellent!'}
+                            </span>
+                            <span className="bg-[#18181b] text-slate-400 text-xs font-medium px-5 py-2 rounded-full shadow-lg border border-slate-800 flex items-center gap-1.5">
+                              <span className="text-white font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* Winning vs Losing Trades Donut Chart */}
+                <div className="bg-white dark:bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-200 dark:border-slate-900/50">
+                  <div className="flex items-center justify-between relative z-10">
+                    <div>
+                      <h3 className="font-medium text-slate-500 dark:text-slate-400 text-sm tracking-wide">Win / Loss Ratio</h3>
+                      <p className="text-[10px] text-slate-400">Total executions split by outcome</p>
+                    </div>
+                  </div>
+                  
+                  <div className="relative w-full flex-1 flex items-center justify-center mt-2">
+                    {totalTradesCount > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: "Winning Trades", value: wins.length, color: "#10b981" },
+                              { name: "Losing Trades", value: losses.length, color: "#ef4444" }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={65}
+                            outerRadius={85}
+                            paddingAngle={5}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {
+                              [{ color: "#10b981" }, { color: "#ef4444" }].map((entry, index) => (
+                                <Cell key={"cell-"+index} fill={entry.color} />
+                              ))
+                            }
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
+                            itemStyle={{ fontWeight: "bold" }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-xs text-slate-400 text-center">No trades logged</div>
+                    )}
+                    
+                    {totalTradesCount > 0 && (
+                      <div className="absolute flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter">
+                          {totalTradesCount}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                          Trades
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between items-center mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{wins.length} Wins</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{losses.length} Losses</span>
+                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
+                    </div>
+                  </div>
+                </div>
+
+              </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
