@@ -3490,15 +3490,15 @@ export default function App() {
                   const strokeDashoffset = circumference - (wrPercentage * circumference);
 
                   return (
-                    <div className="bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-900/50">
+                    <div className="bg-white rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-100">
                       <div className="flex items-center gap-1.5 relative z-10">
-                        <h3 className="font-medium text-slate-400 text-sm tracking-wide">Win / Loss Rate</h3>
+                        <h3 className="font-bold text-slate-900 text-sm tracking-wide">Win / Loss Rate</h3>
                         <button 
                           onClick={() => alert("Win Rate is calculated as:\n(Total Winning Trades ÷ Total Executed Trades) × 100")} 
                           title="How is Win Rate calculated?"
                           className="hover:scale-110 transition-transform"
                         >
-                          <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer" />
+                          <HelpCircle className="w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" />
                         </button>
                       </div>
 
@@ -3509,7 +3509,7 @@ export default function App() {
                             <path 
                               d="M 10 50 A 40 40 0 0 1 90 50" 
                               fill="none" 
-                              stroke="#333342"
+                              stroke="#e2e8f0"
                               strokeWidth="8" 
                               strokeLinecap="round" 
                             />
@@ -3536,11 +3536,11 @@ export default function App() {
                           </svg>
 
                           <div className="absolute flex flex-col items-center justify-end pb-3 gap-2 z-10">
-                            <span className="bg-[#18181b] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg border border-slate-800">
+                            <span className="bg-white text-slate-700 text-xs font-bold px-4 py-1.5 rounded-full shadow-sm border border-slate-200">
                               {winRate < 40 ? 'Needs Work' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good!' : 'Excellent!'}
                             </span>
-                            <span className="bg-[#18181b] text-slate-400 text-xs font-medium px-5 py-2 rounded-full shadow-lg border border-slate-800 flex items-center gap-1.5">
-                              <span className="text-white font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
+                            <span className="bg-white text-slate-500 text-xs font-medium px-5 py-2 rounded-full shadow-sm border border-slate-100 flex items-center gap-1.5">
+                              <span className="text-slate-900 font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
                             </span>
                           </div>
                         </div>
@@ -4104,15 +4104,15 @@ export default function App() {
                   const strokeDashoffset = circumference - (wrPercentage * circumference);
 
                   return (
-                    <div className="bg-[#09090b] rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-900/50">
+                    <div className="bg-white rounded-[1.5rem] p-6 shadow-xs flex flex-col justify-between h-80 relative overflow-hidden border border-slate-100">
                       <div className="flex items-center gap-1.5 relative z-10">
-                        <h3 className="font-medium text-slate-400 text-sm tracking-wide">Win / Loss Rate</h3>
+                        <h3 className="font-bold text-slate-900 text-sm tracking-wide">Win / Loss Rate</h3>
                         <button 
                           onClick={() => alert("Win Rate is calculated as:\n(Total Winning Trades ÷ Total Executed Trades) × 100")} 
                           title="How is Win Rate calculated?"
                           className="hover:scale-110 transition-transform"
                         >
-                          <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer" />
+                          <HelpCircle className="w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" />
                         </button>
                       </div>
 
@@ -4123,7 +4123,7 @@ export default function App() {
                             <path 
                               d="M 10 50 A 40 40 0 0 1 90 50" 
                               fill="none" 
-                              stroke="#333342"
+                              stroke="#e2e8f0"
                               strokeWidth="8" 
                               strokeLinecap="round" 
                             />
@@ -4150,11 +4150,11 @@ export default function App() {
                           </svg>
 
                           <div className="absolute flex flex-col items-center justify-end pb-3 gap-2 z-10">
-                            <span className="bg-[#18181b] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg border border-slate-800">
+                            <span className="bg-white text-slate-700 text-xs font-bold px-4 py-1.5 rounded-full shadow-sm border border-slate-200">
                               {winRate < 40 ? 'Needs Work' : winRate < 50 ? 'Average' : winRate < 65 ? 'Good!' : 'Excellent!'}
                             </span>
-                            <span className="bg-[#18181b] text-slate-400 text-xs font-medium px-5 py-2 rounded-full shadow-lg border border-slate-800 flex items-center gap-1.5">
-                              <span className="text-white font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
+                            <span className="bg-white text-slate-500 text-xs font-medium px-5 py-2 rounded-full shadow-sm border border-slate-100 flex items-center gap-1.5">
+                              <span className="text-slate-900 font-bold text-sm tracking-tight">{wrVal.toFixed(0)}%</span> Win Rate
                             </span>
                           </div>
                         </div>
