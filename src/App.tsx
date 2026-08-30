@@ -1270,8 +1270,10 @@ export default function App() {
   };
 
   const handleDeleteTrade = (tradeId: string) => {
-    // If the user has opted out of confirmation, delete immediately
-    if ((user as any)?.preferences?.skipDeleteConfirm) {
+    // Check both user state and localStorage so the preference works instantly
+    const skipConfirm = (user as any)?.preferences?.skipDeleteConfirm
+      || localStorage.getItem('skipDeleteConfirm') === 'true';
+    if (skipConfirm) {
       executeDeleteTrade(tradeId);
     } else {
       setDeleteConfirmDontShow(false);
@@ -1304,8 +1306,11 @@ export default function App() {
     if (!deleteConfirmTradeId) return;
     const tradeId = deleteConfirmTradeId;
     setDeleteConfirmTradeId(null);
-    // Persist "don't show again" preference to server
+    // Persist "don't show again" preference
     if (deleteConfirmDontShow) {
+      // Write to localStorage immediately so next deletion skips the modal
+      // without waiting for the async server call or React re-render
+      localStorage.setItem('skipDeleteConfirm', 'true');
       try {
         const res = await authFetch('/api/auth/preferences', {
           method: 'PATCH',
@@ -1317,7 +1322,7 @@ export default function App() {
           setUser(data.user);
         }
       } catch (_) {
-        // Non-critical — proceed with deletion even if preference save fails
+        // localStorage already set — preference will still work this session
       }
     }
     await executeDeleteTrade(tradeId);
