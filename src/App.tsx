@@ -173,15 +173,15 @@ export default function App() {
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
   const [tradeDate, setTradeDate] = useState('');
-  const [tradeSymbol, setTradeSymbol] = useState('EURUSD');
+  const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
   const [tradeType, setTradeType] = useState<'Buy' | 'Sell'>('Buy');
   const [tradeLotSize, setTradeLotSize] = useState('1.0');
   const [tradeEntryPrice, setTradeEntryPrice] = useState('1.08500');
   const [tradeExitPrice, setTradeExitPrice] = useState('1.09200');
   const [tradeSL, setTradeSL] = useState('');
   const [tradeTP, setTradeTP] = useState('');
-  const [tradeProfit, setTradeProfit] = useState('700');
-  const [tradeComm, setTradeComm] = useState('-7');
+  const [tradeProfit, setTradeProfit] = useState('100');
+  const [tradeComm, setTradeComm] = useState('0');
   const [tradeSwap, setTradeSwap] = useState('0');
   const [tradeRisk, setTradeRisk] = useState('1.0');
   const [tradeStrategy, setTradeStrategy] = useState('Order Block Rejection');
@@ -1181,15 +1181,15 @@ export default function App() {
     } else {
       setEditingTradeId(null);
       setTradeDate('');
-      setTradeSymbol('EURUSD');
+      setTradeSymbol(localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
       setTradeType('Buy');
       setTradeLotSize('1.0');
       setTradeEntryPrice('1.08500');
       setTradeExitPrice('1.09200');
       setTradeSL('');
       setTradeTP('');
-      setTradeProfit('700');
-      setTradeComm('-7');
+      setTradeProfit('100');
+      setTradeComm('0');
       setTradeSwap('0');
       setTradeRisk('1.0');
       setTradeStrategy('Order Block Rejection');
@@ -5858,7 +5858,7 @@ export default function App() {
                     type="text"
                     required
                     value={tradeSymbol}
-                    onChange={(e) => setTradeSymbol(e.target.value)}
+                    onChange={(e) => { const sym = e.target.value; setTradeSymbol(sym); localStorage.setItem('lastTradeSymbol', sym); }}
                     placeholder="EURUSD"
                     className="bg-white border border-slate-200 text-sm rounded-xl p-3 w-full uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
                   />
