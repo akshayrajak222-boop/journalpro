@@ -173,15 +173,15 @@ export default function App() {
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
   const [tradeDate, setTradeDate] = useState('');
-  const [tradeSymbol, setTradeSymbol] = useState('EURUSD');
+  const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
   const [tradeType, setTradeType] = useState<'Buy' | 'Sell'>('Buy');
   const [tradeLotSize, setTradeLotSize] = useState('1.0');
   const [tradeEntryPrice, setTradeEntryPrice] = useState('1.08500');
   const [tradeExitPrice, setTradeExitPrice] = useState('1.09200');
   const [tradeSL, setTradeSL] = useState('');
   const [tradeTP, setTradeTP] = useState('');
-  const [tradeProfit, setTradeProfit] = useState('700');
-  const [tradeComm, setTradeComm] = useState('-7');
+  const [tradeProfit, setTradeProfit] = useState('100');
+  const [tradeComm, setTradeComm] = useState('0');
   const [tradeSwap, setTradeSwap] = useState('0');
   const [tradeRisk, setTradeRisk] = useState('1.0');
   const [tradeStrategy, setTradeStrategy] = useState('Order Block Rejection');
@@ -199,6 +199,11 @@ export default function App() {
   const [pasteRawText, setPasteRawText] = useState('');
   const [parsedTrades, setParsedTrades] = useState<any[]>([]);
   const [pasteImporting, setPasteImporting] = useState(false);
+
+  // Delete trade confirmation modal state
+  const [deleteConfirmTradeId, setDeleteConfirmTradeId] = useState<string | null>(null);
+  const [deleteConfirmDontShow, setDeleteConfirmDontShow] = useState(false);
+  const [deleteConfirmLoading, setDeleteConfirmLoading] = useState(false);
 
   // Dismissible drawdown warning (dismissal is scoped to the current account)
   const [dismissedDrawdownAccount, setDismissedDrawdownAccount] = useState<string | null>(null);
@@ -1185,15 +1190,15 @@ export default function App() {
     } else {
       setEditingTradeId(null);
       setTradeDate('');
-      setTradeSymbol('EURUSD');
+      setTradeSymbol(localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
       setTradeType('Buy');
       setTradeLotSize('1.0');
       setTradeEntryPrice('1.08500');
       setTradeExitPrice('1.09200');
       setTradeSL('');
       setTradeTP('');
-      setTradeProfit('700');
-      setTradeComm('-7');
+      setTradeProfit('100');
+      setTradeComm('0');
       setTradeSwap('0');
       setTradeRisk('1.0');
       setTradeStrategy('Order Block Rejection');
@@ -1270,8 +1275,20 @@ export default function App() {
     }
   };
 
-  const handleDeleteTrade = async (tradeId: string) => {
-    if (!confirm('Are you sure you want to delete this trade? This will reverse its financial impact from your account balance.')) return;
+  const handleDeleteTrade = (tradeId: string) => {
+    // Check both user state and localStorage so the preference works instantly
+    const skipConfirm = (user as any)?.preferences?.skipDeleteConfirm
+      || localStorage.getItem('skipDeleteConfirm') === 'true';
+    if (skipConfirm) {
+      executeDeleteTrade(tradeId);
+    } else {
+      setDeleteConfirmDontShow(false);
+      setDeleteConfirmTradeId(tradeId);
+    }
+  };
+
+  const executeDeleteTrade = async (tradeId: string) => {
+    setDeleteConfirmLoading(true);
     try {
       const res = await authFetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
       if (res.ok) {
@@ -1286,7 +1303,35 @@ export default function App() {
       }
     } catch (e: any) {
       alert('Error deleting trade: ' + (e?.message || e));
+    } finally {
+      setDeleteConfirmLoading(false);
     }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmTradeId) return;
+    const tradeId = deleteConfirmTradeId;
+    setDeleteConfirmTradeId(null);
+    // Persist "don't show again" preference
+    if (deleteConfirmDontShow) {
+      // Write to localStorage immediately so next deletion skips the modal
+      // without waiting for the async server call or React re-render
+      localStorage.setItem('skipDeleteConfirm', 'true');
+      try {
+        const res = await authFetch('/api/auth/preferences', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skipDeleteConfirm: true })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch (_) {
+        // localStorage already set — preference will still work this session
+      }
+    }
+    await executeDeleteTrade(tradeId);
   };
 
   // ── Paste-from-MT5 handlers ──
@@ -5806,6 +5851,40 @@ export default function App() {
         </div>
       )}
 
+      {/* A2. Delete Trade Confirmation Modal */}
+      {deleteConfirmTradeId && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-xs p-5">
+            <p className="text-sm font-semibold text-slate-800 mb-4">Delete this trade?</p>
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => { setDeleteConfirmTradeId(null); setDeleteConfirmDontShow(false); }}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-lg py-2 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteConfirmLoading}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm rounded-lg py-2 transition-colors disabled:opacity-60"
+              >
+                {deleteConfirmLoading ? '...' : 'Delete'}
+              </button>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="delete-dont-show-again"
+                type="checkbox"
+                checked={deleteConfirmDontShow}
+                onChange={(e) => setDeleteConfirmDontShow(e.target.checked)}
+                className="w-3.5 h-3.5 accent-indigo-600 cursor-pointer"
+              />
+              <span className="text-xs text-slate-400">Don't show again</span>
+            </label>
+          </div>
+        </div>
+      )}
+
       {/* B. Add / Edit Trade Modal */}
       {showTradeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
@@ -5862,7 +5941,7 @@ export default function App() {
                     type="text"
                     required
                     value={tradeSymbol}
-                    onChange={(e) => setTradeSymbol(e.target.value)}
+                    onChange={(e) => { const sym = e.target.value; setTradeSymbol(sym); localStorage.setItem('lastTradeSymbol', sym); }}
                     placeholder="EURUSD"
                     className="bg-white border border-slate-200 text-sm rounded-xl p-3 w-full uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
                   />

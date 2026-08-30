@@ -1746,6 +1746,28 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   });
 
   // ==========================================
+  // USER PREFERENCES ROUTE
+  // ==========================================
+
+  app.patch('/api/auth/preferences', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const userIdx = db.users.findIndex((u: any) => u.id === currentUser?.id);
+    if (userIdx === -1) return res.status(404).json({ error: 'User not found' });
+
+    // Merge incoming preferences with existing ones
+    const existing = db.users[userIdx].preferences || {};
+    db.users[userIdx].preferences = { ...existing, ...req.body };
+
+    await saveDatabase(db, authEmail);
+    currentUser = db.users[userIdx];
+    res.json({ message: 'Preferences saved', user: currentUser });
+  });
+
+  // ==========================================
   // TRADING ACCOUNTS ROUTES
   // ==========================================
 
