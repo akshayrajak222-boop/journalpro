@@ -9,11 +9,33 @@ interface TradingCalendarProps {
 
 export default function TradingCalendar({ trades, currency }: TradingCalendarProps) {
   const tradingTrades = trades.filter(t => t.type !== 'Deposit' && t.type !== 'Withdrawal');
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 11)); // Seed to match our metadata context
-  const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[] | null>(null);
-  const [selectedDayString, setSelectedDayString] = useState<string | null>(null);
-  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
 
+  const [selectedDayString, setSelectedDayString] = useState<string | null>(() => {
+    const d = new Date();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  });
+
+  const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[] | null>(null);
+
+  // Sync selectedDayTrades with tradesByDay whenever trades update or a new day is selected
+  React.useEffect(() => {
+    if (selectedDayKey) {
+      // Recompute the local trades mapping just for the selected day to avoid dependency issues with the full tradesByDay object
+      const localDayTrades = tradingTrades.filter(t => {
+        const d = new Date(t.date);
+        if (isNaN(d.getTime())) return false;
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === selectedDayKey;
+      });
+      setSelectedDayTrades(localDayTrades);
+    }
+  }, [selectedDayKey, tradingTrades]);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
