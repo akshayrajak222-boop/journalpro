@@ -1320,7 +1320,10 @@ export default function App() {
       const defaultExit  = defaultSymbol === 'XAUUSD' ? '4460' : '1.09200';
       const defaultLot   = '0.1';
       setEditingTradeId(null);
-      setTradeDate('');
+      // Pre-fill current local date & time (refreshed each time the modal opens)
+      const now = new Date();
+      const localISO = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      setTradeDate(localISO);
       setTradeSymbol(defaultSymbol);
       setTradeType('Buy');
       setTradeLotSize(defaultLot);
