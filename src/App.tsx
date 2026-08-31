@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
@@ -38,6 +38,126 @@ import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
 
+
+// ─── Symbol Contract Specifications ─────────────────────────────────────────
+// contractSize = number of units per 1 standard lot
+// pipValue     = USD value of 1 pip per 1 standard lot (for USD-quoted pairs)
+// For pairs where profit currency != USD, we use a simplified conversion.
+interface SymbolSpec {
+  contractSize: number; // units per lot
+  pipSize: number;      // 1 pip in price units (e.g. 0.0001 for EURUSD, 0.01 for USDJPY)
+  pipValuePerLot: number; // USD value of 1 pip movement for 1 standard lot
+}
+
+const SYMBOL_SPECS: Record<string, SymbolSpec> = {
+  // Forex Majors
+  EURUSD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 10 },
+  GBPUSD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 10 },
+  AUDUSD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 10 },
+  NZDUSD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 10 },
+  USDCAD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 10 },
+  USDCHF: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 10 },
+  USDJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 }, // ~$9.09 per pip (varies with JPY rate)
+  // Forex Crosses EUR
+  EURGBP: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 12.5 },
+  EURJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 },
+  EURAUD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 6.5 },
+  EURCAD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 7.4 },
+  EURCHF: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 11.2 },
+  EURNZD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 6.1 },
+  // Forex Crosses GBP
+  GBPJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 },
+  GBPAUD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 6.5 },
+  GBPCAD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 7.4 },
+  GBPCHF: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 11.2 },
+  GBPNZD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 6.1 },
+  // Forex Crosses AUD
+  AUDJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 },
+  AUDCAD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 7.4 },
+  AUDCHF: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 11.2 },
+  AUDNZD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 6.1 },
+  // Forex Crosses NZD
+  NZDJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 },
+  NZDCAD: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 7.4 },
+  NZDCHF: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 11.2 },
+  // Forex Crosses CAD/CHF
+  CADJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 },
+  CADCHF: { contractSize: 100000, pipSize: 0.0001, pipValuePerLot: 11.2 },
+  CHFJPY: { contractSize: 100000, pipSize: 0.01,   pipValuePerLot: 9.09 },
+  // Metals
+  XAUUSD: { contractSize: 100, pipSize: 0.01, pipValuePerLot: 1 },   // Gold: 100 troy oz, $1 per $0.01 move per lot → $1 per pip
+  XAGUSD: { contractSize: 5000, pipSize: 0.001, pipValuePerLot: 5 }, // Silver: 5000 oz
+  XPTUSD: { contractSize: 100, pipSize: 0.01,  pipValuePerLot: 1 },  // Platinum
+  XPDUSD: { contractSize: 100, pipSize: 0.01,  pipValuePerLot: 1 },  // Palladium
+  // Crypto
+  BTCUSD: { contractSize: 1,    pipSize: 0.01, pipValuePerLot: 0.01 },
+  ETHUSD: { contractSize: 1,    pipSize: 0.01, pipValuePerLot: 0.01 },
+  LTCUSD: { contractSize: 1,    pipSize: 0.01, pipValuePerLot: 0.01 },
+  XRPUSD: { contractSize: 1,    pipSize: 0.0001, pipValuePerLot: 0.0001 },
+  // Indices (CFDs)
+  US30:   { contractSize: 1, pipSize: 1,    pipValuePerLot: 1 },
+  US500:  { contractSize: 1, pipSize: 0.1,  pipValuePerLot: 0.1 },
+  NAS100: { contractSize: 1, pipSize: 0.1,  pipValuePerLot: 0.1 },
+  UK100:  { contractSize: 1, pipSize: 1,    pipValuePerLot: 0.88 },
+  GER40:  { contractSize: 1, pipSize: 1,    pipValuePerLot: 1.1 },
+  JPN225: { contractSize: 1, pipSize: 1,    pipValuePerLot: 0.0067 },
+  // Oil
+  USOIL:  { contractSize: 1000, pipSize: 0.01, pipValuePerLot: 10 },
+  UKOIL:  { contractSize: 1000, pipSize: 0.01, pipValuePerLot: 10 },
+};
+
+// Common symbol aliases
+const SYMBOL_ALIASES: Record<string, string> = {
+  GOLD: 'XAUUSD', SILVER: 'XAGUSD', XAUUSD_m: 'XAUUSD',
+  DJIA: 'US30', SPX500: 'US500', NASDAQ: 'NAS100',
+  WTI: 'USOIL', BRENT: 'UKOIL',
+};
+
+// All available symbols for autocomplete
+const ALL_SYMBOLS = [
+  'XAUUSD','XAGUSD','XPTUSD','XPDUSD',
+  'EURUSD','EURGBP','EURJPY','EURAUD','EURCAD','EURCHF','EURNZD',
+  'GBPUSD','GBPJPY','GBPAUD','GBPCAD','GBPCHF','GBPNZD',
+  'USDJPY','USDCAD','USDCHF',
+  'AUDUSD','AUDJPY','AUDCAD','AUDCHF','AUDNZD',
+  'NZDUSD','NZDJPY','NZDCAD','NZDCHF',
+  'CADJPY','CADCHF','CHFJPY',
+  'BTCUSD','ETHUSD','LTCUSD','XRPUSD',
+  'US30','US500','NAS100','UK100','GER40','JPN225',
+  'USOIL','UKOIL',
+];
+
+/**
+ * Calculate profit/loss for a trade based on symbol contract specs.
+ * Returns USD profit (positive = profit, negative = loss).
+ */
+function calculateTradeProfit(
+  symbol: string,
+  tradeType: 'Buy' | 'Sell',
+  entryPrice: number,
+  exitPrice: number,
+  lotSize: number
+): number | null {
+  const sym = symbol.toUpperCase().trim();
+  const resolved = SYMBOL_ALIASES[sym] || sym;
+  const spec = SYMBOL_SPECS[resolved];
+
+  if (!spec || isNaN(entryPrice) || isNaN(exitPrice) || isNaN(lotSize) || lotSize <= 0) {
+    return null;
+  }
+
+  const priceDiff = tradeType === 'Buy'
+    ? exitPrice - entryPrice
+    : entryPrice - exitPrice;
+
+  // Number of pips moved
+  const pips = priceDiff / spec.pipSize;
+
+  // Profit = pips × pipValuePerLot × lots
+  const profit = pips * spec.pipValuePerLot * lotSize;
+
+  return parseFloat(profit.toFixed(2));
+}
 
 async function applyFreezePane(xlsxArray: Uint8Array, ySplit: number): Promise<Uint8Array> {
   const fflate = await import('fflate');
@@ -175,12 +295,13 @@ export default function App() {
   const [tradeDate, setTradeDate] = useState('');
   const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
   const [tradeType, setTradeType] = useState<'Buy' | 'Sell'>('Buy');
-  const [tradeLotSize, setTradeLotSize] = useState('1.0');
-  const [tradeEntryPrice, setTradeEntryPrice] = useState('1.08500');
-  const [tradeExitPrice, setTradeExitPrice] = useState('1.09200');
+  const [tradeLotSize, setTradeLotSize] = useState('0.1');
+  const [tradeEntryPrice, setTradeEntryPrice] = useState('4450');
+  const [tradeExitPrice, setTradeExitPrice] = useState('4460');
   const [tradeSL, setTradeSL] = useState('');
   const [tradeTP, setTradeTP] = useState('');
   const [tradeProfit, setTradeProfit] = useState('100');
+  const [tradeProfitIsAuto, setTradeProfitIsAuto] = useState(true);
   const [tradeComm, setTradeComm] = useState('0');
   const [tradeSwap, setTradeSwap] = useState('0');
   const [tradeRisk, setTradeRisk] = useState('1.0');
@@ -193,6 +314,11 @@ export default function App() {
   const [tradeScreenshot, setTradeScreenshot] = useState('');
   const [tradeTags, setTradeTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
+  // Symbol autocomplete
+  const [symbolSuggestions, setSymbolSuggestions] = useState<string[]>([]);
+  const [showSymbolDropdown, setShowSymbolDropdown] = useState(false);
+  const symbolInputRef = useRef<HTMLInputElement>(null);
+  const symbolDropdownRef = useRef<HTMLDivElement>(null);
 
   // Paste-from-MT5 modal state
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -1176,6 +1302,7 @@ export default function App() {
       setTradeSL(trade.stopLoss ? String(trade.stopLoss) : '');
       setTradeTP(trade.takeProfit ? String(trade.takeProfit) : '');
       setTradeProfit(String(trade.profit));
+      setTradeProfitIsAuto(false); // When editing existing trade, keep profit as-is
       setTradeComm(String(trade.commission));
       setTradeSwap(String(trade.swap));
       setTradeRisk(String(trade.riskPercentage));
@@ -1188,16 +1315,23 @@ export default function App() {
       setTradeScreenshot(trade.screenshot || '');
       setTradeTags(trade.tags || []);
     } else {
+      const defaultSymbol = localStorage.getItem('lastTradeSymbol') || 'XAUUSD';
+      const defaultEntry = defaultSymbol === 'XAUUSD' ? '4450' : '1.08500';
+      const defaultExit  = defaultSymbol === 'XAUUSD' ? '4460' : '1.09200';
+      const defaultLot   = '0.1';
       setEditingTradeId(null);
       setTradeDate('');
-      setTradeSymbol(localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
+      setTradeSymbol(defaultSymbol);
       setTradeType('Buy');
-      setTradeLotSize('1.0');
-      setTradeEntryPrice('1.08500');
-      setTradeExitPrice('1.09200');
+      setTradeLotSize(defaultLot);
+      setTradeEntryPrice(defaultEntry);
+      setTradeExitPrice(defaultExit);
       setTradeSL('');
       setTradeTP('');
-      setTradeProfit('100');
+      // Auto-calculate profit for defaults
+      const autoProfit = calculateTradeProfit(defaultSymbol, 'Buy', parseFloat(defaultEntry), parseFloat(defaultExit), parseFloat(defaultLot));
+      setTradeProfit(autoProfit !== null ? String(autoProfit) : '100');
+      setTradeProfitIsAuto(true);
       setTradeComm('0');
       setTradeSwap('0');
       setTradeRisk('1.0');
@@ -1210,8 +1344,36 @@ export default function App() {
       setTradeScreenshot('');
       setTradeTags([]);
     }
+    setSymbolSuggestions([]);
+    setShowSymbolDropdown(false);
     setShowTradeModal(true);
   };
+
+  // Auto-recalculate profit whenever trade inputs change
+  useEffect(() => {
+    if (!tradeProfitIsAuto) return;
+    const entry = parseFloat(tradeEntryPrice);
+    const exit  = parseFloat(tradeExitPrice);
+    const lot   = parseFloat(tradeLotSize);
+    const calc  = calculateTradeProfit(tradeSymbol, tradeType, entry, exit, lot);
+    if (calc !== null) {
+      setTradeProfit(String(calc));
+    }
+  }, [tradeSymbol, tradeType, tradeEntryPrice, tradeExitPrice, tradeLotSize, tradeProfitIsAuto]);
+
+  // Close symbol dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        symbolDropdownRef.current && !symbolDropdownRef.current.contains(e.target as Node) &&
+        symbolInputRef.current && !symbolInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSymbolDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSaveTrade = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3029,7 +3191,7 @@ export default function App() {
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
-              title="MT5 Automation"
+              title="MT5 Sync"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
                 sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
               } ${
@@ -3037,7 +3199,7 @@ export default function App() {
               }`}
             >
               <Terminal className="h-4 w-4 text-slate-500" />
-              {!sidebarCollapsed && 'MT5 Automation'}
+              {!sidebarCollapsed && 'MT5 Sync'}
             </button>
 
             <button
@@ -3166,7 +3328,7 @@ export default function App() {
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
-                 activeTab === 'mt5' ? 'MT5 Automation' :
+                 activeTab === 'mt5' ? 'MT5 Sync' :
                  activeTab === 'tools' ? 'Tools' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
@@ -5935,16 +6097,75 @@ export default function App() {
 
               {/* Core Details (Asset, Direction, Lots) */}
               <div className="grid grid-cols-3 gap-4">
-                <div>
+                {/* Symbol with autocomplete */}
+                <div className="relative">
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">Symbol</label>
                   <input
+                    ref={symbolInputRef}
                     type="text"
                     required
                     value={tradeSymbol}
-                    onChange={(e) => { const sym = e.target.value; setTradeSymbol(sym); localStorage.setItem('lastTradeSymbol', sym); }}
-                    placeholder="EURUSD"
+                    onChange={(e) => {
+                      const sym = e.target.value.toUpperCase();
+                      setTradeSymbol(sym);
+                      localStorage.setItem('lastTradeSymbol', sym);
+                      if (sym.length > 0) {
+                        const matches = ALL_SYMBOLS.filter(s => s.startsWith(sym) && s !== sym);
+                        setSymbolSuggestions(matches.slice(0, 8));
+                        setShowSymbolDropdown(matches.length > 0);
+                      } else {
+                        setSymbolSuggestions([]);
+                        setShowSymbolDropdown(false);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (tradeSymbol.length > 0) {
+                        const matches = ALL_SYMBOLS.filter(s => s.startsWith(tradeSymbol) && s !== tradeSymbol);
+                        if (matches.length > 0) { setSymbolSuggestions(matches.slice(0, 8)); setShowSymbolDropdown(true); }
+                      } else {
+                        setSymbolSuggestions(ALL_SYMBOLS.slice(0, 8));
+                        setShowSymbolDropdown(true);
+                      }
+                    }}
+                    placeholder="XAUUSD"
+                    autoComplete="off"
                     className="bg-white border border-slate-200 text-sm rounded-xl p-3 w-full uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
                   />
+                  {/* Autocomplete Dropdown */}
+                  {showSymbolDropdown && symbolSuggestions.length > 0 && (
+                    <div
+                      ref={symbolDropdownRef}
+                      className="absolute top-full left-0 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden"
+                    >
+                      {symbolSuggestions.map((sym) => {
+                        const spec = SYMBOL_SPECS[sym];
+                        const previewProfit = spec
+                          ? calculateTradeProfit(sym, tradeType, parseFloat(tradeEntryPrice), parseFloat(tradeExitPrice), parseFloat(tradeLotSize))
+                          : null;
+                        return (
+                          <button
+                            key={sym}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setTradeSymbol(sym);
+                              localStorage.setItem('lastTradeSymbol', sym);
+                              setShowSymbolDropdown(false);
+                              setSymbolSuggestions([]);
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center justify-between font-medium border-b border-slate-50 last:border-0"
+                          >
+                            <span className="font-bold text-slate-800">{sym}</span>
+                            {previewProfit !== null && (
+                              <span className={`text-[10px] font-semibold ${previewProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                {previewProfit >= 0 ? '+' : ''}{previewProfit.toFixed(2)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">Direction</label>
@@ -5962,6 +6183,7 @@ export default function App() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0.01"
                     required
                     value={tradeLotSize}
                     onChange={(e) => setTradeLotSize(e.target.value)}
@@ -6023,9 +6245,18 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Outcome (Net P/L) */}
+              {/* Outcome (Net P/L) — auto-calculated */}
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">Net P/L (Profit/Loss)</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">Net P/L (Profit/Loss)</label>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    tradeProfitIsAuto
+                      ? 'bg-indigo-50 text-indigo-500'
+                      : 'bg-amber-50 text-amber-500'
+                  }`}>
+                    {tradeProfitIsAuto ? '⚡ Auto-calculated' : '✏️ Manual override'}
+                  </span>
+                </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <span className="text-slate-400 font-semibold sm:text-sm">$</span>
@@ -6035,17 +6266,43 @@ export default function App() {
                     step="0.01"
                     required
                     value={tradeProfit}
-                    onChange={(e) => setTradeProfit(e.target.value)}
+                    onChange={(e) => {
+                      setTradeProfit(e.target.value);
+                      setTradeProfitIsAuto(false);
+                    }}
+                    onFocus={() => setTradeProfitIsAuto(false)}
                     placeholder="0.00"
                     className={`bg-white border text-sm rounded-xl p-3 pl-7 w-full focus:outline-none shadow-sm transition-all font-bold ${
-                      Number(tradeProfit) > 0 
-                        ? 'border-emerald-300 text-emerald-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500' 
-                        : Number(tradeProfit) < 0 
+                      Number(tradeProfit) > 0
+                        ? 'border-emerald-300 text-emerald-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500'
+                        : Number(tradeProfit) < 0
                           ? 'border-rose-300 text-rose-700 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500'
                           : 'border-slate-200 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500'
                     }`}
                   />
+                  {tradeProfitIsAuto && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTradeProfitIsAuto(true);
+                        const entry = parseFloat(tradeEntryPrice);
+                        const exit  = parseFloat(tradeExitPrice);
+                        const lot   = parseFloat(tradeLotSize);
+                        const calc  = calculateTradeProfit(tradeSymbol, tradeType, entry, exit, lot);
+                        if (calc !== null) setTradeProfit(String(calc));
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-600 transition-colors"
+                      title="Recalculate profit"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
+                {!SYMBOL_SPECS[tradeSymbol.toUpperCase()] && tradeSymbol.length > 2 && (
+                  <p className="text-[10px] text-amber-500 mt-1">
+                    ⚠ Symbol not recognized — please enter profit manually.
+                  </p>
+                )}
               </div>
 
               {/* Optional extras — horizontal chip row */}
