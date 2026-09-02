@@ -108,7 +108,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   const yearlyStats = React.useMemo(() => {
 
     const monthlyProfits = new Array(12).fill(0);
-    const weeklyProfits: { [week: string]: number } = {};
+    const weeklyProfits: { [week: string]: { profit: number, label: string } } = {};
     let winStreak = 0;
     let lossStreak = 0;
     let currentWinStreak = 0;
@@ -123,25 +123,39 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
 
     daysInYear.forEach(dayStr => {
       const dayData = tradesByDay[dayStr];
-      const date = new Date(dayStr);
-      const m = date.getMonth();
+      // Note: Use UTC or parse parts to avoid timezone shift on YYYY-MM-DD
+      const [y, m, d] = dayStr.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      const monthIndex = date.getMonth();
       
       // Monthly
-      monthlyProfits[m] += dayData.netProfit;
+      monthlyProfits[monthIndex] += dayData.netProfit;
       
       // Daily Max/Min
       if (dayData.netProfit > maxDailyProfit) maxDailyProfit = dayData.netProfit;
       if (dayData.netProfit < maxDailyLoss) maxDailyLoss = dayData.netProfit;
       
       // Weekly (ISO week approximation)
-      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-      const dayNum = d.getUTCDay() || 7;
-      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-      const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
-      const weekKey = `${d.getUTCFullYear()}-W${weekNo}`;
+      const dUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = dUTC.getUTCDay() || 7;
+      dUTC.setUTCDate(dUTC.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(dUTC.getUTCFullYear(),0,1));
+      const weekNo = Math.ceil((((dUTC.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+      const weekKey = `${dUTC.getUTCFullYear()}-W${weekNo}`;
       
-      weeklyProfits[weekKey] = (weeklyProfits[weekKey] || 0) + dayData.netProfit;
+      if (!weeklyProfits[weekKey]) {
+        const day = date.getDay() || 7;
+        const monday = new Date(date);
+        monday.setDate(date.getDate() - day + 1);
+        const sunday = new Date(date);
+        sunday.setDate(date.getDate() - day + 7);
+        const formatOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+        weeklyProfits[weekKey] = { 
+          profit: 0, 
+          label: `${monday.toLocaleDateString('en-US', formatOpts)} - ${sunday.toLocaleDateString('en-US', formatOpts)}` 
+        };
+      }
+      weeklyProfits[weekKey].profit += dayData.netProfit;
 
       // Streaks
       if (dayData.netProfit > 0) {
@@ -160,15 +174,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
     const bestMonthIdx = monthlyProfits.indexOf(bestMonth);
     const worstMonthIdx = monthlyProfits.indexOf(worstMonth);
 
-    const weekValues = Object.values(weeklyProfits);
-    const bestWeek = weekValues.length > 0 ? Math.max(...weekValues) : 0;
-    const worstWeek = weekValues.length > 0 ? Math.min(...weekValues) : 0;
+    const weekEntries = Object.values(weeklyProfits);
+    const bestWeekObj = weekEntries.length > 0 ? weekEntries.reduce((a, b) => a.profit > b.profit ? a : b) : { profit: 0, label: '-' };
+    const worstWeekObj = weekEntries.length > 0 ? weekEntries.reduce((a, b) => a.profit < b.profit ? a : b) : { profit: 0, label: '-' };
 
     return {
       bestMonth: { value: bestMonth, name: bestMonth !== 0 ? monthNames[bestMonthIdx] : '-' },
       worstMonth: { value: worstMonth, name: worstMonth !== 0 ? monthNames[worstMonthIdx] : '-' },
-      bestWeek,
-      worstWeek,
+      bestWeek: bestWeekObj,
+      worstWeek: worstWeekObj,
       winStreak,
       lossStreak,
       maxDailyProfit,
@@ -269,13 +283,15 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
               <div className="bg-white/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-3 shadow-sm">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider block mb-1">Best Week</span>
                 <div className="flex flex-col">
-                  <span className="text-sm font-black text-slate-800 dark:text-slate-200">{yearlyStats.bestWeek > 0 ? '+' : ''}{formatValue(yearlyStats.bestWeek)}</span>
+                  <span className="text-sm font-black text-slate-800 dark:text-slate-200">{yearlyStats.bestWeek.label}</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold">{yearlyStats.bestWeek.profit > 0 ? '+' : ''}{formatValue(yearlyStats.bestWeek.profit)}</span>
                 </div>
               </div>
               <div className="bg-white/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-3 shadow-sm">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider block mb-1">Worst Week</span>
                 <div className="flex flex-col">
-                  <span className="text-sm font-black text-slate-800 dark:text-slate-200">{formatValue(yearlyStats.worstWeek)}</span>
+                  <span className="text-sm font-black text-slate-800 dark:text-slate-200">{yearlyStats.worstWeek.label}</span>
+                  <span className="text-rose-600 dark:text-rose-400 text-xs font-bold">{formatValue(yearlyStats.worstWeek.profit)}</span>
                 </div>
               </div>
               <div className="bg-white/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-3 shadow-sm">

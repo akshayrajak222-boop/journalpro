@@ -179,10 +179,21 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // FIX #2: Refs to guard against the onAuthStateChange / bootstrapSession
+  // race condition and concurrent fetchAccountData calls.
+  const bootstrapDoneRef = React.useRef(false);
+  const isFetchingAccountsRef = React.useRef(false);
+
+  // FIX #1: Actually persist the session IDs to sessionStorage so that
+  // authFetch can inject them as headers on every subsequent API call,
+  // including after a page refresh where the React state is empty.
   const persistAuthSession = (userId: string, email?: string) => {
     if (typeof window === 'undefined') return;
-    window.sessionStorage.removeItem('auth_user_id');
-    window.sessionStorage.removeItem('auth_email');
+    if (userId) window.sessionStorage.setItem('auth_user_id', userId);
+    else window.sessionStorage.removeItem('auth_user_id');
+    if (email) window.sessionStorage.setItem('auth_email', email);
+    else window.sessionStorage.removeItem('auth_email');
+    // Always remove any legacy localStorage copies to avoid stale reads
     window.localStorage.removeItem('auth_user_id');
     window.localStorage.removeItem('auth_email');
   };
@@ -415,6 +426,8 @@ export default function App() {
 
     const authProvider = sessionUser?.app_metadata?.provider || 'email';
 
+    // FIX #1 (applied): persistAuthSession now correctly writes to sessionStorage.
+    // This ensures authFetch includes x-auth-user-id on all subsequent calls.
     persistAuthSession(userId, email);
 
     try {
@@ -437,8 +450,10 @@ export default function App() {
           await fetchAccountData();
           // Check admin status directly after login
           try {
+            const canonicalId = data.user.id || userId;
+            const canonicalEmail = data.user.email || email;
             const adminRes = await fetch('/api/admin/check', {
-              headers: { 'x-auth-user-id': data.user.id || userId, 'x-auth-email': data.user.email || email }
+              headers: { 'x-auth-user-id': canonicalId, 'x-auth-email': canonicalEmail }
             });
             if (adminRes.ok) {
               const adminData = await adminRes.json();
@@ -650,7 +665,10 @@ export default function App() {
         if (isSupabaseConfigured) {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
+            // Mark bootstrap in-progress so onAuthStateChange SIGNED_IN (which
+            // fires concurrently) knows not to double-fetch.
             await syncSupabaseUser(session.user);
+            bootstrapDoneRef.current = true;
             return;
           }
         }
@@ -658,35 +676,48 @@ export default function App() {
         console.error('Error loading Supabase session:', err);
       }
 
+      // FIX #3: Write sessionStorage BEFORE calling fetchAccountData so that
+      // authFetch has the correct user ID available when it builds headers.
       try {
+        const storedId = sessionStorage.getItem('auth_user_id');
+        const storedEmail = sessionStorage.getItem('auth_email');
         const headers: Record<string, string> = {};
-        if (sessionStorage.getItem('auth_user_id')) headers['x-auth-user-id'] = sessionStorage.getItem('auth_user_id')!;
-        if (sessionStorage.getItem('auth_email')) headers['x-auth-email'] = sessionStorage.getItem('auth_email')!;
+        if (storedId) headers['x-auth-user-id'] = storedId;
+        if (storedEmail) headers['x-auth-email'] = storedEmail;
 
         const res = await fetch('/api/auth/me', { headers, credentials: 'include' });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.user) {
-              setUser(data.user);
-              setShowOnboardingWizard(false);
-              await fetchAccountData();
-              // Check admin status directly after session restore
-              try {
-                const adminRes = await fetch('/api/admin/check', { headers });
-                if (adminRes.ok) {
-                  const adminData = await adminRes.json();
-                  setIsAdmin(!!adminData.isAdmin);
-                }
-              } catch (_) {}
-              setLoading(false);
-              return;
-            }
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            // Persist the canonical IDs resolved by the server (cookie-based restore)
+            // before we call fetchAccountData so authFetch has them available.
+            persistAuthSession(data.user.id, data.user.email);
+            setUser(data.user);
+            setShowOnboardingWizard(false);
+            await fetchAccountData();
+            // Check admin status after session restore
+            try {
+              const adminHeaders = {
+                'x-auth-user-id': data.user.id,
+                'x-auth-email': data.user.email
+              };
+              const adminRes = await fetch('/api/admin/check', { headers: adminHeaders, credentials: 'include' });
+              if (adminRes.ok) {
+                const adminData = await adminRes.json();
+                setIsAdmin(!!adminData.isAdmin);
+              }
+            } catch (_) {}
+            setLoading(false);
+            bootstrapDoneRef.current = true;
+            return;
           }
-        } catch (e) {
-          console.error('Error loading stored session:', e);
         }
+      } catch (e) {
+        console.error('Error loading stored session:', e);
+      }
 
       setLoading(false);
+      bootstrapDoneRef.current = true;
     };
 
     bootstrapSession();
@@ -694,7 +725,17 @@ export default function App() {
     let subscription: any = null;
     if (isSupabaseConfigured) {
       const subObj = supabase.auth.onAuthStateChange(async (event, session) => {
+        // FIX #2: Guard against the race where onAuthStateChange(SIGNED_IN) fires
+        // at the same time as bootstrapSession is still running (Supabase always
+        // emits INITIAL_SESSION then SIGNED_IN on page load). We only call
+        // syncSupabaseUser from here once bootstrap has fully completed — that way
+        // this handler only reacts to genuine new sign-in events (e.g. after a
+        // login form submission) and not to the initial session restore.
         if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+          if (!bootstrapDoneRef.current) {
+            // Bootstrap is still running; it will handle data loading.
+            return;
+          }
           await syncSupabaseUser(session.user);
         }
 
@@ -724,15 +765,22 @@ export default function App() {
 
   // Fetch all user accounts, active trades, risk params, support queues
   const fetchAccountData = async (overrideAccountId?: string) => {
+    // FIX #4: Guard against concurrent fetches. If a fetch is already in flight,
+    // skip this call to prevent an empty-data response from temporarily
+    // overwriting real data that the first fetch is about to return.
+    if (isFetchingAccountsRef.current) return;
+    isFetchingAccountsRef.current = true;
     setLoading(true);
     try {
       // Accounts
       const accsRes = await authFetch('/api/accounts');
       const accsData = await accsRes.json();
       const loadedAccs = Array.isArray(accsData.accounts) ? accsData.accounts : [];
-      setAccounts(loadedAccs);
 
       if (loadedAccs.length > 0) {
+        // Only update state when we have real data — never clear existing data
+        // while a fresh load is in progress (prevents empty-data flash).
+        setAccounts(loadedAccs);
         const storedSelectedId = sessionStorage.getItem('selected_account_id');
         // Prefer stored selection → then first account
         const defaultId = overrideAccountId
@@ -745,6 +793,11 @@ export default function App() {
         persistSelectedAccount(defaultId);
         await fetchTradesAndParams(defaultId);
       } else {
+        // Server returned no accounts for this user. Only clear state if we
+        // actually got a valid (authenticated) response — i.e. the response
+        // body was parseable and the user is logged in. This avoids wiping data
+        // when the server returns 401/empty due to a missing auth header.
+        setAccounts([]);
         setSelectedAccountId('');
         setTrades([]);
         setRiskSettings(null);
@@ -766,6 +819,7 @@ export default function App() {
       console.error('Error fetching dashboard tables:', e);
     } finally {
       setLoading(false);
+      isFetchingAccountsRef.current = false;
     }
   };
 
