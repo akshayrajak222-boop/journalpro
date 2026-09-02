@@ -181,16 +181,8 @@ export default function App() {
 
   const persistAuthSession = (userId: string, email?: string) => {
     if (typeof window === 'undefined') return;
-    if (userId) {
-      window.sessionStorage.setItem('auth_user_id', userId);
-    } else {
-      window.sessionStorage.removeItem('auth_user_id');
-    }
-    if (email) {
-      window.sessionStorage.setItem('auth_email', email);
-    } else {
-      window.sessionStorage.removeItem('auth_email');
-    }
+    window.sessionStorage.removeItem('auth_user_id');
+    window.sessionStorage.removeItem('auth_email');
     window.localStorage.removeItem('auth_user_id');
     window.localStorage.removeItem('auth_email');
   };
@@ -209,6 +201,7 @@ export default function App() {
     window.localStorage.removeItem('auth_user_id');
     window.localStorage.removeItem('auth_email');
     window.localStorage.removeItem('selected_account_id');
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(console.error);
   };
 
   // Auth states
@@ -641,6 +634,7 @@ export default function App() {
     const needsContentType = ['POST', 'PUT', 'PATCH'].includes(method) && options.body;
     return fetch(url, {
       ...options,
+      credentials: 'include',
       headers: {
         ...(needsContentType ? { 'Content-Type': 'application/json' } : {}),
         ...(storedUserId ? { 'x-auth-user-id': storedUserId } : {}),
@@ -664,15 +658,12 @@ export default function App() {
         console.error('Error loading Supabase session:', err);
       }
 
-      const storedUserId = sessionStorage.getItem('auth_user_id');
-      const storedEmail = sessionStorage.getItem('auth_email');
-      if (storedUserId || storedEmail) {
-        try {
-          const headers: Record<string, string> = {};
-          if (storedUserId) headers['x-auth-user-id'] = storedUserId;
-          if (storedEmail) headers['x-auth-email'] = storedEmail;
+      try {
+        const headers: Record<string, string> = {};
+        if (sessionStorage.getItem('auth_user_id')) headers['x-auth-user-id'] = sessionStorage.getItem('auth_user_id')!;
+        if (sessionStorage.getItem('auth_email')) headers['x-auth-email'] = sessionStorage.getItem('auth_email')!;
 
-          const res = await fetch('/api/auth/me', { headers });
+        const res = await fetch('/api/auth/me', { headers, credentials: 'include' });
           if (res.ok) {
             const data = await res.json();
             if (data.user) {
@@ -694,7 +685,6 @@ export default function App() {
         } catch (e) {
           console.error('Error loading stored session:', e);
         }
-      }
 
       setLoading(false);
     };

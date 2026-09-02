@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import { GoogleGenAI } from '@google/genai';
 import { 
   User, 
@@ -1033,6 +1034,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   });
 
   // Middleware
+  app.use(cookieParser());
   app.use(express.json({ limit: '15mb' }));
 
   // CORS middleware — allow browser requests from both domains
@@ -1049,6 +1051,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     } else {
       res.setHeader('Access-Control-Allow-Origin', 'https://fxjournalpro.com');
     }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-User-Id, X-Auth-Email');
     if (req.method === 'OPTIONS') {
@@ -1069,8 +1072,16 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   // Global middleware to load database and set local user context
   app.use(async (req, res, next) => {
     try {
-      const authUserId = (req.headers['x-auth-user-id'] as string | undefined)?.trim();
-      const authEmail = (req.headers['x-auth-email'] as string | undefined)?.trim();
+      let authUserId = (req.headers['x-auth-user-id'] as string | undefined)?.trim();
+      let authEmail = (req.headers['x-auth-email'] as string | undefined)?.trim();
+
+      if ((!authUserId || !authEmail) && req.cookies && req.cookies.fx_auth_session) {
+        try {
+          const session = JSON.parse(req.cookies.fx_auth_session);
+          if (session.userId) authUserId = session.userId;
+          if (session.email) authEmail = session.email;
+        } catch (e) {}
+      }
 
       if (authUserId || authEmail) {
         const email = authEmail ? authEmail.toLowerCase() : '';
@@ -1155,6 +1166,15 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       console.warn('[auth/me] last_login update failed:', err);
     }
     return res.json({ user: currentUser });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('fx_auth_session', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+    res.json({ message: 'Logged out successfully' });
   });
 
   app.post('/api/auth/register', async (req, res) => {
@@ -1390,6 +1410,14 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         console.log(`[Dev] Auto-created user: ${normalizedEmail}`);
         // Auto-create a default portfolio account for the dev user
         await ensureDefaultPortfolioAccount(db, uid, normalizedEmail);
+
+        res.cookie('fx_auth_session', JSON.stringify({ userId: devUser.id, email: devUser.email }), {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
+
         return res.json({ message: 'Login successful', user: devUser });
       }
 
@@ -1422,11 +1450,23 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       }
       await saveDatabase(db);
 
+      res.cookie('fx_auth_session', JSON.stringify({ userId: user.id, email: user.email }), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+      });
+
       res.json({ message: 'Login successful', user });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Login endpoint error:', err);
       res.status(500).json({ error: `Server login error: ${err?.message || err}` });
     }
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('fx_auth_session', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' });
+    res.json({ message: 'Logged out successfully' });
   });
 
   app.post('/api/auth/verify-otp', async (req, res) => {
@@ -1487,6 +1527,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           console.error('[verify-otp] Failed to auto-create default portfolio account:', e);
         }
 
+        res.cookie('fx_auth_session', JSON.stringify({ userId: verifiedUser.id, email: verifiedUser.email }), {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
+
         return res.json({ message: 'Email verified successfully.', user: verifiedUser });
       }
 
@@ -1509,6 +1556,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         // Auto-create a default portfolio account for the newly verified user
         await ensureDefaultPortfolioAccount(db, user.id, normalizedEmail);
         await saveDatabase(db, user.id, normalizedEmail);
+        
+        res.cookie('fx_auth_session', JSON.stringify({ userId: user.id, email: user.email }), {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
         return res.json({ message: 'Email verified successfully.', user });
       } else {
         return res.status(400).json({ error: 'Invalid 6-digit verification code.' });
@@ -1575,7 +1629,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       });
     } catch (err: any) {
       console.error('[AxyFx Journal Server] Resend OTP error:', err);
-      return res.status(500).json({ error: `Server resend OTP error: ${err?.message || err}` });
+      res.status(500).json({ error: `Server resend OTP error: ${err?.message || err}` });
     }
   });
 
@@ -1628,7 +1682,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       return res.json({ message: 'If this email is registered, a password reset code has been sent.', devOtp: emailResult.otp });
     } catch (err: any) {
       console.error('[Auth] Forgot password error:', err);
-      return res.status(500).json({ error: 'Server error during password reset request.' });
+      res.status(500).json({ error: 'Server error during password reset request.' });
     }
   });
 
@@ -1690,7 +1744,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       return res.json({ message: 'Password updated successfully. You can now log in with your new password.' });
     } catch (err: any) {
       console.error('[Auth] Reset password error:', err);
-      return res.status(500).json({ error: 'Server error during password reset.' });
+      res.status(500).json({ error: 'Server error during password reset.' });
     }
   });
 
