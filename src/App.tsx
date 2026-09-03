@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper
+  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, LineChart
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -37,6 +37,8 @@ import LegalFooter from './components/LegalFooter';
 import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
+import TradingViewChart from './components/TradingViewChart';
+import BacktestPage from './components/backtest/BacktestPage';
 
 
 // ─── Symbol Contract Specifications ─────────────────────────────────────────
@@ -349,6 +351,10 @@ export default function App() {
   const [journalFilterSymbol, setJournalFilterSymbol] = useState('');
   const [journalFilterStrategy, setJournalFilterStrategy] = useState('');
   const [journalFilterEmotion, setJournalFilterEmotion] = useState('');
+
+  // Chart state — scoped to current user's trades (passed from existing trades[] state)
+  const [selectedChartTradeId, setSelectedChartTradeId] = useState<string | null>(null);
+  const [showChartPanel, setShowChartPanel] = useState(false);
 
   // Export Journal modal
   const [showExportModal, setShowExportModal] = useState(false);
@@ -3188,6 +3194,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => { setActiveTab('backtest'); setMobileMenuOpen(false); }}
+              title="Backtester"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'backtest' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <Activity className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Backtester'}
+            </button>
+
+            <button
               onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
               title="Analytics"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3269,6 +3288,29 @@ export default function App() {
               )}
               {sidebarCollapsed && (
                 <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('chart'); setMobileMenuOpen(false); }}
+              title="Live Chart"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'chart' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <LineChart className={`h-4 w-4 ${activeTab === 'chart' ? 'text-blue-600' : 'text-blue-500'}`} />
+                {!sidebarCollapsed && 'Live Chart'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
               )}
             </button>
 
@@ -3372,6 +3414,7 @@ export default function App() {
                  activeTab === 'journal' ? 'Trading Journal' :
                  activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
+                 activeTab === 'backtest' ? 'Backtest Engine' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
@@ -3384,6 +3427,7 @@ export default function App() {
                  activeTab === 'journal' ? 'Inline workspace database to log, filter, and audit trading setups.' :
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
+                 activeTab === 'backtest' ? 'Simulate strategies on historical data without risking real capital.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
                  activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
@@ -4058,6 +4102,17 @@ export default function App() {
                               <Edit3 className="h-3.5 w-3.5" />
                             </button>
                             <button
+                              onClick={() => {
+                                setSelectedChartTradeId(t.id);
+                                setShowChartPanel(true);
+                                setActiveTab('chart');
+                              }}
+                              className="p-1 hover:bg-blue-50 rounded text-blue-500"
+                              title="View on Chart"
+                            >
+                              <LineChart className="h-3.5 w-3.5" />
+                            </button>
+                            <button
                               onClick={() => handleDeleteTrade(t.id)}
                               className="p-1 hover:bg-rose-50 rounded text-rose-600"
                               title="Delete position"
@@ -4079,6 +4134,45 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'backtest' && user && (
+          <div className="h-full w-full px-4 md:px-8 py-6 flex flex-col">
+            <BacktestPage theme={theme} userId={user.id} />
+          </div>
+        )}
+
+        {/* 2b. STANDALONE LIVE CHART VIEW */}
+        {activeTab === 'chart' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900 dark:text-white text-base">Live Chart</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {trades.filter(t => t.type !== 'Deposit' && t.type !== 'Withdrawal').length} trade markers · Click a journal trade to highlight it on the chart
+                </p>
+              </div>
+              {selectedChartTradeId && (
+                <button
+                  onClick={() => setSelectedChartTradeId(null)}
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-semibold flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <X className="h-3 w-3" /> Clear selection
+                </button>
+              )}
+            </div>
+
+            {/* The chart fills the remaining viewport height */}
+            <div style={{ height: 'calc(100vh - 220px)', minHeight: '480px' }}>
+              <TradingViewChart
+                trades={trades}
+                theme={theme}
+                selectedTradeId={selectedChartTradeId}
+                onTradeMarkerClick={(id) => setSelectedChartTradeId(id)}
+                initialSymbol={selectedChartTradeId ? (trades.find(t => t.id === selectedChartTradeId)?.symbol || 'XAUUSD') : 'XAUUSD'}
+              />
             </div>
           </div>
         )}

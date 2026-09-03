@@ -236,7 +236,6 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
             <CalendarRange className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Trading Performance Calendar</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">Color-coded daily profit and loss journal</p>
           </div>
         </div>

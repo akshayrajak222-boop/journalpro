@@ -260,7 +260,8 @@ function loadDatabaseFromFile() {
       }
     ] as Announcement[],
     mt5Deals: [],
-    payments: [] as PaymentHistory[]
+    payments: [] as PaymentHistory[],
+    backtestSessions: [] as any[]
   };
 
   try {
@@ -3806,8 +3807,293 @@ RESTRICTIONS:
   });
 
   // ==========================================
+  // CHART OHLC DATA PROXY (Yahoo Finance)
+  // No API key required. Server-side to avoid CORS.
+  // ==========================================
+
+  // Symbol translation table: internal symbol → Yahoo Finance ticker
+  const YAHOO_SYMBOL_MAP: Record<string, string> = {
+    // Metals
+    XAUUSD: 'GC=F', GOLD: 'GC=F',
+    XAGUSD: 'SI=F', SILVER: 'SI=F',
+    XPTUSD: 'PL=F', XPDUSD: 'PA=F',
+    // Forex pairs
+    EURUSD: 'EURUSD=X', GBPUSD: 'GBPUSD=X', USDJPY: 'USDJPY=X',
+    USDCHF: 'USDCHF=X', USDCAD: 'USDCAD=X', AUDUSD: 'AUDUSD=X',
+    NZDUSD: 'NZDUSD=X', EURGBP: 'EURGBP=X', EURJPY: 'EURJPY=X',
+    EURAUD: 'EURAUD=X', EURCAD: 'EURCAD=X', EURCHF: 'EURCHF=X',
+    EURNZD: 'EURNZD=X', GBPJPY: 'GBPJPY=X', GBPAUD: 'GBPAUD=X',
+    GBPCAD: 'GBPCAD=X', GBPCHF: 'GBPCHF=X', GBPNZD: 'GBPNZD=X',
+    AUDJPY: 'AUDJPY=X', AUDCAD: 'AUDCAD=X', AUDCHF: 'AUDCHF=X',
+    AUDNZD: 'AUDNZD=X', NZDJPY: 'NZDJPY=X', NZDCAD: 'NZDCAD=X',
+    NZDCHF: 'NZDCHF=X', CADJPY: 'CADJPY=X', CADCHF: 'CADCHF=X',
+    CHFJPY: 'CHFJPY=X',
+    // Crypto
+    BTCUSD: 'BTC-USD', ETHUSD: 'ETH-USD', LTCUSD: 'LTC-USD', XRPUSD: 'XRP-USD',
+    // Indices
+    US30: '^DJI', US500: '^GSPC', NAS100: '^NDX',
+    UK100: '^FTSE', GER40: '^GDAXI', JPN225: '^N225',
+    // Oil
+    USOIL: 'CL=F', UKOIL: 'BZ=F',
+  };
+
+  // Interval/range mapping: timeframe param → { interval, range } for Yahoo Finance v8 API
+  const YAHOO_INTERVAL_MAP: Record<string, { interval: string; range: string }> = {
+    '1m':  { interval: '1m',  range: '5d'  },
+    '5m':  { interval: '5m',  range: '10d' },
+    '15m': { interval: '15m', range: '20d' },
+    '30m': { interval: '30m', range: '30d' },
+    '1h':  { interval: '60m', range: '60d' },
+    '4h':  { interval: '60m', range: '180d' }, // Yahoo doesn't have 4h, we use 1h for 6mo and resample client-side
+    '1d':  { interval: '1d',  range: '2y'  },
+  };
+
+  app.get('/api/chart/ohlc', async (req, res) => {
+    try {
+      const rawSymbol = ((req.query.symbol as string) || 'XAUUSD').toUpperCase().trim();
+      const timeframe = ((req.query.timeframe as string) || '1d').toLowerCase().trim();
+
+      // Translate to Yahoo Finance ticker
+      const yahooSymbol = YAHOO_SYMBOL_MAP[rawSymbol] || (rawSymbol.endsWith('=X') ? rawSymbol : `${rawSymbol}=X`);
+      const mapping = YAHOO_INTERVAL_MAP[timeframe] || YAHOO_INTERVAL_MAP['1d'];
+
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=${mapping.interval}&range=${mapping.range}&includePrePost=false`;
+
+      const yahooRes = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; FXJournalPro/1.0)',
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!yahooRes.ok) {
+        console.warn(`[chart/ohlc] Yahoo Finance returned ${yahooRes.status} for ${yahooSymbol}`);
+        return res.json({ candles: [], symbol: rawSymbol, timeframe, error: 'No data available for this symbol.' });
+      }
+
+      const data: any = await yahooRes.json();
+      const result = data?.chart?.result?.[0];
+
+      if (!result) {
+        return res.json({ candles: [], symbol: rawSymbol, timeframe, error: 'No chart data from provider.' });
+      }
+
+      const timestamps: number[] = result.timestamp || [];
+      const quotes = result.indicators?.quote?.[0] || {};
+      const opens: (number | null)[] = quotes.open || [];
+      const highs: (number | null)[] = quotes.high || [];
+      const lows: (number | null)[] = quotes.low || [];
+      const closes: (number | null)[] = quotes.close || [];
+
+      // For 4h timeframe, we receive 1h candles from Yahoo — aggregate every 4 into one
+      let candles: { time: number; open: number; high: number; low: number; close: number }[] = [];
+
+      if (timeframe === '4h') {
+        // Aggregate 1h bars → 4h bars
+        let i = 0;
+        while (i < timestamps.length) {
+          const group = [];
+          for (let j = 0; j < 4 && i + j < timestamps.length; j++) {
+            const idx = i + j;
+            if (opens[idx] != null && highs[idx] != null && lows[idx] != null && closes[idx] != null) {
+              group.push({ t: timestamps[idx], o: opens[idx]!, h: highs[idx]!, l: lows[idx]!, c: closes[idx]! });
+            }
+          }
+          if (group.length > 0) {
+            candles.push({
+              time: group[0].t,
+              open: group[0].o,
+              high: Math.max(...group.map(g => g.h)),
+              low: Math.min(...group.map(g => g.l)),
+              close: group[group.length - 1].c,
+            });
+          }
+          i += 4;
+        }
+      } else {
+        candles = timestamps
+          .map((t, i) => ({
+            time: t,
+            open: opens[i] ?? 0,
+            high: highs[i] ?? 0,
+            low: lows[i] ?? 0,
+            close: closes[i] ?? 0,
+          }))
+          .filter(c => c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0);
+      }
+
+      // Deduplicate by timestamp and sort ascending
+      const seen = new Set<number>();
+      candles = candles
+        .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; })
+        .sort((a, b) => a.time - b.time);
+
+      res.json({ candles, symbol: rawSymbol, timeframe });
+    } catch (err: any) {
+      console.error('[chart/ohlc] Error:', err?.message || err);
+      res.json({ candles: [], symbol: req.query.symbol || '', timeframe: req.query.timeframe || '1d', error: 'Chart data temporarily unavailable.' });
+    }
+  });
+
+// ==========================================
+// BACKTEST SESSIONS API
+// ==========================================
+
+app.get('/api/backtest/sessions', async (req, res) => {
+  const userId = req.headers['x-auth-user-id'] as string;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('backtest_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false });
+      if (error) {
+        // If table doesn't exist yet, just return empty array
+        if (error.code === '42P01') return res.json([]);
+        throw error;
+      }
+      return res.json(data || []);
+    } else {
+      const db = loadDatabaseFromFile();
+      const userSessions = (db.backtestSessions || []).filter((s: any) => s.user_id === userId);
+      return res.json(userSessions);
+    }
+  } catch (err: any) {
+    console.error('[Backtest] GET /sessions Error:', err);
+    res.status(500).json({ error: 'Failed to load sessions' });
+  }
+});
+
+app.post('/api/backtest/sessions', async (req, res) => {
+  const userId = req.headers['x-auth-user-id'] as string;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const session = req.body;
+  session.user_id = userId;
+  if (!session.id) session.id = 'bt_' + Date.now();
+  session.created_at = new Date().toISOString();
+  session.updated_at = new Date().toISOString();
+
+  try {
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('backtest_sessions')
+        .insert([session])
+        .select()
+        .single();
+      if (error) throw error;
+      return res.json(data);
+    } else {
+      const db = loadDatabaseFromFile();
+      if (!db.backtestSessions) db.backtestSessions = [];
+      db.backtestSessions.push(session);
+      saveDatabase(db);
+      return res.json(session);
+    }
+  } catch (err: any) {
+    console.error('[Backtest] POST /sessions Error:', err);
+    res.status(500).json({ error: 'Failed to save session' });
+  }
+});
+
+app.get('/api/backtest/sessions/:id', async (req, res) => {
+  const userId = req.headers['x-auth-user-id'] as string;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const { id } = req.params;
+
+  try {
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('backtest_sessions')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+      if (error) throw error;
+      return res.json(data);
+    } else {
+      const db = loadDatabaseFromFile();
+      const session = (db.backtestSessions || []).find((s: any) => s.id === id && s.user_id === userId);
+      if (!session) return res.status(404).json({ error: 'Session not found' });
+      return res.json(session);
+    }
+  } catch (err: any) {
+    console.error('[Backtest] GET /sessions/:id Error:', err);
+    res.status(500).json({ error: 'Failed to load session' });
+  }
+});
+
+app.put('/api/backtest/sessions/:id', async (req, res) => {
+  const userId = req.headers['x-auth-user-id'] as string;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const { id } = req.params;
+  const updates = req.body;
+  updates.updated_at = new Date().toISOString();
+  // Ensure user cannot change user_id
+  delete updates.user_id;
+
+  try {
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('backtest_sessions')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      if (error) throw error;
+      return res.json(data);
+    } else {
+      const db = loadDatabaseFromFile();
+      const index = (db.backtestSessions || []).findIndex((s: any) => s.id === id && s.user_id === userId);
+      if (index === -1) return res.status(404).json({ error: 'Session not found' });
+      db.backtestSessions[index] = { ...db.backtestSessions[index], ...updates };
+      saveDatabase(db);
+      return res.json(db.backtestSessions[index]);
+    }
+  } catch (err: any) {
+    console.error('[Backtest] PUT /sessions/:id Error:', err);
+    res.status(500).json({ error: 'Failed to update session' });
+  }
+});
+
+app.delete('/api/backtest/sessions/:id', async (req, res) => {
+  const userId = req.headers['x-auth-user-id'] as string;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const { id } = req.params;
+
+  try {
+    if (useSupabase) {
+      const { error } = await supabase
+        .from('backtest_sessions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (error) throw error;
+      return res.json({ success: true });
+    } else {
+      const db = loadDatabaseFromFile();
+      if (!db.backtestSessions) db.backtestSessions = [];
+      const lenBefore = db.backtestSessions.length;
+      db.backtestSessions = db.backtestSessions.filter((s: any) => !(s.id === id && s.user_id === userId));
+      if (db.backtestSessions.length === lenBefore) return res.status(404).json({ error: 'Session not found' });
+      saveDatabase(db);
+      return res.json({ success: true });
+    }
+  } catch (err: any) {
+    console.error('[Backtest] DELETE /sessions/:id Error:', err);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
+  // ==========================================
   // VITE DEV SERVER OR STATIC ASSET PRODUCTION
   // ==========================================
+
 
   // In development environment outside of Vercel, load Vite dev server
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
