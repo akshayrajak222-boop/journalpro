@@ -9,7 +9,7 @@ import BacktestResultsPanel from './BacktestResultsPanel';
 import { BacktestEngine } from '../../backtest/BacktestEngine';
 import { BacktestSettings, OhlcCandle, BacktestTrade } from '../../backtest/types';
 import { ManualStrategy } from '../../backtest/strategies/ManualStrategy';
-import { EMAStrategy } from '../../backtest/strategies/EMAStrategy';
+import { getStrategy } from '../../backtest/strategies/StrategyRegistry';
 
 interface BacktestPageProps {
   theme: 'light' | 'dark';
@@ -84,11 +84,8 @@ export default function BacktestPage({ theme, userId }: BacktestPageProps) {
       });
       
       // 3. Set strategy
-      if (strategyId === 'ema_crossover') {
-        newEngine.setStrategy(new EMAStrategy(), strategyConfig);
-      } else {
-        newEngine.setStrategy(new ManualStrategy(), strategyConfig);
-      }
+      const strat = getStrategy(strategyId) || new ManualStrategy();
+      newEngine.setStrategy(strat, strategyConfig);
       
       newEngine.setCandles(filteredCandles);
       setEngine(newEngine);
@@ -208,6 +205,8 @@ export default function BacktestPage({ theme, userId }: BacktestPageProps) {
       {status === 'finished' && engine && (
         <BacktestResultsPanel 
           results={engine.calculateResults()}
+          equityCurve={engine.equityCurve}
+          trades={engine.closedTrades}
           onClose={handleReset}
           onSave={async () => {
             const results = engine.calculateResults();

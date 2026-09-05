@@ -15,6 +15,10 @@ export interface BacktestSettings {
   commissionPerLot: number;
   spreadPoints: number;
   slippagePoints: number;
+  maxDailyLoss: number; // Max USD loss per day (0 for disabled)
+  maxConsecutiveLosses: number; // Max losses before halting (0 for disabled)
+  breakEvenTriggerR: number; // Risk multiple (e.g., 1R) to trigger moving SL to breakeven (0 for disabled)
+  trailingStopDistancePips: number; // Distance in pips to trail stop loss (0 for disabled)
 }
 
 export interface BacktestTrade {
@@ -39,6 +43,10 @@ export interface BacktestTrade {
   balanceAfter?: number;
   comment?: string;
   isOpen: boolean;
+  // Advanced Risk Tracking
+  highestPriceReached: number;
+  lowestPriceReached: number;
+  slMovedToBreakEven: boolean;
 }
 
 export interface EquityCurvePoint {
@@ -51,6 +59,7 @@ export interface BacktestResults {
   startingBalance: number;
   endingBalance: number;
   netPnL: number;
+  returnPercent: number;
   totalTrades: number;
   winningTrades: number;
   losingTrades: number;

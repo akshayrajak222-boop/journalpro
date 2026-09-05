@@ -3839,13 +3839,14 @@ RESTRICTIONS:
 
   // Interval/range mapping: timeframe param → { interval, range } for Yahoo Finance v8 API
   const YAHOO_INTERVAL_MAP: Record<string, { interval: string; range: string }> = {
-    '1m':  { interval: '1m',  range: '5d'  },
-    '5m':  { interval: '5m',  range: '10d' },
-    '15m': { interval: '15m', range: '20d' },
-    '30m': { interval: '30m', range: '30d' },
-    '1h':  { interval: '60m', range: '60d' },
-    '4h':  { interval: '60m', range: '180d' }, // Yahoo doesn't have 4h, we use 1h for 6mo and resample client-side
-    '1d':  { interval: '1d',  range: '2y'  },
+    '1m':  { interval: '1m',  range: '7d'  },
+    '5m':  { interval: '5m',  range: '60d' },
+    '15m': { interval: '15m', range: '60d' },
+    '30m': { interval: '30m', range: '60d' },
+    '1h':  { interval: '60m', range: '730d' },
+    '4h':  { interval: '60m', range: '730d' }, // Yahoo doesn't have 4h, we use 1h and resample client-side
+    '1d':  { interval: '1d',  range: '20y' },
+    '1mo': { interval: '1mo', range: 'max' },
   };
 
   app.get('/api/chart/ohlc', async (req, res) => {

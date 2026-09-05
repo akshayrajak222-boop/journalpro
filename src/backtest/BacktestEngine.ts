@@ -100,15 +100,35 @@ export class BacktestEngine {
     if (!currentCandle) return;
     
     // Enforce max trades per day
-    if (this.settings.maxTradesPerDay > 0) {
-      const todayString = new Date(currentCandle.time as number * 1000).toISOString().split('T')[0];
-      const tradesToday = [...this.closedTrades, ...this.openTrades].filter(t => 
-        t.entryTime.startsWith(todayString)
-      ).length;
-      
-      if (tradesToday >= this.settings.maxTradesPerDay) {
-        console.warn('Max trades per day reached.');
+    const todayString = new Date(currentCandle.time as number * 1000).toISOString().split('T')[0];
+    const tradesToday = [...this.closedTrades, ...this.openTrades].filter(t => 
+      t.entryTime.startsWith(todayString)
+    );
+    
+    if (this.settings.maxTradesPerDay > 0 && tradesToday.length >= this.settings.maxTradesPerDay) {
+      return;
+    }
+    
+    // Enforce max daily loss
+    if (this.settings.maxDailyLoss > 0) {
+      const dailyPnL = tradesToday.reduce((acc, t) => acc + (t.profit || 0), 0);
+      if (dailyPnL <= -this.settings.maxDailyLoss) {
         return;
+      }
+    }
+    
+    // Enforce max consecutive losses
+    if (this.settings.maxConsecutiveLosses > 0) {
+      let consecutiveLosses = 0;
+      for (let i = this.closedTrades.length - 1; i >= 0; i--) {
+        if ((this.closedTrades[i].profit || 0) < 0) {
+          consecutiveLosses++;
+        } else if ((this.closedTrades[i].profit || 0) > 0) {
+          break; // Streak broken
+        }
+      }
+      if (consecutiveLosses >= this.settings.maxConsecutiveLosses) {
+        return; // Halt trading due to consecutive losses
       }
     }
 
@@ -130,7 +150,10 @@ export class BacktestEngine {
       spreadCost: (this.settings.spreadPoints * (SYMBOL_SPECS[SYMBOL_ALIASES[this.settings.symbol] || this.settings.symbol]?.pipValuePerLot || 10)) * lots, // Simplistic mapping
       slippageCost: 0,
       isOpen: true,
-      comment
+      comment,
+      highestPriceReached: entryPrice,
+      lowestPriceReached: entryPrice,
+      slMovedToBreakEven: false
     };
     
     this.openTrades.push(trade);
@@ -198,6 +221,10 @@ export class BacktestEngine {
       let hitSL = false;
       let hitTP = false;
       
+      // Update extremes
+      if (currentCandle.high > trade.highestPriceReached) trade.highestPriceReached = currentCandle.high;
+      if (currentCandle.low < trade.lowestPriceReached) trade.lowestPriceReached = currentCandle.low;
+      
       if (trade.direction === 'Buy') {
         hitSL = currentCandle.low <= trade.stopLoss;
         hitTP = currentCandle.high >= trade.takeProfit;
@@ -208,12 +235,54 @@ export class BacktestEngine {
       
       if (hitSL && hitTP) {
         // CONSERVATIVE RULE: If both are hit in same candle, assume worst case (SL)
-        // Add slippage logic here if needed based on settings
         this.closeTrade(trade.id, trade.stopLoss, candleTimeStr, 'SL', this.settings.slippagePoints * trade.lotSize * 10);
       } else if (hitSL) {
         this.closeTrade(trade.id, trade.stopLoss, candleTimeStr, 'SL', this.settings.slippagePoints * trade.lotSize * 10);
       } else if (hitTP) {
         this.closeTrade(trade.id, trade.takeProfit, candleTimeStr, 'TP', 0);
+      } else {
+        // Trade is still open, evaluate Trailing Stop & Break Even
+        const sym = this.settings.symbol.toUpperCase().trim();
+        const spec = SYMBOL_SPECS[SYMBOL_ALIASES[sym] || sym] || { pipSize: 0.0001, pipValuePerLot: 10 };
+        
+        if (trade.direction === 'Buy') {
+          // Break even
+          if (this.settings.breakEvenTriggerR > 0 && !trade.slMovedToBreakEven) {
+            const riskPips = (trade.entryPrice - trade.stopLoss) / spec.pipSize;
+            if (riskPips > 0) {
+              const currentProfitPips = (currentCandle.close - trade.entryPrice) / spec.pipSize;
+              if (currentProfitPips >= riskPips * this.settings.breakEvenTriggerR) {
+                trade.stopLoss = trade.entryPrice;
+                trade.slMovedToBreakEven = true;
+              }
+            }
+          }
+          // Trailing stop
+          if (this.settings.trailingStopDistancePips > 0) {
+            const potentialSL = currentCandle.close - (this.settings.trailingStopDistancePips * spec.pipSize);
+            if (potentialSL > trade.stopLoss) {
+              trade.stopLoss = potentialSL; // Trail it up
+            }
+          }
+        } else {
+          // Sell
+          if (this.settings.breakEvenTriggerR > 0 && !trade.slMovedToBreakEven) {
+            const riskPips = (trade.stopLoss - trade.entryPrice) / spec.pipSize;
+            if (riskPips > 0) {
+              const currentProfitPips = (trade.entryPrice - currentCandle.close) / spec.pipSize;
+              if (currentProfitPips >= riskPips * this.settings.breakEvenTriggerR) {
+                trade.stopLoss = trade.entryPrice;
+                trade.slMovedToBreakEven = true;
+              }
+            }
+          }
+          if (this.settings.trailingStopDistancePips > 0) {
+            const potentialSL = currentCandle.close + (this.settings.trailingStopDistancePips * spec.pipSize);
+            if (potentialSL < trade.stopLoss) {
+              trade.stopLoss = potentialSL; // Trail it down
+            }
+          }
+        }
       }
     }
     
@@ -291,6 +360,7 @@ export class BacktestEngine {
       startingBalance: this.settings.startingBalance,
       endingBalance: this.currentBalance,
       netPnL: this.currentBalance - this.settings.startingBalance,
+      returnPercent: ((this.currentBalance - this.settings.startingBalance) / this.settings.startingBalance) * 100,
       totalTrades,
       winningTrades: winningTrades.length,
       losingTrades: losingTrades.length,

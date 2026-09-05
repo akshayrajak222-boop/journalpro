@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BacktestSettings } from '../../backtest/types';
 import { ALL_SYMBOLS } from '../../backtest/symbolSpecs';
 import { Play, Settings2 } from 'lucide-react';
+import { getAllStrategies, getStrategy } from '../../backtest/strategies/StrategyRegistry';
 
 interface BacktestSetupPanelProps {
   onStart: (settings: BacktestSettings, strategyId: string, strategyConfig: any) => void;
@@ -24,20 +25,24 @@ const DEFAULT_SETTINGS: BacktestSettings = {
   maxTradesPerDay: 5,
   commissionPerLot: 7,
   spreadPoints: 1.5,
-  slippagePoints: 0
+  slippagePoints: 0,
+  maxDailyLoss: 0,
+  maxConsecutiveLosses: 0,
+  breakEvenTriggerR: 0,
+  trailingStopDistancePips: 0
 };
 
 export default function BacktestSetupPanel({ onStart, isLoading }: BacktestSetupPanelProps) {
   const [settings, setSettings] = useState<BacktestSettings>(DEFAULT_SETTINGS);
   const [strategyId, setStrategyId] = useState('manual');
-  
-  // Minimal EMA config for now. Will be expanded when strategies are fully wired.
-  const [strategyConfig, setStrategyConfig] = useState<any>({
-    fastPeriod: 9,
-    slowPeriod: 21,
-    stopLossPips: 20,
-    takeProfitPips: 40,
-  });
+  const [strategyConfig, setStrategyConfig] = useState<any>({});
+
+  useEffect(() => {
+    const strat = getStrategy(strategyId);
+    if (strat) {
+      setStrategyConfig(strat.getDefaultConfig());
+    }
+  }, [strategyId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -182,8 +187,9 @@ export default function BacktestSetupPanel({ onStart, isLoading }: BacktestSetup
                 onChange={(e) => setStrategyId(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
               >
-                <option value="manual">Manual Trading</option>
-                <option value="ema_crossover">EMA Crossover (Auto)</option>
+                {getAllStrategies().map(strat => (
+                  <option key={strat.id} value={strat.id}>{strat.name}</option>
+                ))}
               </select>
             </div>
 
@@ -229,46 +235,63 @@ export default function BacktestSetupPanel({ onStart, isLoading }: BacktestSetup
           </div>
         </div>
         
-        {strategyId === 'ema_crossover' && (
+        {/* Advanced Risk Management */}
+        <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Advanced Risk Limits</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Max Daily Loss ($)</label>
+              <input type="number" name="maxDailyLoss" value={settings.maxDailyLoss} onChange={handleChange} min="0" placeholder="0 = disable" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Max Consec. Losses</label>
+              <input type="number" name="maxConsecutiveLosses" value={settings.maxConsecutiveLosses} onChange={handleChange} min="0" placeholder="0 = disable" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Break Even Trigger (R)</label>
+              <input type="number" name="breakEvenTriggerR" value={settings.breakEvenTriggerR} onChange={handleChange} min="0" step="0.5" placeholder="0 = disable" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Trailing Stop (Pips)</label>
+              <input type="number" name="trailingStopDistancePips" value={settings.trailingStopDistancePips} onChange={handleChange} min="0" placeholder="0 = disable" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none" />
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Strategy Configuration */}
+        {strategyId !== 'manual' && getStrategy(strategyId) && (
           <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">EMA Settings</h4>
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">{getStrategy(strategyId)?.name} Settings</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Fast EMA</label>
-                <input 
-                  type="number" 
-                  value={strategyConfig.fastPeriod} 
-                  onChange={(e) => setStrategyConfig({...strategyConfig, fastPeriod: parseInt(e.target.value)})}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Slow EMA</label>
-                <input 
-                  type="number" 
-                  value={strategyConfig.slowPeriod} 
-                  onChange={(e) => setStrategyConfig({...strategyConfig, slowPeriod: parseInt(e.target.value)})}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">SL Pips</label>
-                <input 
-                  type="number" 
-                  value={strategyConfig.stopLossPips} 
-                  onChange={(e) => setStrategyConfig({...strategyConfig, stopLossPips: parseInt(e.target.value)})}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">TP Pips</label>
-                <input 
-                  type="number" 
-                  value={strategyConfig.takeProfitPips} 
-                  onChange={(e) => setStrategyConfig({...strategyConfig, takeProfitPips: parseInt(e.target.value)})}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none"
-                />
-              </div>
+              {getStrategy(strategyId)?.getConfigSchema().map(field => (
+                <div key={field.name}>
+                  <label className="block text-xs text-slate-500 mb-1" title={field.description}>{field.label}</label>
+                  {field.type === 'select' ? (
+                    <select
+                      value={strategyConfig[field.name] ?? field.defaultValue}
+                      onChange={(e) => setStrategyConfig({...strategyConfig, [field.name]: e.target.value})}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none"
+                    >
+                      {field.options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  ) : field.type === 'boolean' ? (
+                    <input 
+                      type="checkbox" 
+                      checked={strategyConfig[field.name] ?? field.defaultValue}
+                      onChange={(e) => setStrategyConfig({...strategyConfig, [field.name]: e.target.checked})}
+                      className="mt-1"
+                    />
+                  ) : (
+                    <input 
+                      type={field.type === 'number' ? 'number' : 'text'}
+                      value={strategyConfig[field.name] ?? field.defaultValue}
+                      onChange={(e) => setStrategyConfig({...strategyConfig, [field.name]: field.type === 'number' ? parseFloat(e.target.value) : e.target.value})}
+                      min={field.min} max={field.max} step={field.step}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-sm outline-none"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

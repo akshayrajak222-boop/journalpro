@@ -40,6 +40,7 @@ import {
 } from 'lightweight-charts';
 import { Search, RefreshCw, Maximize2, AlertCircle, TrendingUp, X } from 'lucide-react';
 import { Trade } from '../types';
+import { TradeLinePrimitive } from './TradeLinePrimitive';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -77,9 +78,10 @@ const TIMEFRAMES = [
   { label: '1H',  value: '1h'  },
   { label: '4H',  value: '4h'  },
   { label: '1D',  value: '1d'  },
+  { label: '1M',  value: '1mo' },
 ];
 
-const DEFAULT_TIMEFRAME = '1d';
+const DEFAULT_TIMEFRAME = '15m';
 
 // Popular symbols for autocomplete
 const POPULAR_SYMBOLS = [
@@ -137,42 +139,26 @@ const CANDLE_COLORS = {
 
 // ─── Marker builder ───────────────────────────────────────────────────────────
 
-function buildMarkersForSymbol(trades: Trade[], symbol: string): SeriesMarker<Time>[] {
+function buildMarkersForSymbol(filteredTrades: Trade[]): SeriesMarker<Time>[] {
   const markers: SeriesMarker<Time>[] = [];
 
-  const symbolTrades = trades.filter(
-    t => t.symbol?.toUpperCase() === symbol.toUpperCase()
-      && t.type !== 'Deposit'
-      && t.type !== 'Withdrawal'
-  );
-
-  for (const trade of symbolTrades) {
+  for (const trade of filteredTrades) {
     if (!trade.date) continue;
     const ts = Math.floor(new Date(trade.date).getTime() / 1000) as Time;
-    const isWin = trade.profit >= 0;
     const isBuy = trade.type === 'Buy';
 
-    // Entry marker
+    const profitText = trade.profit !== undefined 
+      ? `${trade.profit >= 0 ? '+' : ''}$${trade.profit.toFixed(2)}` 
+      : '';
+
+    // Main marker
     markers.push({
       time: ts,
       position: isBuy ? 'belowBar' : 'aboveBar',
-      color: isBuy ? '#3b82f6' : '#f97316',
+      color: isBuy ? '#3b82f6' : '#ef4444',
       shape: isBuy ? 'arrowUp' : 'arrowDown',
-      text: `${trade.type}`,
       id: `entry_${trade.id}`,
-      size: 1.3,
-    } as SeriesMarker<Time>);
-
-    // Result marker (1-second offset to allow both markers on same candle)
-    const exitTs = ((ts as number) + 1) as Time;
-    markers.push({
-      time: exitTs,
-      position: isWin ? 'aboveBar' : 'belowBar',
-      color: isWin ? '#10b981' : '#ef4444',
-      shape: 'circle',
-      text: `${trade.profit >= 0 ? '+' : ''}${trade.profit.toFixed(2)}`,
-      id: `result_${trade.id}`,
-      size: 0.8,
+      size: 1.5,
     } as SeriesMarker<Time>);
   }
 
@@ -196,18 +182,22 @@ const TradingViewChart = memo(function TradingViewChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const priceLineRefs = useRef<IPriceLine[]>([]);
+  const primitivesRef = useRef<TradeLinePrimitive[]>([]);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const initDoneRef = useRef(false);
+  const lastCandleRef = useRef<{time: Time, close: number} | null>(null);
 
   const [symbol, setSymbol] = useState(initialSymbol);
   const [symbolInput, setSymbolInput] = useState(initialSymbol);
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
+  const [filterMode, setFilterMode] = useState<'all'|'wins'|'losses'|'buy'|'sell'>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [countdown, setCountdown] = useState<string>('');
 
   // ─── Chart initialisation ─────────────────────────────────────────────────
 
@@ -298,9 +288,17 @@ const TradingViewChart = memo(function TradingViewChart({
         close: c.close,
       }));
 
+      if (data.length > 0) {
+        lastCandleRef.current = { time: data[data.length - 1].time, close: data[data.length - 1].close };
+      }
+
       if (seriesRef.current) {
         seriesRef.current.setData(data);
-        chartRef.current?.timeScale().scrollToRealTime();
+        setTimeout(() => {
+          if (chartRef.current) {
+            chartRef.current.timeScale().scrollToPosition(0, true);
+          }
+        }, 50);
       }
       setLastUpdated(new Date());
     } catch (err: any) {
@@ -316,7 +314,9 @@ const TradingViewChart = memo(function TradingViewChart({
     if (!initDoneRef.current) return;
     if (overrideData) {
       if (seriesRef.current && overrideData.length > 0) {
-        seriesRef.current.setData(overrideData.map(c => ({ ...c, time: c.time as Time })));
+        const mapped = overrideData.map(c => ({ ...c, time: c.time as Time }));
+        lastCandleRef.current = { time: mapped[mapped.length - 1].time, close: mapped[mapped.length - 1].close };
+        seriesRef.current.setData(mapped);
         // Optional: Do not force scroll to realtime if we are replaying
       }
     } else {
@@ -324,11 +324,26 @@ const TradingViewChart = memo(function TradingViewChart({
     }
   }, [symbol, timeframe, fetchData, overrideData]);
 
-  // ─── Apply trade markers ──────────────────────────────────────────────────
+  // ─── Apply trade markers & primitives ─────────────────────────────────────
 
   const applyMarkers = useCallback(() => {
-    if (!seriesRef.current) return;
-    const markers = buildMarkersForSymbol(trades, symbol);
+    if (!seriesRef.current || !chartRef.current) return;
+
+    // Filter trades based on symbol and selected filter
+    const filteredTrades = trades.filter(t => {
+      if (t.type === 'Deposit' || t.type === 'Withdrawal') return false;
+      if (t.symbol?.toUpperCase() !== symbol.toUpperCase()) return false;
+      
+      if (filterMode === 'wins' && t.profit < 0) return false;
+      if (filterMode === 'losses' && t.profit >= 0) return false;
+      if (filterMode === 'buy' && t.type !== 'Buy') return false;
+      if (filterMode === 'sell' && t.type !== 'Sell') return false;
+      
+      return true;
+    });
+
+    const markers = buildMarkersForSymbol(filteredTrades);
+    
     // v5 API: use createSeriesMarkers plugin
     if (!markersPluginRef.current) {
       try {
@@ -337,7 +352,56 @@ const TradingViewChart = memo(function TradingViewChart({
     } else {
       try { markersPluginRef.current.setMarkers(markers); } catch (_) {}
     }
-  }, [trades, symbol]);
+
+    // Detach existing primitives
+    for (const p of primitivesRef.current) {
+      try { seriesRef.current.detachPrimitive(p); } catch (e) {}
+    }
+    primitivesRef.current = [];
+
+    for (const trade of filteredTrades) {
+      if (!trade.date) continue;
+      const entryTime = Math.floor(new Date(trade.date).getTime() / 1000) as Time;
+      const isWin = trade.profit >= 0;
+      
+      let exitTime: Time;
+      let exitPrice: number;
+      let isOpen = false;
+
+      if (trade.exitPrice && trade.exitPrice !== trade.entryPrice) {
+        exitTime = ((entryTime as number) + 3600) as Time; // 1 hr default line width since exitDate is not in DB
+        exitPrice = trade.exitPrice;
+      } else {
+        // Trade is open.
+        isOpen = true;
+        if (lastCandleRef.current) {
+          exitTime = lastCandleRef.current.time;
+          exitPrice = lastCandleRef.current.close;
+        } else {
+          continue;
+        }
+      }
+
+      const primitive = new TradeLinePrimitive({
+        entryTime,
+        entryPrice: trade.entryPrice,
+        exitTime,
+        exitPrice,
+        isWin,
+        isOpen,
+        profit: trade.profit,
+        lotSize: trade.lotSize || 1,
+        type: trade.type as 'Buy' | 'Sell'
+      });
+
+      try {
+        seriesRef.current.attachPrimitive(primitive);
+        primitivesRef.current.push(primitive);
+      } catch (e) {
+        console.warn("Could not attach primitive", e);
+      }
+    }
+  }, [trades, symbol, filterMode]);
 
   // ─── Apply SL/TP price lines for the selected trade ───────────────────────
 
@@ -422,6 +486,45 @@ const TradingViewChart = memo(function TradingViewChart({
   useEffect(() => {
     applySLTP();
   }, [applySLTP]);
+
+  // ─── Candle Countdown ─────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const parseTimeframe = (tf: string) => {
+      const val = parseInt(tf);
+      if (tf.endsWith('m')) return val * 60 * 1000;
+      if (tf.endsWith('h')) return val * 60 * 60 * 1000;
+      if (tf.endsWith('d')) return val * 24 * 60 * 60 * 1000;
+      return 0;
+    };
+
+    const durationMs = parseTimeframe(timeframe.toLowerCase());
+    if (!durationMs) {
+      setCountdown('');
+      return;
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      const remainder = now % durationMs;
+      const msUntilNext = durationMs - remainder;
+      
+      const totalSeconds = Math.floor(msUntilNext / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      
+      if (hours > 0) {
+        setCountdown(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+      } else {
+        setCountdown(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [timeframe]);
 
   // ─── Symbol search handlers ───────────────────────────────────────────────
 
@@ -543,6 +646,21 @@ const TradingViewChart = memo(function TradingViewChart({
 
         <div className="flex-1 min-w-0" />
 
+        {/* Trade Filter selector */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {(['all', 'wins', 'losses', 'buy', 'sell'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setFilterMode(mode)}
+              className={`text-xs font-bold px-2 py-1 rounded-md transition capitalize ${filterMode === mode ? btnActive : btnInactive}`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+
+        <div className={`w-px h-4 ${isDark ? 'bg-slate-700' : 'bg-slate-200'} mx-0.5 flex-shrink-0`} />
+
         {/* Selected trade info pill */}
         {selectedTradeId && (() => {
           const t = trades.find(tr => tr.id === selectedTradeId);
@@ -561,12 +679,19 @@ const TradingViewChart = memo(function TradingViewChart({
           );
         })()}
 
-        {/* Last updated label */}
-        {lastUpdated && !loading && (
-          <span className={`hidden lg:block text-[10px] ${textMuted} flex-shrink-0`}>
-            {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        )}
+        {/* Last updated & Countdown label */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {countdown && (
+            <span className={`hidden md:flex items-center gap-1 text-[10px] font-bold ${isDark ? 'text-indigo-400 bg-indigo-900/30' : 'text-indigo-600 bg-indigo-50'} px-2 py-1 rounded-md`}>
+              ⏱ {countdown}
+            </span>
+          )}
+          {lastUpdated && !loading && (
+            <span className={`hidden lg:block text-[10px] ${textMuted}`}>
+              {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
 
         {/* Refresh */}
         <button

@@ -3194,19 +3194,6 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => { setActiveTab('backtest'); setMobileMenuOpen(false); }}
-              title="Backtester"
-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
-              } ${
-                activeTab === 'backtest' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
-              }`}
-            >
-              <Activity className="h-4 w-4 text-slate-500" />
-              {!sidebarCollapsed && 'Backtester'}
-            </button>
-
-            <button
               onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
               title="Analytics"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3233,6 +3220,29 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => { setActiveTab('chart'); setMobileMenuOpen(false); }}
+              title="Live Chart"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'chart' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <LineChart className={`h-4 w-4 ${activeTab === 'chart' ? 'text-blue-600' : 'text-blue-500'}`} />
+                {!sidebarCollapsed && 'Live Chart'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+              )}
+            </button>
+
+            <button
               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News & Economic Calendar"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3253,6 +3263,19 @@ export default function App() {
               {sidebarCollapsed && (
                 <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
               )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('backtest'); setMobileMenuOpen(false); }}
+              title="Backtester"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'backtest' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+              }`}
+            >
+              <Activity className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Backtester'}
             </button>
 
             <button
@@ -3288,29 +3311,6 @@ export default function App() {
               )}
               {sidebarCollapsed && (
                 <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
-              )}
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('chart'); setMobileMenuOpen(false); }}
-              title="Live Chart"
-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
-                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
-              } ${
-                activeTab === 'chart' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
-              }`}
-            >
-              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
-                <LineChart className={`h-4 w-4 ${activeTab === 'chart' ? 'text-blue-600' : 'text-blue-500'}`} />
-                {!sidebarCollapsed && 'Live Chart'}
-              </span>
-              {!sidebarCollapsed && (
-                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                  NEW
-                </span>
-              )}
-              {sidebarCollapsed && (
-                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
               )}
             </button>
 

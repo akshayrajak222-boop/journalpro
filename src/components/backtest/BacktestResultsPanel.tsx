@@ -1,14 +1,17 @@
 import React from 'react';
-import { BacktestResults } from '../../backtest/types';
+import { BacktestResults, EquityCurvePoint, BacktestTrade } from '../../backtest/types';
 import { Target, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface BacktestResultsPanelProps {
   results: BacktestResults;
+  equityCurve?: EquityCurvePoint[];
+  trades?: BacktestTrade[];
   onClose: () => void;
   onSave: () => void;
 }
 
-export default function BacktestResultsPanel({ results, onClose, onSave }: BacktestResultsPanelProps) {
+export default function BacktestResultsPanel({ results, equityCurve, trades, onClose, onSave }: BacktestResultsPanelProps) {
   const isProfitable = results.netPnL >= 0;
 
   return (
@@ -44,7 +47,9 @@ export default function BacktestResultsPanel({ results, onClose, onSave }: Backt
             {isProfitable ? '+' : ''}{results.netPnL.toFixed(2)}
           </p>
           <div className="mt-2 text-xs font-medium text-slate-500">
-            Final Balance: <span className="text-slate-700 dark:text-slate-300 font-mono">${results.endingBalance.toFixed(2)}</span>
+            Return: <span className={results.returnPercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{results.returnPercent.toFixed(2)}%</span>
+            {' • '}
+            Balance: <span className="text-slate-700 dark:text-slate-300 font-mono">${results.endingBalance.toFixed(2)}</span>
           </div>
         </div>
 
@@ -136,6 +141,59 @@ export default function BacktestResultsPanel({ results, onClose, onSave }: Backt
           </div>
         </div>
       </div>
+
+      {equityCurve && equityCurve.length > 0 && (
+        <div className="mt-8">
+          <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">Equity Curve</h4>
+          <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-4 border border-slate-100 dark:border-slate-800" style={{ height: '300px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                <XAxis dataKey="time" tickFormatter={(val) => new Date(val).toLocaleDateString()} stroke="#94a3b8" fontSize={12} minTickGap={30} />
+                <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `$${val}`} width={80} />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '0.5rem', color: '#fff' }}
+                  labelFormatter={(val) => new Date(val).toLocaleString()}
+                  formatter={(val: number) => [`$${val.toFixed(2)}`, 'Balance']}
+                />
+                <Area type="monotone" dataKey="balance" stroke="#4f46e5" strokeWidth={2} fillOpacity={1} fill="url(#colorBalance)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {trades && trades.length > 0 && (
+        <div className="mt-8">
+          <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">Trade Performance</h4>
+          <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-4 border border-slate-100 dark:border-slate-800" style={{ height: '250px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trades.map((t, i) => ({ index: i + 1, profit: t.profit || 0 }))}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                <XAxis dataKey="index" stroke="#94a3b8" fontSize={12} />
+                <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `$${val}`} width={60} />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '0.5rem', color: '#fff' }}
+                  formatter={(val: number) => [`$${val.toFixed(2)}`, 'Profit/Loss']}
+                />
+                <Bar 
+                  dataKey="profit" 
+                  shape={(props: any) => {
+                    const { x, y, width, height, profit } = props;
+                    return <rect x={x} y={y} width={width} height={height} fill={profit >= 0 ? '#10b981' : '#f43f5e'} rx={2} />;
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
