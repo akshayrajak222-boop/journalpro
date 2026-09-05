@@ -38,8 +38,6 @@ import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
 import TradingViewChart from './components/TradingViewChart';
-import BacktestPage from './components/backtest/BacktestPage';
-
 
 // ─── Symbol Contract Specifications ─────────────────────────────────────────
 // contractSize = number of units per 1 standard lot
@@ -3266,19 +3264,6 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => { setActiveTab('backtest'); setMobileMenuOpen(false); }}
-              title="Backtester"
-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
-              } ${
-                activeTab === 'backtest' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
-              }`}
-            >
-              <Activity className="h-4 w-4 text-slate-500" />
-              {!sidebarCollapsed && 'Backtester'}
-            </button>
-
-            <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
               title="MT5 Sync"
               className={`text-xs font-semibold transition flex items-center rounded-lg ${
@@ -3414,7 +3399,6 @@ export default function App() {
                  activeTab === 'journal' ? 'Trading Journal' :
                  activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
-                 activeTab === 'backtest' ? 'Backtest Engine' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
@@ -3427,7 +3411,6 @@ export default function App() {
                  activeTab === 'journal' ? 'Inline workspace database to log, filter, and audit trading setups.' :
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
-                 activeTab === 'backtest' ? 'Simulate strategies on historical data without risking real capital.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
                  activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
@@ -4135,12 +4118,6 @@ export default function App() {
                 </table>
               </div>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'backtest' && user && (
-          <div className="h-full w-full px-4 md:px-8 py-6 flex flex-col">
-            <BacktestPage theme={theme} userId={user.id} />
           </div>
         )}
 
