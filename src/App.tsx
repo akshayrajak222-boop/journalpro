@@ -3536,8 +3536,8 @@ export default function App() {
             <div className="h-48 bg-slate-100 rounded-xl" />
           </div>
         }>
-        {/* page-transition key causes a re-mount + CSS fade-in on every route change */}
-        <div key={location.pathname} className="page-transition">
+        {/* Remove the key prop to prevent full DOM remounting on route changes, which causes extreme lag */}
+        <div className="page-transition">
         <Routes>
           <Route path="/" element={<>
           <div className="space-y-8">
