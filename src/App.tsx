@@ -1848,6 +1848,15 @@ export default function App() {
     if (!settingsName || !settingsEmail) return;
     setActionLoading(true);
     try {
+      if (settingsEmail !== user?.email) {
+        const { error } = await supabase.auth.updateUser({ email: settingsEmail });
+        if (error) {
+          alert('Failed to update email in authentication provider: ' + error.message);
+          setActionLoading(false);
+          return;
+        }
+      }
+
       const res = await authFetch('/api/auth/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -824,6 +824,10 @@ async function saveDatabase(
   if (overrideUserId) userDatabases.set(overrideUserId, data);
   if (overrideEmail) userDatabases.set(overrideEmail.toLowerCase(), data);
 
+  if (previousAliases?.email && previousAliases.email.toLowerCase() !== email?.toLowerCase()) {
+    userDatabases.delete(previousAliases.email.toLowerCase());
+  }
+
   if (!useSupabase) return {};
 
   try {
