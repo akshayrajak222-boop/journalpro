@@ -20,6 +20,16 @@ export default defineConfig(() => {
     },
     build: {
       chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          // Split heavy vendor libraries into separate, long-lived cached chunks
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-charts': ['recharts'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+          },
+        },
+      },
     },
   };
 });

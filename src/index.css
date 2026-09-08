@@ -18,6 +18,16 @@ html {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Page transition: triggered each time location.pathname changes (key prop on wrapper div) */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-transition {
+  animation: page-enter 0.18s ease-out both;
+}
+
 @keyframes float-slow {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
