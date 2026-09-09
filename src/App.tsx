@@ -3395,16 +3395,7 @@ export default function App() {
                 <span className="text-sm shadow-sm relative z-10">Add New Trade</span>
               </button>
             </div>
-            {activeTab === 'journal' && (
-              <button
-                onClick={() => { setShowPasteModal(true); setPasteRawText(''); setParsedTrades([]); }}
-                disabled={accounts.length === 0}
-                className="border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg py-2 px-4 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
-              >
-                <Terminal className="h-4 w-4" />
-                Paste from MT5
-              </button>
-            )}
+
           </div>
         </div>
 
