@@ -3947,8 +3947,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Big log Table with Scrollable Box container */}
-              <div className="max-h-[500px] overflow-y-auto overflow-x-auto border border-slate-100 rounded-xl relative shadow-inner">
+              {/* Big log Table with Scrollable Box container (Desktop) */}
+              <div className="hidden md:block max-h-[500px] overflow-y-auto overflow-x-auto border border-slate-100 rounded-xl relative shadow-inner">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-100">
                     <tr className="text-slate-500 uppercase font-bold text-[10px]">
@@ -4029,6 +4029,44 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile Trades List (Reference Image Style) */}
+              <div className="md:hidden flex flex-col space-y-0 mt-2 border-t border-slate-100 dark:border-slate-800 -mx-6 px-6">
+                {filteredTrades.map(t => (
+                  <div 
+                    key={t.id} 
+                    onClick={() => handleOpenTradeModal(t)} 
+                    className="flex flex-col py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 active:bg-slate-50 dark:active:bg-slate-800/50 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-extrabold text-[14px] text-slate-800 dark:text-slate-200 tracking-wide uppercase">{t.symbol}</span>
+                      <span className={`font-bold text-[13px] ${t.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {t.profit >= 0 ? '+' : ''}{formatValue(t.profit)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <span className={`font-bold text-[11px] ${t.type === 'Buy' || t.type === 'buy' ? 'text-blue-500 dark:text-blue-400' : 'text-rose-500 dark:text-rose-400'} uppercase tracking-wide`}>{t.type}</span>
+                      <span className="text-[12px] text-slate-500 dark:text-slate-400">{t.lotSize} lots</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center text-[12px] text-slate-600 dark:text-slate-300 font-mono">
+                        <span>{t.entryPrice}</span>
+                        <span className="mx-2 text-slate-400">&rarr;</span>
+                        <span>{t.exitPrice}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                        {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        <ChevronRight className="h-3.5 w-3.5 opacity-60" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredTrades.length === 0 && (
+                  <div className="text-center py-10 text-slate-400 text-sm">
+                    No matching recorded trades. Clear filters or add your first position.
+                  </div>
+                )}
               </div>
             </div>
           </div>
