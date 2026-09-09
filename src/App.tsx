@@ -5632,34 +5632,39 @@ export default function App() {
 
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-slate-950 border-t border-slate-900 px-3 py-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        {[
-          { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
-          { id: 'journal', icon: BookOpen, label: 'Journal' },
-          { id: 'accounts', icon: Layers, label: 'Accounts' },
-          { id: 'analytics', icon: Activity, label: 'Analytics' },
-          { id: 'calendar', icon: Calendar, label: 'Calendar' },
-          { id: 'fxnews', icon: Globe, label: 'FX News' },
-          { id: 'mt5', icon: RefreshCw, label: 'MT5 Sync' },
-          { id: 'tools', icon: Wrench, label: 'Tools' },
-          { id: 'insights', icon: Brain, label: 'AI Mentor' },
-          { id: 'settings', icon: Shield, label: 'Settings' }
-        ].map(item => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id as any)}
-            className={`flex-shrink-0 flex flex-col items-center justify-center w-[72px] h-[64px] rounded-[16px] transition-all duration-200 ${
-              activeTab === item.id 
-                ? 'bg-slate-800 text-white shadow-md' 
-                : 'text-slate-400 hover:text-slate-300'
-            }`}
-          >
-            <item.icon className="h-5 w-5 mb-1" />
-            <span className="text-[10px] font-bold tracking-wide">{item.label}</span>
-          </button>
-        ))}
-      </nav>
+      {/* Mobile Bottom Navigation (Premium Pill) */}
+      <div className="md:hidden fixed bottom-6 left-4 right-4 z-[60] bg-slate-950/90 backdrop-blur-lg border border-slate-800/80 rounded-full shadow-[0_20px_40px_-10px_rgba(0,0,0,0.7)]">
+        <nav 
+          className="flex items-center px-4 py-2 gap-1 overflow-x-auto no-scrollbar"
+          style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
+        >
+          {[
+            { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
+            { id: 'journal', icon: BookOpen, label: 'Journal' },
+            { id: 'accounts', icon: Layers, label: 'Accounts' },
+            { id: 'analytics', icon: Activity, label: 'Analytics' },
+            { id: 'calendar', icon: Calendar, label: 'Calendar' },
+            { id: 'fxnews', icon: Globe, label: 'FX News' },
+            { id: 'mt5', icon: RefreshCw, label: 'MT5 Sync' },
+            { id: 'tools', icon: Wrench, label: 'Tools' },
+            { id: 'insights', icon: Brain, label: 'AI Mentor' },
+            { id: 'settings', icon: Shield, label: 'Settings' }
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as any)}
+              className={`flex-shrink-0 flex flex-col items-center justify-center w-[68px] h-[56px] rounded-full transition-all duration-300 ${
+                activeTab === item.id 
+                  ? 'bg-blue-500/20 text-blue-400' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <item.icon className={`h-5 w-5 mb-0.5 ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
+              <span className="text-[9px] font-bold tracking-wider">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {/* ==========================================
           SYSTEM MODALS (CREATE ACCOUNT, ADD TRADE, ETC.)
