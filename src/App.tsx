@@ -3240,12 +3240,12 @@ export default function App() {
 
       {/* Main Content Area */}
       <main 
-        className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 pb-24 md:pb-6 md:p-12 space-y-8"
+        className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 pt-20 pb-24 md:pt-12 md:pb-6 md:p-12 space-y-8"
         onScroll={handleMainScroll}
       >
         
         {/* Mobile Top Header (Reference Image Style) */}
-        <div className="md:hidden flex items-center justify-between mb-4 mt-2">
+        <div className="md:hidden fixed top-0 left-0 right-0 z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-3 flex items-center justify-between">
           {/* Top Left: Logo & Brand */}
           <div className="flex items-center gap-2">
             <Logo size={24} />
