@@ -36,23 +36,7 @@ export default function AchievementsTab({ user, trades }: { user?: any, trades?:
               Track the milestones that mark your progress across accounts, journaling, and consistency.
             </p>
 
-            <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700/50">
-                <Lock className="h-5 w-5 text-emerald-500 mb-2" />
-                <div className="text-xl font-bold text-slate-900 dark:text-white">3</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Unlocked</div>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700/50">
-                <CheckCircle2 className="h-5 w-5 text-blue-500 mb-2" />
-                <div className="text-xl font-bold text-slate-900 dark:text-white">3/21</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Completed</div>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700/50">
-                <TrendingUp className="h-5 w-5 text-blue-500 dark:text-blue-400 mb-2" />
-                <div className="text-xl font-bold text-slate-900 dark:text-white">14%</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Showcase completion</div>
-              </div>
-            </div>
+
 
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Recent Weekly Log</h3>
