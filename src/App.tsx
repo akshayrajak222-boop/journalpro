@@ -37,6 +37,7 @@ import LegalFooter from './components/LegalFooter';
 import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
+import AchievementsTab from './components/AchievementsTab';
 
 
 // ─── Symbol Contract Specifications ─────────────────────────────────────────
@@ -358,7 +359,7 @@ export default function App() {
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf'>('xlsx');
 
   // Unified settings tab state
-  const [settingsTab, setSettingsTab] = useState<'achievements' | 'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('general');
+  const [settingsTab, setSettingsTab] = useState<'achievements' | 'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('achievements');
   const [activeAboutForm, setActiveAboutForm] = useState<'none' | 'support' | 'bug' | 'feature'>('none');
 
   // Sign-out confirmation modal
@@ -4796,10 +4797,10 @@ export default function App() {
               <button
                 onClick={() => setSettingsTab('achievements')}
                 className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'achievements' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
+                  settingsTab === 'achievements' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                <Trophy className={`h-4 w-4 ${settingsTab === 'achievements' ? 'text-blue-400' : ''}`} />
+                <Trophy className="h-4 w-4" />
                 Achievements
               </button>
 
@@ -4883,133 +4884,7 @@ export default function App() {
               
               {/* Achievements sub-tab */}
               {settingsTab === 'achievements' && (
-                <div className="bg-white dark:bg-[#0F172A] rounded-2xl p-6 shadow-xs space-y-8 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800">
-                  <div className="flex flex-col md:flex-row gap-8">
-                    <div className="flex-1 space-y-6">
-                      <div className="bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full w-fit flex items-center gap-2 border border-blue-100 dark:border-transparent">
-                        <Trophy className="w-3.5 h-3.5" />
-                        Collector Showcase
-                      </div>
-                      
-                      <div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Achievements</h3>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm">
-                          Track the milestones that mark your progress across accounts, journaling, and consistency.
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
-                          <Lock className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mb-3" />
-                          <div className="text-xl font-bold">3</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">Unlocked</div>
-                        </div>
-                        <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
-                          <CheckCircle2 className="w-5 h-5 text-blue-500 dark:text-blue-400 mb-3" />
-                          <div className="text-xl font-bold">3/21</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">Completed</div>
-                        </div>
-                        <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
-                          <TrendingUp className="w-5 h-5 text-blue-500 dark:text-blue-400 mb-3" />
-                          <div className="text-xl font-bold">14%</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">Showcase completion</div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-4 mt-8">
-                          <h4 className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Recent Weekly Log</h4>
-                          <span className="text-xs font-bold text-blue-600 dark:text-blue-400">2/6 logged</span>
-                        </div>
-                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                          {/* Missed boxes */}
-                          {[
-                            { label: 'Aug 3 - 9' },
-                            { label: 'Aug 10 - 16' },
-                            { label: 'Aug 17 - 23' },
-                            { label: 'Aug 24 - 30' },
-                          ].map((week, i) => (
-                            <div key={i} className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-lg p-2.5 flex flex-col items-center justify-center gap-1.5 dark:opacity-60">
-                              <span className="text-[9px] font-semibold text-slate-600 dark:text-slate-300 text-center">{week.label}</span>
-                              <div className="text-xs text-slate-400 dark:text-slate-500 font-bold mb-1 mt-1">-</div>
-                              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Missed</span>
-                            </div>
-                          ))}
-                          
-                          {/* Logged boxes */}
-                          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 rounded-lg p-2.5 flex flex-col items-center justify-center gap-1.5 relative overflow-hidden">
-                            <span className="text-[9px] font-semibold text-emerald-800 dark:text-emerald-100 text-center relative z-10">Aug 31 - Sep 6</span>
-                            <Flame className="w-4 h-4 text-emerald-500 dark:text-emerald-400 relative z-10 my-0.5" />
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 relative z-10">Logged</span>
-                          </div>
-                          
-                          <div className="bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-500/50 rounded-lg p-2.5 flex flex-col items-center justify-center gap-1.5 relative overflow-hidden shadow-sm dark:shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-                            <span className="text-[9px] font-semibold text-emerald-900 dark:text-emerald-100 text-center relative z-10">This week</span>
-                            <Flame className="w-4 h-4 text-emerald-600 dark:text-emerald-400 relative z-10 my-0.5" />
-                            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 relative z-10">Logged</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="w-full md:w-80 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-5 flex flex-col relative overflow-hidden">
-                      <div className="flex justify-end mb-2 relative z-10">
-                        <div className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                          <Flame className="w-3 h-3" />
-                          This week locked in
-                        </div>
-                      </div>
-                      
-                      <div className="mb-2 mt-4 relative z-10 flex justify-center py-6 h-40">
-                        <div className="absolute inset-0 bg-blue-100 dark:bg-blue-500/10 blur-[40px] rounded-full animate-pulse" />
-                        
-                        {/* Cartoon Blue Flame */}
-                        <div className="relative w-40 h-40 flex justify-center items-center cursor-pointer hover:scale-105 transition-transform duration-500">
-                          <div className="relative w-full h-full animate-[flame-sway_4s_ease-in-out_infinite] origin-bottom">
-                            
-                            {/* Floating upward sparks */}
-                            <div className="absolute top-1/2 left-1/4 w-1.5 h-1.5 bg-[#60a5fa] rounded-full opacity-0 animate-[spark-rise_2.5s_ease-in-out_infinite_0.5s] blur-[1px] z-10"></div>
-                            <div className="absolute top-2/3 left-3/4 w-1 h-1 bg-white rounded-full opacity-0 animate-[spark-rise_3s_ease-in-out_infinite_1.2s] blur-[0.5px] z-10"></div>
-                            <div className="absolute top-1/3 left-1/2 w-2 h-2 bg-[#93c5fd] rounded-full opacity-0 animate-[spark-rise_2s_ease-in-out_infinite_0s] blur-[1px] z-10"></div>
-
-                            {/* Using the native transparent PNG without blend modes */}
-                            <img src="/cartoon_flame.png" alt="Cartoon Blue Flame" className="w-full h-full object-contain animate-pulse rounded-3xl drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mb-4 relative z-10">
-                        <div className="inline-block bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full mb-3">2/12 weekly ranks</div>
-                        <h4 className="text-2xl font-bold mb-1 text-slate-900 dark:text-white">2-week streak</h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Keep logging in weekly to climb the streak ladder.</p>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3 mb-8 bg-slate-100 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-200 dark:border-slate-700/30 relative z-10">
-                        <div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-0.5">Best run</div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-white">2 weeks</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-0.5">Started</div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-white">Aug 31</div>
-                        </div>
-                      </div>
-
-                      <div className="mt-auto relative z-10">
-                        <div className="flex justify-between items-end mb-2">
-                          <div className="text-[10px] font-semibold">
-                            <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Next streak rank</span>
-                            <span className="text-slate-700 dark:text-slate-300">Flame Keeper: 2/4 weeks</span>
-                          </div>
-                          <div className="text-[10px] font-bold text-blue-600 dark:text-slate-300">2/12</div>
-                        </div>
-                        <div className="w-full bg-slate-200 dark:bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
-                          <div className="bg-blue-500 dark:bg-[#3B82F6] h-1.5 rounded-full shadow-none dark:shadow-[0_0_8px_rgba(59,130,246,0.8)]" style={{ width: '16.6%' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <AchievementsTab user={user} trades={trades} />
               )}
 
               {/* General sub-tab */}
