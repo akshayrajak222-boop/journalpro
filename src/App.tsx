@@ -3245,25 +3245,34 @@ export default function App() {
       >
         
         {/* Mobile Top Header (Reference Image Style) */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-3 flex items-center justify-between">
+        <div className="md:hidden fixed top-0 left-0 right-0 z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-5 py-2.5 flex items-center justify-between">
           {/* Top Left: Logo & Brand */}
-          <div className="flex items-center gap-2">
-            <Logo size={24} />
-            <div className="text-[12px] font-extrabold leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
+          <div className="flex items-center gap-2.5">
+            <Logo size={28} />
+            <div className="text-[14px] font-extrabold leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
               FXJournalPro
             </div>
           </div>
           
           {/* Top Right: Actions */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Theme Toggle */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+
             {/* Notification Bell */}
             <div className="relative">
               <button 
                 onClick={() => { setShowMobileNavNotifications(!showMobileNavNotifications); setShowMobileNavProfile(false); }}
-                className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
+                className="p-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
               >
-                <Bell className="h-6 w-6" />
-                <span className="absolute top-1 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#FBFBFA] dark:border-slate-900"></span>
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#FBFBFA] dark:border-slate-900"></span>
               </button>
               
               {/* Notification Dropdown */}
@@ -3286,8 +3295,8 @@ export default function App() {
                 onClick={() => { setShowMobileNavProfile(!showMobileNavProfile); setShowMobileNavNotifications(false); }}
                 className="p-0.5 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-white"
               >
-                <div className="bg-[#FBFBFA] dark:bg-slate-900 rounded-full p-1">
-                  <User className="h-5 w-5 text-slate-700 dark:text-slate-300" />
+                <div className="bg-[#FBFBFA] dark:bg-slate-900 rounded-full p-0.5">
+                  <User className="h-4 w-4 text-slate-700 dark:text-slate-300" />
                 </div>
               </button>
               
@@ -3295,14 +3304,13 @@ export default function App() {
               {showMobileNavProfile && (
                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
                   <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Signed in as</p>
-                    <p className="font-bold text-sm truncate">{user?.name || 'Trader'}</p>
+                    <p className="font-bold text-sm truncate">Hello, {user?.name || 'Trader'}</p>
                   </div>
                   <div className="p-2 space-y-1">
                     <button onClick={() => { setActiveTab('settings'); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2">
                       <Shield className="h-4 w-4" /> Account Settings
                     </button>
-                    <button onClick={() => setShowMobileNavProfile(false)} className="w-full text-left px-3 py-2 text-sm text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors flex items-center gap-2">
+                    <button onClick={() => { setActiveTab('subscription' as any); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors flex items-center gap-2">
                       <Sparkles className="h-4 w-4" /> Upgrade Plan
                     </button>
                     <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
@@ -3348,9 +3356,10 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            {/* Desktop Theme Toggle */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 border border-slate-200/80 rounded-lg hover:bg-slate-50 transition text-slate-500 dark:border-white/10 dark:hover:bg-slate-900/40 flex items-center justify-center shadow-xs"
+              className="hidden md:flex p-2 border border-slate-200/80 rounded-lg hover:bg-slate-50 transition text-slate-500 dark:border-white/10 dark:hover:bg-slate-900/40 items-center justify-center shadow-xs"
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {theme === 'dark' ? (
@@ -5698,9 +5707,9 @@ export default function App() {
       </main>
 
       {/* Mobile Bottom Navigation (Premium Pill) */}
-      <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${isScrolled ? 'bottom-3 left-8 right-8' : 'bottom-5 left-4 right-4'} bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-700/50 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] ring-1 ring-white/20 dark:ring-white/5`}>
+      <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${isScrolled ? 'bottom-2 left-6 right-6' : 'bottom-4 left-3 right-3'} bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border border-slate-200/40 dark:border-slate-700/40 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-white/10 dark:ring-white/5`}>
         <nav 
-          className={`flex items-center gap-1 overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out ${isScrolled ? 'px-2 py-1.5' : 'px-3 py-2'}`}
+          className={`flex items-center gap-1 overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-1' : 'py-1.5'}`}
           style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
         >
           {[
@@ -5718,7 +5727,7 @@ export default function App() {
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
               className={`flex-shrink-0 flex flex-col items-center justify-center rounded-full transition-all duration-500 ease-in-out ${
-                isScrolled ? 'w-[48px] h-[40px]' : 'w-[64px] h-[52px]'
+                isScrolled ? 'w-[44px] h-[38px]' : 'w-[60px] h-[48px]'
               } ${
                 activeTab === item.id 
                   ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' 
