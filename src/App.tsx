@@ -3042,200 +3042,324 @@ export default function App() {
     <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col md:flex-row">
       
       {/* Sidebar Navigation */}
-      <aside className={`bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex flex-col items-center justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto ${
+      <aside className={`bg-[#FBFBFA] border-r border-slate-200/80 flex-shrink-0 flex flex-col justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto ${
         mobileMenuOpen 
-          ? 'fixed inset-y-0 left-0 translate-x-0 shadow-2xl w-24 py-5' 
-          : 'hidden md:flex md:w-24 py-5'
+          ? 'fixed inset-y-0 left-0 translate-x-0 shadow-2xl bg-white w-64 p-5' 
+          : (sidebarCollapsed ? 'hidden md:flex md:w-[72px] p-3' : 'hidden md:flex md:w-64 p-5')
       }`}>
-        <div className="space-y-6 w-full flex flex-col items-center">
+        <div className="space-y-6">
           {/* Brand Logo */}
-          <div className="flex flex-col items-center gap-3 pb-4 w-full border-b border-slate-100 dark:border-slate-800/80">
-            <Logo size={28} />
-            <div className="text-[10px] font-bold text-center leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
-              FX Journal<br/>Pro
+          <div className={`flex ${sidebarCollapsed ? 'flex-col items-center gap-3' : 'items-center justify-between'} pb-2 border-b border-slate-100`}>
+            <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+              <Logo size={24} />
+              {!sidebarCollapsed && (
+                <div>
+                  <h1 className="text-sm font-bold tracking-tight text-slate-900 font-display">FX Journal Pro</h1>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 text-xs p-1">
+              {/* Mobile close toggle */}
+              <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-slate-700 text-xs p-1">
                 ✕
+              </button>
+              {/* Desktop collapse toggle (3 lines / expand menu) */}
+              <button 
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)} 
+                className="hidden md:flex text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 p-1.5 rounded transition"
+                title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                <Menu className="h-4 w-4" />
               </button>
             </div>
           </div>
 
+          {/* Active Workspace Switcher */}
+          <div className={`bg-[#f4f4f3] border border-slate-200/40 rounded-lg ${sidebarCollapsed ? 'p-1.5 text-center flex flex-col items-center gap-1' : 'p-2.5'}`} title="Active Portfolio">
+            {sidebarCollapsed ? (
+              <button
+                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+                className="text-slate-600 hover:text-slate-900 bg-white/80 hover:bg-white p-2 rounded-md transition duration-150 shadow-2xs"
+                title="Manage Portfolio Accounts"
+              >
+                💼
+              </button>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
+                  <button
+                    onClick={() => { 
+                      setShowAccountModal(true); 
+                      setAccountCreationMethod('select'); 
+                    }}
+                    title="Connect New Portfolio Account"
+                    className="text-slate-400 hover:text-slate-900 hover:bg-slate-200/50 p-1 rounded transition duration-150"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
+                <select
+                  value={selectedAccountId}
+                  onChange={handleAccountChange}
+                  className="w-full bg-transparent border-none text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer pr-2 select-none"
+                >
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      💼 {acc.name} ({acc.platform})
+                    </option>
+                  ))}
+                  {accounts.length === 0 && <option value="">No Accounts Registered</option>}
+                </select>
+              </>
+            )}
+          </div>
+
           {/* Primary Sidebar Links */}
-          <nav className="flex flex-col gap-2 w-full">
+          <nav className={`space-y-1.5 ${sidebarCollapsed ? 'flex flex-col items-center' : ''}`}>
             {isAdmin && (
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 title="Admin Panel"
-                className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                  activeTab === 'admin' 
-                    ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                    : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
+                className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+                } ${
+                  activeTab === 'admin' ? 'bg-[#efefee] text-slate-900' : 'text-red-500 hover:bg-red-50 hover:text-red-600'
                 }`}
               >
-                <Shield className="h-5 w-5" />
-                <span className="text-[10px] font-bold">Admin</span>
+                <Shield className="h-4 w-4 text-red-500" />
+                {!sidebarCollapsed && 'Admin Panel'}
               </button>
             )}
             
             <button
               onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
               title="Dashboard"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'dashboard' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'dashboard' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <BarChart3 className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Dashboard</span>
+              <BarChart3 className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Dashboard'}
             </button>
 
             <button
               onClick={() => { setActiveTab('journal'); setMobileMenuOpen(false); }}
               title="Trading Journal"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'journal' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'journal' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <BookOpen className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Journal</span>
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <BookOpen className="h-4 w-4 text-slate-500" />
+                {!sidebarCollapsed && 'Trading Journal'}
+              </span>
               {trades.length > 0 && (
-                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center text-[8px] bg-blue-500 text-white rounded-full font-bold shadow-sm">
-                  {trades.length}
-                </span>
+                sidebarCollapsed ? (
+                  <span className="absolute -top-1 -right-1 text-[8px] bg-slate-200 text-slate-700 px-1 rounded-full font-mono font-bold">
+                    {trades.length}
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-slate-200/80 text-slate-600 px-1.5 py-0.5 rounded font-mono font-medium">
+                    {trades.length}
+                  </span>
+                )
               )}
             </button>
 
             <button
               onClick={() => { setActiveTab('accounts'); setMobileMenuOpen(false); }}
               title="Portfolio Accounts"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'accounts' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'accounts' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Layers className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Accounts</span>
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Layers className="h-4 w-4 text-slate-500" />
+                {!sidebarCollapsed && 'Accounts'}
+              </span>
               {accounts.length > 0 && (
-                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center text-[8px] bg-emerald-500 text-white rounded-full font-bold shadow-sm">
-                  {accounts.length}
-                </span>
+                sidebarCollapsed ? (
+                  <span className="absolute -top-1 -right-1 text-[8px] bg-slate-200 text-slate-700 px-1 rounded-full font-mono font-bold">
+                    {accounts.length}
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-slate-200/80 text-slate-600 px-1.5 py-0.5 rounded font-mono font-medium">
+                    {accounts.length}
+                  </span>
+                )
               )}
             </button>
 
             <button
               onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
               title="Analytics"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'analytics' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'analytics' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <TrendingUp className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Analytics</span>
+              <TrendingUp className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Analytics'}
             </button>
 
             <button
               onClick={() => { setActiveTab('calendar'); setMobileMenuOpen(false); }}
               title="Calendar"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'calendar' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'calendar' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Calendar className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Calendar</span>
+              <Calendar className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Calendar'}
             </button>
 
             <button
               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
-              title="FX News"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'fxnews' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              title="FX News & Economic Calendar"
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Newspaper className={`h-5 w-5 ${activeTab === 'fxnews' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-              <span className="text-[10px] font-bold">FX News</span>
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
+                {!sidebarCollapsed && 'FX News'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+              )}
             </button>
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
               title="MT5 Sync"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'mt5' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'mt5' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Terminal className="h-5 w-5" />
-              <span className="text-[10px] font-bold">MT5 Sync</span>
+              <Terminal className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'MT5 Sync'}
             </button>
 
             <button
               onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
               title="Tools"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'tools' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'tools' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Wrench className={`h-5 w-5 ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
-              <span className="text-[10px] font-bold">Tools</span>
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600' : 'text-emerald-500'}`} />
+                {!sidebarCollapsed && 'Tools'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+              )}
             </button>
 
             <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
               title="AI Mentor"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'insights' 
-                  ? 'bg-slate-200 text-indigo-700 dark:bg-slate-800 dark:text-indigo-400 shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-indigo-600 dark:hover:text-indigo-400'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+              } ${
+                activeTab === 'insights' ? 'bg-[#efefee] text-[#4f46e5]' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-[#4f46e5]'
               }`}
             >
-              <Brain className={`h-5 w-5 ${activeTab === 'insights' ? 'text-indigo-600 dark:text-indigo-400' : 'text-indigo-500'}`} />
-              <span className="text-[10px] font-bold">AI Mentor</span>
-              <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-indigo-500 rounded-full animate-ping" />
+              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+                <Brain className="h-4 w-4 text-indigo-500" />
+                {!sidebarCollapsed && 'AI Mentor'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider text-[8px]">
+                  AI
+                </span>
+              )}
+              {sidebarCollapsed && (
+                <span className="absolute top-0 right-0 h-1.5 w-1.5 bg-indigo-600 rounded-full animate-ping" />
+              )}
             </button>
 
             <button
               onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
               title="Settings"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'settings' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+              } ${
+                activeTab === 'settings' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
               }`}
             >
-              <Shield className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Settings</span>
+              <Shield className="h-4 w-4 text-slate-500" />
+              {!sidebarCollapsed && 'Settings'}
             </button>
           </nav>
         </div>
 
         {/* User profile strip and signout */}
-        <div className="w-full flex flex-col items-center gap-4 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80">
-          <div className="h-10 w-10 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-full flex items-center justify-center font-bold text-sm uppercase shadow-sm flex-shrink-0" title={`${user.name} (${user.email})`}>
-            {user.name.substring(0,2)}
+        <div className="border-t border-slate-200/60 pt-4 mt-auto">
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center p-0' : 'gap-2.5 p-1'}`}>
+            <div className="h-8 w-8 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-xs uppercase" title={`${user.name} (${user.email})`}>
+              {user.name.substring(0,2)}
+            </div>
+            {!sidebarCollapsed && (
+              <div className="overflow-hidden flex-1">
+                <span className="font-bold text-xs text-slate-800 block truncate">{user.name}</span>
+                <span className="text-[10px] text-slate-400 block truncate">{user.email}</span>
+              </div>
+            )}
           </div>
-          
+          {!sidebarCollapsed && (
+            <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+              <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                user.isPro ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {user.isPro ? <Star className="h-2 w-2 fill-blue-700" /> : null}
+                {user.isPro ? 'Pro Member' : 'Free Account'}
+              </span>
+              {!user.isPro && (
+                <button 
+                  onClick={handleUpgradeToPro} 
+                  className="text-[9px] text-blue-600 hover:text-blue-700 font-bold underline"
+                >
+                  Upgrade
+                </button>
+              )}
+            </div>
+          )}
           <button
             onClick={handleLogout}
             title="Sign Out"
-            className="flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 mx-auto"
+            className={`transition flex items-center text-slate-500 hover:text-rose-600 ${
+              sidebarCollapsed ? 'justify-center p-2.5 mt-2 bg-slate-50 hover:bg-rose-50 rounded-lg mx-auto' : 'w-full text-left mt-3 py-1.5 px-2 hover:bg-rose-50 rounded-lg text-xs font-semibold gap-2'
+            }`}
           >
-            <LogOut className="h-5 w-5" />
-            <span className="text-[10px] font-bold">Logout</span>
+            <LogOut className="h-4 w-4" />
+            {!sidebarCollapsed && 'Sign Out'}
           </button>
         </div>
       </aside>
