@@ -5633,7 +5633,7 @@ export default function App() {
       </main>
 
       {/* Mobile Bottom Navigation (Premium Pill) */}
-      <div className="md:hidden fixed bottom-6 left-4 right-4 z-[60] bg-slate-950/90 backdrop-blur-lg border border-slate-800/80 rounded-full shadow-[0_20px_40px_-10px_rgba(0,0,0,0.7)]">
+      <div className="md:hidden fixed bottom-6 left-4 right-4 z-[60] bg-white/90 dark:bg-slate-950/90 backdrop-blur-lg border border-slate-200/80 dark:border-slate-800/80 rounded-full shadow-[0_20px_40px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.7)]">
         <nav 
           className="flex items-center px-4 py-2 gap-1 overflow-x-auto no-scrollbar"
           style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
@@ -5655,8 +5655,8 @@ export default function App() {
               onClick={() => setActiveTab(item.id as any)}
               className={`flex-shrink-0 flex flex-col items-center justify-center w-[68px] h-[56px] rounded-full transition-all duration-300 ${
                 activeTab === item.id 
-                  ? 'bg-blue-500/20 text-blue-400' 
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' 
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               <item.icon className={`h-5 w-5 mb-0.5 ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
