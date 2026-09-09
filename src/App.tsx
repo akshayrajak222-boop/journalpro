@@ -3312,7 +3312,7 @@ export default function App() {
                     </button>
 
                     <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
-                    <button onClick={() => handleSignOut()} className="w-full text-left px-3 py-2 text-sm text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2">
+                    <button onClick={() => { handleLogout(); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2">
                       <LogOut className="h-4 w-4" /> Logout
                     </button>
                   </div>
