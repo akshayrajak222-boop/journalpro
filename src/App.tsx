@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper
+  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -37,6 +37,7 @@ import LegalFooter from './components/LegalFooter';
 import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
+import AchievementsTab from './components/AchievementsTab';
 
 
 // ─── Symbol Contract Specifications ─────────────────────────────────────────
@@ -358,7 +359,7 @@ export default function App() {
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf'>('xlsx');
 
   // Unified settings tab state
-  const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('general');
+  const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help' | 'achievements'>('achievements');
   const [activeAboutForm, setActiveAboutForm] = useState<'none' | 'support' | 'bug' | 'feature'>('none');
 
   // Sign-out confirmation modal
@@ -4794,6 +4795,16 @@ export default function App() {
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block px-2.5 mb-2">Configure Journal</span>
               
               <button
+                onClick={() => setSettingsTab('achievements')}
+                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                  settingsTab === 'achievements' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <Trophy className="h-4 w-4" />
+                Achievements
+              </button>
+
+              <button
                 onClick={() => setSettingsTab('general')}
                 className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
                   settingsTab === 'general' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
@@ -4871,6 +4882,11 @@ export default function App() {
             {/* Settings Right Hand Content Panel */}
             <div className="lg:col-span-3 space-y-6">
               
+              {/* Achievements sub-tab */}
+              {settingsTab === 'achievements' && (
+                <AchievementsTab user={user} trades={trades} />
+              )}
+
               {/* General sub-tab */}
               {settingsTab === 'general' && user && (
                 <div className="space-y-6">
