@@ -243,6 +243,8 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Scroll UI state
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showMobileNavNotifications, setShowMobileNavNotifications] = useState(false);
+  const [showMobileNavProfile, setShowMobileNavProfile] = useState(false);
 
   const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
     setIsScrolled(e.currentTarget.scrollTop > 150);
@@ -3242,6 +3244,78 @@ export default function App() {
         onScroll={handleMainScroll}
       >
         
+        {/* Mobile Top Header (Reference Image Style) */}
+        <div className="md:hidden flex items-center justify-between mb-4 mt-2">
+          {/* Top Left: Logo & Brand */}
+          <div className="flex items-center gap-2">
+            <Logo size={24} />
+            <div className="text-[12px] font-extrabold leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
+              FXJournalPro
+            </div>
+          </div>
+          
+          {/* Top Right: Actions */}
+          <div className="flex items-center gap-4">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button 
+                onClick={() => { setShowMobileNavNotifications(!showMobileNavNotifications); setShowMobileNavProfile(false); }}
+                className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
+              >
+                <Bell className="h-6 w-6" />
+                <span className="absolute top-1 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#FBFBFA] dark:border-slate-900"></span>
+              </button>
+              
+              {/* Notification Dropdown */}
+              {showMobileNavNotifications && (
+                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-sm">Notifications</h3>
+                  </div>
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                    <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                    <p>No new notifications</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* User Profile */}
+            <div className="relative">
+              <button 
+                onClick={() => { setShowMobileNavProfile(!showMobileNavProfile); setShowMobileNavNotifications(false); }}
+                className="p-0.5 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-white"
+              >
+                <div className="bg-[#FBFBFA] dark:bg-slate-900 rounded-full p-1">
+                  <User className="h-5 w-5 text-slate-700 dark:text-slate-300" />
+                </div>
+              </button>
+              
+              {/* Profile Dropdown */}
+              {showMobileNavProfile && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Signed in as</p>
+                    <p className="font-bold text-sm truncate">{user?.name || 'Trader'}</p>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    <button onClick={() => { setActiveTab('settings'); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2">
+                      <Shield className="h-4 w-4" /> Account Settings
+                    </button>
+                    <button onClick={() => setShowMobileNavProfile(false)} className="w-full text-left px-3 py-2 text-sm text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" /> Upgrade Plan
+                    </button>
+                    <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
+                    <button onClick={() => handleSignOut()} className="w-full text-left px-3 py-2 text-sm text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2">
+                      <LogOut className="h-4 w-4" /> Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Dynamic Plain Title bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -5647,8 +5721,7 @@ export default function App() {
             { id: 'fxnews', icon: Globe, label: 'FX News' },
             { id: 'mt5', icon: RefreshCw, label: 'MT5 Sync' },
             { id: 'tools', icon: Wrench, label: 'Tools' },
-            { id: 'insights', icon: Brain, label: 'AI Mentor' },
-            { id: 'settings', icon: Shield, label: 'Settings' }
+            { id: 'insights', icon: Brain, label: 'AI Mentor' }
           ].map(item => (
             <button
               key={item.id}
