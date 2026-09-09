@@ -3042,11 +3042,7 @@ export default function App() {
     <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col md:flex-row">
       
       {/* Sidebar Navigation */}
-      <aside className={`bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex flex-col items-center justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto ${
-        mobileMenuOpen 
-          ? 'fixed inset-y-0 left-0 translate-x-0 shadow-2xl w-24 py-5' 
-          : 'hidden md:flex md:w-24 py-5'
-      }`}>
+      <aside className="hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto w-24 py-5">
         <div className="space-y-6 w-full flex flex-col items-center">
           {/* Brand Logo */}
           <div className="flex flex-col items-center gap-3 pb-4 w-full border-b border-slate-100 dark:border-slate-800/80">
@@ -3242,16 +3238,13 @@ export default function App() {
 
       {/* Main Content Area */}
       <main 
-        className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 md:p-12 space-y-8"
+        className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 pb-24 md:pb-6 md:p-12 space-y-8"
         onScroll={handleMainScroll}
       >
         
         {/* Dynamic Plain Title bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-slate-600 p-1 hover:bg-slate-50 rounded">
-              ☰
-            </button>
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 font-display">
                 {activeTab === 'dashboard' ? 'Dashboard' :
@@ -5638,6 +5631,35 @@ export default function App() {
         <LegalFooter />
 
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-slate-950 border-t border-slate-900 px-3 py-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        {[
+          { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
+          { id: 'journal', icon: BookOpen, label: 'Journal' },
+          { id: 'accounts', icon: Layers, label: 'Accounts' },
+          { id: 'analytics', icon: Activity, label: 'Analytics' },
+          { id: 'calendar', icon: Calendar, label: 'Calendar' },
+          { id: 'fxnews', icon: Globe, label: 'FX News' },
+          { id: 'mt5', icon: RefreshCw, label: 'MT5 Sync' },
+          { id: 'tools', icon: Wrench, label: 'Tools' },
+          { id: 'insights', icon: Brain, label: 'AI Mentor' },
+          { id: 'settings', icon: Shield, label: 'Settings' }
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id as any)}
+            className={`flex-shrink-0 flex flex-col items-center justify-center w-[72px] h-[64px] rounded-[16px] transition-all duration-200 ${
+              activeTab === item.id 
+                ? 'bg-slate-800 text-white shadow-md' 
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            <item.icon className="h-5 w-5 mb-1" />
+            <span className="text-[10px] font-bold tracking-wide">{item.label}</span>
+          </button>
+        ))}
+      </nav>
 
       {/* ==========================================
           SYSTEM MODALS (CREATE ACCOUNT, ADD TRADE, ETC.)
