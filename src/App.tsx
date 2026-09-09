@@ -3051,9 +3051,8 @@ export default function App() {
           {/* Brand Logo */}
           <div className="flex flex-col items-center gap-3 pb-4 w-full border-b border-slate-100 dark:border-slate-800/80">
             <Logo size={28} />
-            <div className="text-xs font-black tracking-tight whitespace-nowrap">
-              <span className="text-slate-900 dark:text-white">FXJOURNAL</span>
-              <span className="text-[#3b82f6]">PRO</span>
+            <div className="text-[10px] font-bold text-center leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
+              FX Journal<br/>Pro
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 text-xs p-1">
