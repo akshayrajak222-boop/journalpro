@@ -5763,7 +5763,7 @@ export default function App() {
       {/* Mobile Bottom Navigation (Premium Instagram-Style Pill) */}
       <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${
         (showTradeModal || showAccountModal || showEditAccountModal || showTicketModal || showExportModal || showPasteModal || showSignOutModal || deleteConfirmTradeId !== null || showGuidedTour || showMT5Tour || isSettingsDropdownOpen) ? 'translate-y-24 opacity-0 pointer-events-none scale-75' : isScrolled ? 'bottom-3 left-6 right-6 scale-[0.98]' : 'bottom-6 left-4 right-4 scale-100'
-      } bg-[#18181b]/95 dark:bg-[#09090b]/95 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-black/5`}>
+      } bg-white/70 dark:bg-[#09090b]/60 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-black/5`}>
         <nav 
           className={`flex items-center justify-between overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-1.5 gap-1' : 'py-2.5 gap-1.5'}`}
           style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
@@ -5787,20 +5787,20 @@ export default function App() {
               }}
               className={`flex-shrink-0 flex items-center justify-center rounded-full transition-all duration-500 ease-out ${
                 activeTab === item.id 
-                  ? (isScrolled ? 'w-[68px] h-[44px] bg-[#333333] dark:bg-white/20 text-white' : 'w-[72px] h-[48px] bg-[#333333] dark:bg-white/20 text-white shadow-inner')
-                  : (isScrolled ? 'w-[44px] h-[44px] text-white/60 hover:text-white hover:bg-white/5' : 'w-[48px] h-[48px] text-white/60 hover:text-white hover:bg-white/5')
+                  ? (isScrolled ? 'w-[68px] h-[44px] bg-slate-200 text-slate-900 dark:bg-white/20 dark:text-white' : 'w-[72px] h-[48px] bg-slate-200 text-slate-900 dark:bg-white/20 dark:text-white shadow-inner')
+                  : (isScrolled ? 'w-[44px] h-[44px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5' : 'w-[48px] h-[48px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5')
               }`}
             >
               <div className="relative flex items-center justify-center">
                 <item.icon className={`transition-all duration-500 ease-out ${
                   isScrolled ? 'h-5 w-5' : 'h-6 w-6'
-                } ${activeTab === item.id ? 'scale-110 drop-shadow-md' : 'scale-100'}`} strokeWidth={activeTab === item.id ? 2.5 : 2} />
+                } ${activeTab === item.id ? 'scale-110 drop-shadow-sm' : 'scale-100'}`} strokeWidth={activeTab === item.id ? 2.5 : 2} />
                 
                 {item.notify && (
                   <span className={`absolute bg-rose-500 rounded-full transition-all duration-500 ${
                     activeTab === item.id 
-                      ? 'border-[#333333] dark:border-[#2f333a]' 
-                      : 'border-[#18181b] dark:border-[#09090b]'
+                      ? 'border-slate-200 dark:border-[#2f333a]' 
+                      : 'border-white dark:border-[#09090b]'
                   } ${
                     isScrolled ? '-bottom-1.5 -right-1.5 w-2 h-2 border-[1.5px]' : '-bottom-1.5 -right-1.5 w-2.5 h-2.5 border-2'
                   }`} />
