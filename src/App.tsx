@@ -249,6 +249,20 @@ export default function App() {
   const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
     setIsScrolled(e.currentTarget.scrollTop > 150);
   };
+
+  React.useEffect(() => {
+    const handleWindowScroll = () => {
+      if (window.scrollY > 150) {
+        setIsScrolled(true);
+      } else if (window.scrollY <= 150 && isScrolled) {
+        setIsScrolled(false);
+      } else {
+        setIsScrolled(window.scrollY > 150);
+      }
+    };
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleWindowScroll);
+  }, [isScrolled]);
   const [fxNewsInitialTab, setFxNewsInitialTab] = useState<'news' | 'calendar'>('news');
 
   const openEconomicCalendar = () => {
@@ -3123,53 +3137,53 @@ export default function App() {
       
       <div className="flex flex-1 md:overflow-hidden relative pt-[60px]">
       {/* Sidebar Navigation */}
-      <aside className="hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto w-24 py-5">
-        <div className="space-y-6 w-full flex flex-col items-center">
+      <aside className="hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 transition-all duration-300 md:h-full overflow-hidden w-24 py-3">
+        <div className="space-y-4 w-full flex flex-col items-center">
 
 
           {/* Primary Sidebar Links */}
-          <nav className="flex flex-col gap-2 w-full">
+          <nav className="flex flex-col gap-1 w-full px-2">
             {isAdmin && (
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 title="Admin Panel"
-                className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+                className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                   activeTab === 'admin' 
                     ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                     : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
                 }`}
               >
-                <Shield className="h-5 w-5" />
-                <span className="text-[10px] font-bold">Admin</span>
+                <Shield className="h-4 w-4" />
+                <span className="text-[9px] font-bold">Admin</span>
               </button>
             )}
             
             <button
               onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
               title="Dashboard"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'dashboard' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <BarChart3 className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Dashboard</span>
+              <BarChart3 className="h-4 w-4" />
+              <span className="text-[9px] font-bold">Dashboard</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('journal'); setMobileMenuOpen(false); }}
               title="Trading Journal"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'journal' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <BookOpen className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Journal</span>
+              <BookOpen className="h-4 w-4" />
+              <span className="text-[9px] font-bold">Journal</span>
               {trades.length > 0 && (
-                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center text-[8px] bg-blue-500 text-white rounded-full font-bold shadow-sm">
+                <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-blue-500 text-white rounded-full font-bold shadow-sm">
                   {trades.length}
                 </span>
               )}
@@ -3178,16 +3192,16 @@ export default function App() {
             <button
               onClick={() => { setActiveTab('accounts'); setMobileMenuOpen(false); }}
               title="Portfolio Accounts"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'accounts' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Layers className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Accounts</span>
+              <Layers className="h-4 w-4" />
+              <span className="text-[9px] font-bold">Accounts</span>
               {accounts.length > 0 && (
-                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center text-[8px] bg-emerald-500 text-white rounded-full font-bold shadow-sm">
+                <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-emerald-500 text-white rounded-full font-bold shadow-sm">
                   {accounts.length}
                 </span>
               )}
@@ -3196,82 +3210,82 @@ export default function App() {
             <button
               onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
               title="Analytics"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'analytics' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <TrendingUp className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Analytics</span>
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-[9px] font-bold">Analytics</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('calendar'); setMobileMenuOpen(false); }}
               title="Calendar"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'calendar' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Calendar className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Calendar</span>
+              <Calendar className="h-4 w-4" />
+              <span className="text-[9px] font-bold">Calendar</span>
             </button>
 
             <button
               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'fxnews' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Newspaper className={`h-5 w-5 ${activeTab === 'fxnews' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-              <span className="text-[10px] font-bold">FX News</span>
+              <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+              <span className="text-[9px] font-bold">FX News</span>
               <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
             </button>
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
               title="MT5 Sync"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'mt5' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Terminal className="h-5 w-5" />
-              <span className="text-[10px] font-bold">MT5 Sync</span>
+              <Terminal className="h-4 w-4" />
+              <span className="text-[9px] font-bold">MT5 Sync</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
               title="Tools"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'tools' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Wrench className={`h-5 w-5 ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
-              <span className="text-[10px] font-bold">Tools</span>
+              <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
+              <span className="text-[9px] font-bold">Tools</span>
               <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
             </button>
 
             <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
               title="AI Mentor"
-              className={`relative flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
                 activeTab === 'insights' 
                   ? 'bg-slate-200 text-indigo-700 dark:bg-slate-800 dark:text-indigo-400 shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-indigo-600 dark:hover:text-indigo-400'
               }`}
             >
-              <Brain className={`h-5 w-5 ${activeTab === 'insights' ? 'text-indigo-600 dark:text-indigo-400' : 'text-indigo-500'}`} />
-              <span className="text-[10px] font-bold">AI Mentor</span>
-              <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-indigo-500 rounded-full animate-ping" />
+              <Brain className={`h-4 w-4 ${activeTab === 'insights' ? 'text-indigo-600 dark:text-indigo-400' : 'text-indigo-500'}`} />
+              <span className="text-[9px] font-bold">AI Mentor</span>
+              <span className="absolute top-1 right-1 h-1 w-1 bg-indigo-500 rounded-full animate-ping" />
             </button>
 
           </nav>
@@ -3338,7 +3352,7 @@ export default function App() {
                 <button
                   onClick={() => handleOpenTradeModal()}
                   disabled={accounts.length === 0}
-                  className={`group fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center gap-2 border border-white/20 overflow-hidden ${
+                  className={`group hidden md:flex fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] items-center gap-2 border border-white/20 overflow-hidden ${
                     isScrolled 
                       ? 'bottom-8 right-8 scale-100 translate-y-0 opacity-100 hover:scale-105' 
                       : 'bottom-0 right-8 scale-50 translate-y-16 opacity-0 pointer-events-none'
@@ -5746,38 +5760,52 @@ export default function App() {
       </main>
       </div>
 
-      {/* Mobile Bottom Navigation (Premium Pill) */}
+      {/* Mobile Bottom Navigation (Premium Instagram-Style Pill) */}
       <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${
-        (showTradeModal || showAccountModal || showEditAccountModal || showTicketModal || showExportModal || showPasteModal || showSignOutModal || deleteConfirmTradeId !== null || showGuidedTour || showMT5Tour || isSettingsDropdownOpen) ? 'translate-y-24 opacity-0 pointer-events-none scale-75' : isScrolled ? 'bottom-2 left-10 right-10 scale-90' : 'bottom-4 left-3 right-3 scale-100'
-      } bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border border-slate-200/40 dark:border-slate-700/40 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-white/10 dark:ring-white/5`}>
+        (showTradeModal || showAccountModal || showEditAccountModal || showTicketModal || showExportModal || showPasteModal || showSignOutModal || deleteConfirmTradeId !== null || showGuidedTour || showMT5Tour || isSettingsDropdownOpen) ? 'translate-y-24 opacity-0 pointer-events-none scale-75' : isScrolled ? 'bottom-3 left-6 right-6 scale-[0.98]' : 'bottom-6 left-4 right-4 scale-100'
+      } bg-[#18181b]/95 dark:bg-[#09090b]/95 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-black/5`}>
         <nav 
-          className={`flex items-center gap-1 overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-0.5' : 'py-1.5'}`}
+          className={`flex items-center justify-between overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-1.5 gap-1' : 'py-2.5 gap-1.5'}`}
           style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
         >
           {[
-            { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
-            { id: 'journal', icon: BookOpen, label: 'Journal' },
-            { id: 'accounts', icon: Layers, label: 'Accounts' },
-            { id: 'analytics', icon: Activity, label: 'Analytics' },
-            { id: 'calendar', icon: Calendar, label: 'Calendar' },
-            { id: 'fxnews', icon: Globe, label: 'FX News' },
-            { id: 'mt5', icon: RefreshCw, label: 'MT5 Sync' },
-            { id: 'tools', icon: Wrench, label: 'Tools' },
-            { id: 'insights', icon: Brain, label: 'AI Mentor' }
+            { id: 'dashboard', icon: BarChart3 },
+            { id: 'journal', icon: BookOpen },
+            { id: 'accounts', icon: Layers },
+            { id: 'analytics', icon: Activity },
+            { id: 'calendar', icon: Calendar },
+            { id: 'fxnews', icon: Globe, notify: true },
+            { id: 'mt5', icon: RefreshCw },
+            { id: 'tools', icon: Wrench, notify: true },
+            { id: 'insights', icon: Brain, notify: true }
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
-              className={`flex-shrink-0 flex flex-col items-center justify-center rounded-full transition-all duration-500 ease-in-out ${
-                isScrolled ? 'w-[36px] h-[32px]' : 'w-[60px] h-[48px]'
-              } ${
+              onClick={() => {
+                setActiveTab(item.id as any);
+                setIsScrolled(false);
+              }}
+              className={`flex-shrink-0 flex items-center justify-center rounded-full transition-all duration-500 ease-out ${
                 activeTab === item.id 
-                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' 
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? (isScrolled ? 'w-[68px] h-[44px] bg-[#333333] dark:bg-white/20 text-white' : 'w-[72px] h-[48px] bg-[#333333] dark:bg-white/20 text-white shadow-inner')
+                  : (isScrolled ? 'w-[44px] h-[44px] text-white/60 hover:text-white hover:bg-white/5' : 'w-[48px] h-[48px] text-white/60 hover:text-white hover:bg-white/5')
               }`}
             >
-              <item.icon className={`transition-all duration-500 ease-in-out ${isScrolled ? 'h-3.5 w-3.5 mb-0' : 'h-5 w-5 mb-0.5'} ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
-              <span className={`font-bold tracking-wider transition-all duration-500 ease-in-out overflow-hidden ${isScrolled ? 'h-0 opacity-0 text-[0px]' : 'h-auto opacity-100 text-[9px]'}`}>{item.label}</span>
+              <div className="relative flex items-center justify-center">
+                <item.icon className={`transition-all duration-500 ease-out ${
+                  isScrolled ? 'h-5 w-5' : 'h-6 w-6'
+                } ${activeTab === item.id ? 'scale-110 drop-shadow-md' : 'scale-100'}`} strokeWidth={activeTab === item.id ? 2.5 : 2} />
+                
+                {item.notify && (
+                  <span className={`absolute bg-rose-500 rounded-full transition-all duration-500 ${
+                    activeTab === item.id 
+                      ? 'border-[#333333] dark:border-[#2f333a]' 
+                      : 'border-[#18181b] dark:border-[#09090b]'
+                  } ${
+                    isScrolled ? '-bottom-1.5 -right-1.5 w-2 h-2 border-[1.5px]' : '-bottom-1.5 -right-1.5 w-2.5 h-2.5 border-2'
+                  }`} />
+                )}
+              </div>
             </button>
           ))}
         </nav>
