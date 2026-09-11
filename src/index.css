@@ -18,6 +18,12 @@ html {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-10px) scaleY(0.95); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+.animate-slide-down { animation: slide-down 0.25s ease-out origin-top both; }
+
 @keyframes float-slow {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
@@ -95,15 +101,15 @@ details.faq summary::-webkit-details-marker { display: none; }
 
 /* Custom styling for Trading Performance Calendar Card */
 #trading-calendar-card {
-  background-color: #f0f4f8 !important;
+  background-color: transparent !important;
   background-image: none !important; /* Clear Tailwind gradient in light mode */
-  border: 1px solid #d1dce8 !important;
+  border: none !important;
 }
 html.dark #trading-calendar-card,
 .dark #trading-calendar-card {
-  background-color: #060913 !important;
+  background-color: transparent !important;
   background-image: none !important;
-  border: 1px solid #1e293b !important;
+  border: none !important;
 }
 
 /* Light mode — force all calendar day buttons to soft off-white */

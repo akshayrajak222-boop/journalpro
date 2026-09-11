@@ -363,6 +363,7 @@ export default function App() {
   // Unified settings tab state
   const [settingsTab, setSettingsTab] = useState<'achievements' | 'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('achievements');
   const [activeAboutForm, setActiveAboutForm] = useState<'none' | 'support' | 'bug' | 'feature'>('none');
+  const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 
   // Sign-out confirmation modal
   const [showSignOutModal, setShowSignOutModal] = useState(false);
@@ -3041,23 +3042,90 @@ export default function App() {
 
   // Primary Platform Shell Layout
   return (
-    <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col md:flex-row">
+    <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col">
+      {/* Unified Top Header */}
+      <header className="fixed top-0 left-0 right-0 z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-5 py-2.5 flex items-center justify-between">
+        {/* Top Left: Logo & Brand */}
+        <div className="flex items-center gap-2.5">
+          <Logo size={28} />
+          <div className="text-[14px] font-extrabold leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
+            FXJournalPro
+          </div>
+        </div>
+        
+        {/* Top Right: Actions */}
+        <div className="flex items-center gap-3">
+          {/* Theme Toggle */}
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
+
+          {/* Notification Bell */}
+          <div className="relative">
+            <button 
+              onClick={() => { setShowMobileNavNotifications(!showMobileNavNotifications); setShowMobileNavProfile(false); }}
+              className="p-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#FBFBFA] dark:border-slate-900"></span>
+            </button>
+            
+            {/* Notification Dropdown */}
+            {showMobileNavNotifications && (
+              <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-bold text-sm">Notifications</h3>
+                </div>
+                <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                  <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                  <p>No new notifications</p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* User Profile */}
+          <div className="relative">
+            <button 
+              onClick={() => { setShowMobileNavProfile(!showMobileNavProfile); setShowMobileNavNotifications(false); }}
+              className="p-0.5 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-white"
+            >
+              <div className="bg-[#FBFBFA] dark:bg-slate-900 rounded-full p-0.5">
+                <User className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+              </div>
+            </button>
+            
+            {/* Profile Dropdown */}
+            {showMobileNavProfile && (
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                  <p className="font-bold text-sm truncate">Hello, {user?.name || 'Trader'}</p>
+                </div>
+                <div className="p-2 space-y-1">
+                  <button onClick={() => { setActiveTab('settings'); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2">
+                    <Shield className="h-4 w-4" /> Account Settings
+                  </button>
+
+                  <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
+                  <button onClick={() => { handleLogout(); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2">
+                    <LogOut className="h-4 w-4" /> Logout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
       
+      <div className="flex flex-1 md:overflow-hidden relative pt-[60px]">
       {/* Sidebar Navigation */}
       <aside className="hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto w-24 py-5">
         <div className="space-y-6 w-full flex flex-col items-center">
-          {/* Brand Logo */}
-          <div className="flex flex-col items-center gap-3 pb-4 w-full border-b border-slate-100 dark:border-slate-800/80">
-            <Logo size={28} />
-            <div className="text-[10px] font-bold text-center leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
-              FX Journal<br/>Pro
-            </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 text-xs p-1">
-                ✕
-              </button>
-            </div>
-          </div>
+
 
           {/* Primary Sidebar Links */}
           <nav className="flex flex-col gap-2 w-full">
@@ -3206,130 +3274,25 @@ export default function App() {
               <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-indigo-500 rounded-full animate-ping" />
             </button>
 
-            <button
-              onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
-              title="Settings"
-              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 mx-auto ${
-                activeTab === 'settings' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Shield className="h-5 w-5" />
-              <span className="text-[10px] font-bold">Settings</span>
-            </button>
           </nav>
-        </div>
-
-        {/* User profile strip and signout */}
-        <div className="w-full flex flex-col items-center gap-4 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80">
-          <div className="h-10 w-10 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-full flex items-center justify-center font-bold text-sm uppercase shadow-sm flex-shrink-0" title={`${user.name} (${user.email})`}>
-            {user.name.substring(0,2)}
-          </div>
-          
-          <button
-            onClick={handleLogout}
-            title="Sign Out"
-            className="flex flex-col items-center justify-center gap-1.5 w-16 h-16 rounded-2xl transition-all duration-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 mx-auto"
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="text-[10px] font-bold">Logout</span>
-          </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <main 
-        className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 pt-20 pb-24 md:pt-12 md:pb-6 md:p-12 space-y-8"
+        className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6 pb-24 md:pb-6 md:p-12 space-y-8"
         onScroll={handleMainScroll}
       >
         
-        {/* Mobile Top Header (Reference Image Style) */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-5 py-2.5 flex items-center justify-between">
-          {/* Top Left: Logo & Brand */}
-          <div className="flex items-center gap-2.5">
-            <Logo size={28} />
-            <div className="text-[14px] font-extrabold leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
-              FXJournalPro
-            </div>
-          </div>
-          
-          {/* Top Right: Actions */}
-          <div className="flex items-center gap-3">
-            {/* Theme Toggle */}
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
-
-            {/* Notification Bell */}
-            <div className="relative">
-              <button 
-                onClick={() => { setShowMobileNavNotifications(!showMobileNavNotifications); setShowMobileNavProfile(false); }}
-                className="p-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
-              >
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#FBFBFA] dark:border-slate-900"></span>
-              </button>
-              
-              {/* Notification Dropdown */}
-              {showMobileNavNotifications && (
-                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800">
-                    <h3 className="font-bold text-sm">Notifications</h3>
-                  </div>
-                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
-                    <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                    <p>No new notifications</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* User Profile */}
-            <div className="relative">
-              <button 
-                onClick={() => { setShowMobileNavProfile(!showMobileNavProfile); setShowMobileNavNotifications(false); }}
-                className="p-0.5 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-white"
-              >
-                <div className="bg-[#FBFBFA] dark:bg-slate-900 rounded-full p-0.5">
-                  <User className="h-4 w-4 text-slate-700 dark:text-slate-300" />
-                </div>
-              </button>
-              
-              {/* Profile Dropdown */}
-              {showMobileNavProfile && (
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                    <p className="font-bold text-sm truncate">Hello, {user?.name || 'Trader'}</p>
-                  </div>
-                  <div className="p-2 space-y-1">
-                    <button onClick={() => { setActiveTab('settings'); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2">
-                      <Shield className="h-4 w-4" /> Account Settings
-                    </button>
-
-                    <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
-                    <button onClick={() => { handleLogout(); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2">
-                      <LogOut className="h-4 w-4" /> Logout
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Dynamic Plain Title bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-4 w-full">
+          <div className="flex-1 min-w-0">
             <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 font-display">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-display truncate">
                 {activeTab === 'dashboard' ? 'Dashboard' :
                  activeTab === 'journal' ? 'Trading Journal' :
-                 activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
+                 activeTab === 'accounts' ? 'Portfolio Accounts' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
                  activeTab === 'fxnews' ? 'FX News' :
@@ -3338,7 +3301,7 @@ export default function App() {
                  activeTab === 'tools' ? 'Tools' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1 line-clamp-2 sm:line-clamp-1">
                 {activeTab === 'dashboard' ? 'Welcome back! Here\'s an overview of your trading performance.' :
                  activeTab === 'journal' ? 'Inline workspace database to log, filter, and audit trading setups.' :
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
@@ -3353,7 +3316,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-0.5">
             {/* Desktop Theme Toggle */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -3366,41 +3329,39 @@ export default function App() {
                 <Moon className="h-4 w-4 text-indigo-600" />
               )}
             </button>
-            {isPortfolioGuardOn && (
-              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-2xs">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Risk Guard Active</span>
-              </span>
-            )}
-            <div className="relative">
-              {/* Original Button */}
-              <button
-                onClick={() => handleOpenTradeModal()}
-                disabled={accounts.length === 0}
-                data-tour="add-trade"
-                className={`group relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg py-2 px-5 transition-all duration-300 flex items-center gap-1.5 disabled:opacity-50 shadow-md hover:shadow-lg shadow-indigo-500/30 border border-white/10 ${
-                  isScrolled ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
-                }`}
-              >
-                <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
-                <Plus className="h-4 w-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
-                <span className="relative z-10">Add New Trade</span>
-              </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="relative flex items-center justify-end w-full">
+                {/* Original Button */}
+                <button
+                  onClick={() => handleOpenTradeModal()}
+                  disabled={accounts.length === 0}
+                  data-tour="add-trade"
+                  className={`group relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg py-2 px-5 transition-all duration-300 flex items-center gap-1.5 disabled:opacity-50 shadow-md hover:shadow-lg shadow-indigo-500/30 border border-white/10 ${
+                    isScrolled ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
+                  }`}
+                >
+                  <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
+                  <Plus className="h-4 w-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+                  <span className="relative z-10">Add New Trade</span>
+                </button>
+  
+                {/* Floating Button (Appears on Scroll) */}
+                <button
+                  onClick={() => handleOpenTradeModal()}
+                  disabled={accounts.length === 0}
+                  className={`group fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center gap-2 border border-white/20 overflow-hidden ${
+                    isScrolled 
+                      ? 'bottom-8 right-8 scale-100 translate-y-0 opacity-100 hover:scale-105' 
+                      : 'bottom-0 right-8 scale-50 translate-y-16 opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
+                  <Plus className="h-5 w-5 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+                  <span className="text-sm shadow-sm relative z-10">Add New Trade</span>
+                </button>
+              </div>
 
-              {/* Floating Button (Appears on Scroll) */}
-              <button
-                onClick={() => handleOpenTradeModal()}
-                disabled={accounts.length === 0}
-                className={`group fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center gap-2 border border-white/20 overflow-hidden ${
-                  isScrolled 
-                    ? 'bottom-8 right-8 scale-100 translate-y-0 opacity-100 hover:scale-105' 
-                    : 'bottom-0 right-8 scale-50 translate-y-16 opacity-0 pointer-events-none'
-                }`}
-              >
-                <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
-                <Plus className="h-5 w-5 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
-                <span className="text-sm shadow-sm relative z-10">Add New Trade</span>
-              </button>
+
             </div>
 
           </div>
@@ -4770,92 +4731,145 @@ export default function App() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             
             {/* Settings Inner Tabs Navigation */}
-            <aside className="lg:col-span-1 space-y-1">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block px-2.5 mb-2">Configure Journal</span>
+            {/* Settings Inner Tabs Navigation */}
+            <aside className="lg:col-span-1">
+              <span className="hidden lg:block text-[10px] text-slate-400 font-bold uppercase tracking-wider px-2.5 mb-2">Configure Journal</span>
               
-              <button
-                onClick={() => setSettingsTab('achievements')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'achievements' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <Trophy className="h-4 w-4" />
-                Achievements
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('general')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'general' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <User className="h-4 w-4" />
-                General Settings
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('risk')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'risk' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <Shield className="h-4 w-4" />
-                Configure Guard Limits
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('notifications')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'notifications' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <Bell className="h-4 w-4" />
-                Notifications
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('subscription')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'subscription' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <CreditCard className="h-4 w-4" />
-                Subscription
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('about')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'about' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <Info className="h-4 w-4" />
-                About
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('help')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'help' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <HelpCircle className="h-4 w-4" />
-                Help
-              </button>
-
-              <button
-                onClick={() => setSettingsTab('theme')}
-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
-                  settingsTab === 'theme' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                {theme === 'dark' ? (
-                  <Moon className="h-4 w-4 text-indigo-400" />
-                ) : (
-                  <Sun className="h-4 w-4 text-amber-500" />
+              {/* Mobile Dropdown Navigation */}
+              <div className="lg:hidden relative mb-4">
+                <button
+                  onClick={() => setIsSettingsDropdownOpen(!isSettingsDropdownOpen)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-bold text-slate-800 flex justify-between items-center shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+                >
+                  <span className="flex items-center gap-2">
+                    {settingsTab === 'achievements' && <><Trophy className="h-4 w-4" /> Achievements</>}
+                    {settingsTab === 'general' && <><User className="h-4 w-4" /> General Settings</>}
+                    {settingsTab === 'risk' && <><Shield className="h-4 w-4" /> Configure Guard Limits</>}
+                    {settingsTab === 'notifications' && <><Bell className="h-4 w-4" /> Notifications</>}
+                    {settingsTab === 'subscription' && <><CreditCard className="h-4 w-4" /> Subscription</>}
+                    {settingsTab === 'about' && <><Info className="h-4 w-4" /> About</>}
+                    {settingsTab === 'help' && <><HelpCircle className="h-4 w-4" /> Help</>}
+                    {settingsTab === 'theme' && (theme === 'dark' ? <><Moon className="h-4 w-4 text-indigo-400" /> Theme Mode</> : <><Sun className="h-4 w-4 text-amber-500" /> Theme Mode</>)}
+                  </span>
+                  <span className={`transform transition-transform ${isSettingsDropdownOpen ? 'rotate-180' : ''}`}>⌄</span>
+                </button>
+                
+                {isSettingsDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 overflow-hidden flex flex-col animate-slide-down">
+                    {[
+                      { id: 'achievements', label: 'Achievements', icon: Trophy },
+                      { id: 'general', label: 'General Settings', icon: User },
+                      { id: 'risk', label: 'Configure Guard Limits', icon: Shield },
+                      { id: 'notifications', label: 'Notifications', icon: Bell },
+                      { id: 'subscription', label: 'Subscription', icon: CreditCard },
+                      { id: 'about', label: 'About', icon: Info },
+                      { id: 'help', label: 'Help', icon: HelpCircle },
+                      { id: 'theme', label: 'Theme Mode', icon: theme === 'dark' ? Moon : Sun }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setSettingsTab(tab.id as any);
+                          setIsSettingsDropdownOpen(false);
+                        }}
+                        className={`w-full text-left py-3 px-4 text-sm font-semibold transition flex items-center gap-3 ${
+                          settingsTab === tab.id ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <tab.icon className={`h-4 w-4 ${tab.id === 'theme' ? (theme === 'dark' ? 'text-indigo-400' : 'text-amber-500') : ''}`} />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
-                Theme Mode
-              </button>
+              </div>
+
+              {/* Desktop Sidebar Navigation */}
+              <div className="hidden lg:flex flex-col space-y-1">
+                <button
+                  onClick={() => setSettingsTab('achievements')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'achievements' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Trophy className="h-4 w-4" />
+                  Achievements
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('general')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'general' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <User className="h-4 w-4" />
+                  General Settings
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('risk')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'risk' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Shield className="h-4 w-4" />
+                  Configure Guard Limits
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('notifications')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'notifications' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Bell className="h-4 w-4" />
+                  Notifications
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('subscription')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'subscription' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Subscription
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('about')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'about' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Info className="h-4 w-4" />
+                  About
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('help')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'help' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  Help
+                </button>
+
+                <button
+                  onClick={() => setSettingsTab('theme')}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+                    settingsTab === 'theme' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {theme === 'dark' ? (
+                    <Moon className="h-4 w-4 text-indigo-400" />
+                  ) : (
+                    <Sun className="h-4 w-4 text-amber-500" />
+                  )}
+                  Theme Mode
+                </button>
+              </div>
             </aside>
 
             {/* Settings Right Hand Content Panel */}
@@ -5741,11 +5755,14 @@ export default function App() {
         <LegalFooter />
 
       </main>
+      </div>
 
       {/* Mobile Bottom Navigation (Premium Pill) */}
-      <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${isScrolled ? 'bottom-2 left-6 right-6' : 'bottom-4 left-3 right-3'} bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border border-slate-200/40 dark:border-slate-700/40 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-white/10 dark:ring-white/5`}>
+      <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${
+        (showTradeModal || showAccountModal || showEditAccountModal || showTicketModal || showExportModal || showPasteModal || showSignOutModal || deleteConfirmTradeId !== null || showGuidedTour || showMT5Tour || isSettingsDropdownOpen) ? 'translate-y-24 opacity-0 pointer-events-none scale-75' : isScrolled ? 'bottom-2 left-10 right-10 scale-90' : 'bottom-4 left-3 right-3 scale-100'
+      } bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border border-slate-200/40 dark:border-slate-700/40 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-white/10 dark:ring-white/5`}>
         <nav 
-          className={`flex items-center gap-1 overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-1' : 'py-1.5'}`}
+          className={`flex items-center gap-1 overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-0.5' : 'py-1.5'}`}
           style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
         >
           {[
@@ -5763,14 +5780,14 @@ export default function App() {
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
               className={`flex-shrink-0 flex flex-col items-center justify-center rounded-full transition-all duration-500 ease-in-out ${
-                isScrolled ? 'w-[44px] h-[38px]' : 'w-[60px] h-[48px]'
+                isScrolled ? 'w-[36px] h-[32px]' : 'w-[60px] h-[48px]'
               } ${
                 activeTab === item.id 
                   ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' 
                   : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
-              <item.icon className={`transition-all duration-500 ease-in-out ${isScrolled ? 'h-4 w-4 mb-0' : 'h-5 w-5 mb-0.5'} ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
+              <item.icon className={`transition-all duration-500 ease-in-out ${isScrolled ? 'h-3.5 w-3.5 mb-0' : 'h-5 w-5 mb-0.5'} ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
               <span className={`font-bold tracking-wider transition-all duration-500 ease-in-out overflow-hidden ${isScrolled ? 'h-0 opacity-0 text-[0px]' : 'h-auto opacity-100 text-[9px]'}`}>{item.label}</span>
             </button>
           ))}

@@ -229,42 +229,12 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
   };
 
   return (
-    <div id="trading-calendar-card" className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-900/80 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-none transition-all">
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-5 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/40 dark:to-indigo-900/20 text-blue-600 dark:text-blue-400 rounded-xl shadow-sm border border-blue-100 dark:border-blue-800/30">
-            <CalendarRange className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Trading Performance Calendar</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">Color-coded daily profit and loss journal</p>
-          </div>
-        </div>
-        
-        {/* Navigation */}
-        <div className="flex items-center gap-3 mt-4 md:mt-0">
-          <button 
-            onClick={handlePrevMonth}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
-          >
-            <ChevronLeft className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
-          </button>
-          <span className="font-black text-slate-900 dark:text-white min-w-[120px] text-center text-sm md:text-base tracking-tight trading-calendar-month">
-            {monthNames[month]} {year}
-          </span>
-          <button 
-            onClick={handleNextMonth}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
-          >
-            <ChevronRight className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
-          </button>
-        </div>
-      </div>
+    <div id="trading-calendar-card" className="w-full transition-all">
+
       <div className="space-y-10">
 {/* Year Stats Row */}
           {yearlyStats && (
           <div>
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 uppercase tracking-wider">Income Section</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="bg-white/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-3 shadow-sm">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider block mb-1">Best Month</span>
@@ -312,7 +282,27 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
 
                   {/* Monthly Calendar Grid */}
         <div>
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 uppercase tracking-wider">Monthly Calendar</h3>
+          <div className="flex flex-row items-center justify-between mb-6">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-0">Monthly Calendar</h3>
+            {/* Navigation */}
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handlePrevMonth}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
+              >
+                <ChevronLeft className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
+              </button>
+              <span className="font-black text-slate-900 dark:text-white min-w-[100px] text-center text-sm md:text-base tracking-tight trading-calendar-month">
+                {monthNames[month]} {year}
+              </span>
+              <button 
+                onClick={handleNextMonth}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-900/50"
+              >
+                <ChevronRight className="h-5 w-5 text-slate-900 dark:text-white stroke-[3]" />
+              </button>
+            </div>
+          </div>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Calendar Grid */}
         <div className="lg:col-span-3">
@@ -450,7 +440,7 @@ export default function TradingCalendar({ trades, currency }: TradingCalendarPro
           </div>
         </div>
         </div>
-        <div className="pt-8 border-t border-slate-100 dark:border-slate-800/80 mt-10">
+        <div className="pt-8 mt-10">
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 uppercase tracking-wider">Year at a Glance</h3>
 {/* 12 Months Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
