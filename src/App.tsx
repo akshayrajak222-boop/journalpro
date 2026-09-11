@@ -3044,7 +3044,7 @@ export default function App() {
   return (
     <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col">
       {/* Unified Top Header */}
-      <header className="fixed top-0 left-0 right-0 z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-5 py-2.5 flex items-center justify-between">
+      <header className="fixed top-0 left-0 right-0 h-[60px] z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl px-5 flex items-center justify-between">
         {/* Top Left: Logo & Brand */}
         <div className="flex items-center gap-2.5">
           <Logo size={28} />
@@ -3058,7 +3058,7 @@ export default function App() {
           {/* Theme Toggle */}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+            className="p-1.5 border border-slate-200/80 rounded-lg hover:bg-slate-50 transition text-slate-500 dark:border-white/10 dark:hover:bg-slate-900/40 shadow-xs dark:text-slate-400 flex items-center justify-center"
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
@@ -3290,7 +3290,7 @@ export default function App() {
           <div className="flex-1 min-w-0">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-display truncate">
-                {activeTab === 'dashboard' ? 'Dashboard' :
+                {activeTab === 'dashboard' ? `Hello, ${user?.name || 'Trader'}` :
                  activeTab === 'journal' ? 'Trading Journal' :
                  activeTab === 'accounts' ? 'Portfolio Accounts' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
@@ -3317,18 +3317,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-0.5">
-            {/* Desktop Theme Toggle */}
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="hidden md:flex p-2 border border-slate-200/80 rounded-lg hover:bg-slate-50 transition text-slate-500 dark:border-white/10 dark:hover:bg-slate-900/40 items-center justify-center shadow-xs"
-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {theme === 'dark' ? (
-                <Sun className="h-4 w-4 text-amber-400" />
-              ) : (
-                <Moon className="h-4 w-4 text-indigo-600" />
-              )}
-            </button>
+
             <div className="flex flex-col items-end gap-2">
               <div className="relative flex items-center justify-end w-full">
                 {/* Original Button */}
