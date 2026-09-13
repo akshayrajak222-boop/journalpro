@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy, Lock, Flame
+  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy, Lock, Flame, MessageSquare
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
@@ -314,6 +314,7 @@ export default function App() {
   // Trade form fields
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
+  const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [tradeDate, setTradeDate] = useState('');
   const [tradeExitTime, setTradeExitTime] = useState('');
   const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
@@ -2452,11 +2453,11 @@ export default function App() {
     const BORDER = 'FFB7C4D6';
     const BRAND = 'FF1F4E79';
 
-    const TABLE_COLS = 8;
-    const SPACER_COL = 9;
-    const SUMMARY_LABEL_COL = 10;
-    const SUMMARY_VALUE_COL = 11;
-    const TOTAL_COLS = 11;
+    const TABLE_COLS = 10;
+    const SPACER_COL = 11;
+    const SUMMARY_LABEL_COL = 12;
+    const SUMMARY_VALUE_COL = 13;
+    const TOTAL_COLS = 13;
 
     const solid = (rgb: string) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: rgb } });
     const fnt = (size: number, color: string, bold = false) => ({ name: 'Calibri', size, bold, color: { argb: color } });
@@ -2482,14 +2483,16 @@ export default function App() {
     ws.getColumn(2).width = 10; // Type
     ws.getColumn(3).width = 15; // Entry
     ws.getColumn(4).width = 15; // Exit
-    ws.getColumn(5).width = 22; // Entry Time
-    ws.getColumn(6).width = 22; // Exit Time
+    ws.getColumn(5).width = 30; // Entry Time
+    ws.getColumn(6).width = 30; // Exit Time
     ws.getColumn(7).width = 10; // Volume
     ws.getColumn(8).width = 15; // Net Profit
+    ws.getColumn(9).width = 15; // Emotion
+    ws.getColumn(10).width = 40; // Notes
     
     // Summary table columns
-    ws.getColumn(10).width = 25; // Summary Label
-    ws.getColumn(11).width = 15; // Summary Value
+    ws.getColumn(12).width = 25; // Summary Label
+    ws.getColumn(13).width = 15; // Summary Value
 
     const outlineMergedRow = (rowNum: number) => {
       for (let c = 1; c <= TOTAL_COLS; c++) {
@@ -2576,7 +2579,7 @@ export default function App() {
       lc.border = borderAll(BORDER);
       vc.font = fnt(10, s.color || TEXT_COLOR, !!s.bold);
       vc.fill = solid('FFFFFFFF');
-      vc.alignment = algn('right');
+      vc.alignment = algn('center');
       vc.border = borderAll(BORDER);
       vc.numFmt = s.numFmt;
       ws.getRow(r).height = 20;
@@ -2592,7 +2595,7 @@ export default function App() {
     bL.border = { ...bL.border, left: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
     bV.border = { ...bV.border, right: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
 
-    const headers = ['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit'];
+    const headers = ['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit', 'Emotion', 'Notes'];
     const hr = ws.getRow(TABLE_HEADER);
     headers.forEach((h, i) => {
       const c = hr.getCell(i + 1);
@@ -2617,13 +2620,14 @@ export default function App() {
       const vals: (string | number)[] = [
         t.symbol, t.type, t.entryPrice, t.exitPrice,
         fmtDateTime(t.date), exitDate ? fmtDateTime(t.exitTime!) : '-',
-        t.lotSize, t.profit
+        t.lotSize, t.profit,
+        t.emotion || '-', t.notes || '-'
       ];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = v;
         c.border = borderAll(BORDER);
-        c.alignment = i >= 4 && i <= 5 ? algn('left') : i === 0 || i === 1 ? algn('center') : algn('right');
+        c.alignment = i === 4 || i === 5 ? algn('left') : i === 9 ? { ...algn('left'), wrapText: true } : algn('center');
         if (i === 6) c.numFmt = '0.00';
         // Note: Entry/Exit prices (i=2, i=3) are left with General formatting to avoid trailing zeros
         if (i === 7) {
@@ -2643,11 +2647,11 @@ export default function App() {
     tr.getCell(7).value = totLots;
     tr.getCell(8).value = netProfit;
     
-    // Format all cells in the TOTALS row up to column 8
-    for (let col = 1; col <= 8; col++) {
+    // Format all cells in the TOTALS row up to column 10
+    for (let col = 1; col <= 10; col++) {
       const c = tr.getCell(col);
       c.fill = solid(TOTAL_FILL);
-      c.alignment = col === 1 ? algn('left') : algn('right');
+      c.alignment = col === 1 ? algn('left') : algn('center');
       c.border = { ...borderAll(BORDER), top: { style: 'medium', color: { argb: BLUE } } };
       
       if (col === 7 || col === 8) {
@@ -2771,7 +2775,7 @@ export default function App() {
 
     const lastY = (doc as any).lastAutoTable?.finalY || 45;
     autoTable(doc, {
-      head: [['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit']],
+      head: [['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit', 'Emotion', 'Notes']],
       body: inRange.map(t => {
         const entryDate = new Date(t.date);
         const exitDate = t.exitTime ? new Date(t.exitTime) : null;
@@ -2789,7 +2793,9 @@ export default function App() {
           fmtDateTime(entryDate),
           exitDate ? fmtDateTime(exitDate) : '-',
           String(t.lotSize),
-          `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+          `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`,
+          t.emotion || '-',
+          t.notes || '-'
         ];
       }),
       startY: lastY + 8,
@@ -3991,6 +3997,7 @@ export default function App() {
                       <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Exit Time</th>
                       <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Volume</th>
                       <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Net Profit</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Emotion</th>
                       <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Action</th>
                     </tr>
                   </thead>
@@ -4041,6 +4048,26 @@ export default function App() {
                             </span>
                           </td>
                           <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {t.emotion ? (
+                                <span className="text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full">
+                                  {t.emotion}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-600">-</span>
+                              )}
+                              {t.notes && (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); setSelectedNote(t.notes || ''); }}
+                                  className="text-slate-400 hover:text-blue-500 transition-colors ml-1"
+                                  title="Read Note"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
                             <div className="flex items-center justify-center gap-3">
                               <button
                                 onClick={() => handleOpenTradeModal(t)}
@@ -4064,7 +4091,7 @@ export default function App() {
 
                     {filteredTrades.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="text-center py-10 text-slate-500">
+                        <td colSpan={10} className="text-center py-10 text-slate-500">
                           No matching recorded trades. Clear filters or add your first position.
                         </td>
                       </tr>
@@ -4090,6 +4117,8 @@ export default function App() {
                     <div className="flex items-center gap-1.5 mb-3">
                       <span className={`font-bold text-[11px] ${t.type === 'Buy' || t.type === 'buy' ? 'text-blue-500 dark:text-blue-400' : 'text-rose-500 dark:text-rose-400'} uppercase tracking-wide`}>{t.type}</span>
                       <span className="text-[12px] text-slate-500 dark:text-slate-400">{t.lotSize} lots</span>
+                      {t.emotion && <span className="ml-2 text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full">{t.emotion}</span>}
+                      {t.notes && <button onClick={(e) => { e.stopPropagation(); setSelectedNote(t.notes || ''); }} className="ml-1 text-slate-400 hover:text-blue-500 transition-colors" title="Read Note"><MessageSquare className="h-3.5 w-3.5" /></button>}
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center text-[12px] text-slate-600 dark:text-slate-300 font-mono">
@@ -6473,6 +6502,39 @@ export default function App() {
               />
               <span className="text-xs text-slate-400">Don't show again</span>
             </label>
+          </div>
+        </div>
+      )}
+
+      {/* Trade Note Minimalist Modal */}
+      {selectedNote !== null && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60] overflow-y-auto" onClick={() => setSelectedNote(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 max-w-sm w-full relative overflow-hidden transform transition-all" onClick={e => e.stopPropagation()}>
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-500">
+                  <MessageSquare className="h-4 w-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-[15px]">Trade Note</h3>
+                <button
+                  onClick={() => setSelectedNote(null)}
+                  className="ml-auto text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 text-[13px] text-slate-600 dark:text-slate-300 leading-relaxed max-h-[60vh] overflow-y-auto whitespace-pre-wrap">
+                {selectedNote}
+              </div>
+              <div className="mt-5 flex justify-end">
+                <button
+                  onClick={() => setSelectedNote(null)}
+                  className="px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[13px] font-bold rounded-xl hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
