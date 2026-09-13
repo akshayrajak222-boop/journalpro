@@ -5975,8 +5975,8 @@ export default function App() {
         >
           {[
             { id: 'dashboard', icon: BarChart3 },
-            { id: 'journal', icon: BookOpen },
-            { id: 'accounts', icon: Layers },
+            { id: 'journal', icon: BookOpen, badgeNumber: filteredTrades.length > 0 ? filteredTrades.length : undefined },
+            { id: 'accounts', icon: Layers, badgeNumber: accounts.length > 0 ? accounts.length : undefined },
             { id: 'analytics', icon: Activity },
             { id: 'calendar', icon: Calendar },
             { id: 'fxnews', icon: Globe, notify: true },
@@ -6001,7 +6001,13 @@ export default function App() {
                   isScrolled ? 'h-5 w-5' : 'h-6 w-6'
                 } ${activeTab === item.id ? 'scale-110 drop-shadow-sm' : 'scale-100'}`} strokeWidth={activeTab === item.id ? 2.5 : 2} />
                 
-                {item.notify && (
+                {item.badgeNumber !== undefined && (
+                  <span className={`absolute -top-1.5 -right-2 bg-blue-500 text-white text-[9px] font-bold px-1 py-0.5 rounded-full border border-white dark:border-[#09090b] shadow-sm flex items-center justify-center min-w-[16px]`}>
+                    {item.badgeNumber > 99 ? '99+' : item.badgeNumber}
+                  </span>
+                )}
+
+                {item.notify && item.badgeNumber === undefined && (
                   <span className={`absolute bg-rose-500 rounded-full transition-all duration-500 ${
                     activeTab === item.id 
                       ? 'border-slate-200 dark:border-[#2f333a]' 
