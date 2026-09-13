@@ -315,6 +315,7 @@ export default function App() {
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
+  const [journalPage, setJournalPage] = useState(1);
   const [tradeDate, setTradeDate] = useState('');
   const [tradeExitTime, setTradeExitTime] = useState('');
   const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
@@ -2316,6 +2317,11 @@ export default function App() {
     profit: parseFloat(monthlyMap[my].toFixed(2))
   })).sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
 
+  // Reset journal page when filters change
+  useEffect(() => {
+    setJournalPage(1);
+  }, [searchQuery, journalFilterSymbol, journalFilterEmotion]);
+
   // Filter trades for tabular journal
   const filteredTrades = trades.filter(t => {
     const matchesSearch = t.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -3389,7 +3395,7 @@ export default function App() {
                   disabled={accounts.length === 0}
                   data-tour="add-trade"
                   className={`group relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg py-2 px-5 transition-all duration-300 flex items-center gap-1.5 disabled:opacity-50 shadow-md hover:shadow-lg shadow-indigo-500/30 border border-white/10 ${
-                    isScrolled ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
+                    (isScrolled && activeTab !== 'journal') ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
                   }`}
                 >
                   <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
@@ -3402,7 +3408,7 @@ export default function App() {
                   onClick={() => handleOpenTradeModal()}
                   disabled={accounts.length === 0}
                   className={`group hidden md:flex fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] items-center gap-2 border border-white/20 overflow-hidden ${
-                    isScrolled 
+                    (isScrolled && activeTab !== 'journal')
                       ? 'bottom-8 right-8 scale-100 translate-y-0 opacity-100 hover:scale-105' 
                       : 'bottom-0 right-8 scale-50 translate-y-16 opacity-0 pointer-events-none'
                   }`}
@@ -3984,8 +3990,18 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Big log Table with Scrollable Box container (Desktop) */}
-              <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-[#1f2937] rounded-xl relative shadow-xl dark:shadow-2xl bg-white dark:bg-[#0a0d14]">
+              {/* Journal View Content */}
+              {(() => {
+                const tradesPerPage = 7;
+                const totalPages = Math.max(Math.ceil(filteredTrades.length / tradesPerPage), 1);
+                const validPage = Math.min(Math.max(journalPage, 1), totalPages);
+                const startIndex = (validPage - 1) * tradesPerPage;
+                const paginatedTrades = filteredTrades.slice(startIndex, startIndex + tradesPerPage);
+                
+                return (
+                  <div className="space-y-4">
+                    {/* Big log Table (Desktop) */}
+                    <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-[#1f2937] rounded-xl relative shadow-xl dark:shadow-2xl bg-white dark:bg-[#0a0d14]">
                 <table className="w-full text-center border-collapse text-xs">
                   <thead className="sticky top-0 bg-slate-50 dark:bg-[#0a0d14] z-10 border-b border-slate-200 dark:border-[#1f2937]">
                     <tr className="text-slate-900 dark:text-white font-bold text-[11.5px] tracking-wide">
@@ -4002,7 +4018,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTrades.map((t) => {
+                    {paginatedTrades.map((t) => {
                       const entryDate = new Date(t.date);
                       const exitDate = t.exitTime ? new Date(t.exitTime) : null;
                       return (
@@ -4089,7 +4105,7 @@ export default function App() {
                       );
                     })}
 
-                    {filteredTrades.length === 0 && (
+                    {paginatedTrades.length === 0 && (
                       <tr>
                         <td colSpan={10} className="text-center py-10 text-slate-500">
                           No matching recorded trades. Clear filters or add your first position.
@@ -4102,7 +4118,7 @@ export default function App() {
 
               {/* Mobile Trades List (Reference Image Style) */}
               <div className="md:hidden flex flex-col space-y-0 mt-2 border-t border-slate-100 dark:border-slate-800 -mx-6 px-6">
-                {filteredTrades.map(t => (
+                {paginatedTrades.map(t => (
                   <div 
                     key={t.id} 
                     onClick={() => handleOpenTradeModal(t)} 
@@ -4133,12 +4149,43 @@ export default function App() {
                     </div>
                   </div>
                 ))}
-                {filteredTrades.length === 0 && (
+                {paginatedTrades.length === 0 && (
                   <div className="text-center py-10 text-slate-400 text-sm">
                     No matching recorded trades. Clear filters or add your first position.
                   </div>
                 )}
               </div>
+
+              {/* Pagination Controls */}
+              {filteredTrades.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2 pt-4">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Showing <span className="text-slate-900 dark:text-white font-bold">{startIndex + 1}</span> to <span className="text-slate-900 dark:text-white font-bold">{Math.min(startIndex + tradesPerPage, filteredTrades.length)}</span> of <span className="text-slate-900 dark:text-white font-bold">{filteredTrades.length}</span> trades
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setJournalPage(p => Math.max(1, p - 1))}
+                      disabled={validPage === 1}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Page {validPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setJournalPage(p => Math.min(totalPages, p + 1))}
+                      disabled={validPage === totalPages}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
             </div>
           </div>
         )}
