@@ -881,7 +881,9 @@ async function saveDatabase(
     // Upsert trades
     if (data.trades && data.trades.length > 0) {
       const trds = toSnake(data.trades).map((t: any) => ({ ...t, user_id: t.user_id || uid }));
+      console.log('--- UPSERTING TRADES ---', JSON.stringify(trds[trds.length - 1], null, 2));
       const { error: err3 } = await supabase.from('trades').upsert(trds, { onConflict: 'id' });
+      console.log('--- UPSERT ERROR ---', err3);
       if (err3) console.error('[saveDatabase] trades upsert error:', err3);
     }
     // Upsert risk settings
@@ -2040,6 +2042,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         } else {
           accountTrades = toCamel(rows || []);
           console.log(`[GET /api/trades] Fetched ${accountTrades.length} trades for user ${currentUser.id} from Supabase`);
+          if (accountTrades.length > 0) console.log('[GET /api/trades] First trade exitTime:', accountTrades[0].exitTime, '| Raw exit_time:', (rows || [])[0]?.exit_time);
         }
       } catch (err: any) {
         console.error('[GET /api/trades] Exception:', err?.message);
@@ -2075,6 +2078,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       lotSize, 
       entryPrice, 
       exitPrice, 
+      exitTime,
       stopLoss, 
       takeProfit, 
       profit, 
@@ -2154,6 +2158,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       lotSize: parseFloat(lotSize),
       entryPrice: parseFloat(entryPrice),
       exitPrice: parseFloat(exitPrice),
+      exitTime: exitTime || undefined,
       stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
       takeProfit: takeProfit ? parseFloat(takeProfit) : undefined,
       profit: parseFloat(profit),
@@ -2175,6 +2180,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     db.accounts[accountIdx].equity = db.accounts[accountIdx].currentBalance;
 
     await saveDatabase(db, authEmail);
+    console.log('[POST /api/trades] newTrade.exitTime =', newTrade.exitTime);
     res.json({ message: 'Trade logged successfully', trade: newTrade, updatedAccount: db.accounts[accountIdx] });
   });
 
@@ -2262,6 +2268,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     if (updateData.lotSize !== undefined) db.trades[tradeIdx].lotSize = parseFloat(updateData.lotSize);
     if (updateData.entryPrice !== undefined) db.trades[tradeIdx].entryPrice = parseFloat(updateData.entryPrice);
     if (updateData.exitPrice !== undefined) db.trades[tradeIdx].exitPrice = parseFloat(updateData.exitPrice);
+    if (updateData.exitTime !== undefined) db.trades[tradeIdx].exitTime = updateData.exitTime;
     if (updateData.stopLoss !== undefined) db.trades[tradeIdx].stopLoss = updateData.stopLoss ? parseFloat(updateData.stopLoss) : undefined;
     if (updateData.takeProfit !== undefined) db.trades[tradeIdx].takeProfit = updateData.takeProfit ? parseFloat(updateData.takeProfit) : undefined;
     if (updateData.profit !== undefined) db.trades[tradeIdx].profit = parseFloat(updateData.profit);

@@ -47,6 +47,7 @@ export interface Trade {
   id: string;
   accountId: string;
   date: string; // ISO format or date string
+  exitTime?: string;
   symbol: string;
   type: 'Buy' | 'Sell' | 'Deposit' | 'Withdrawal';
   lotSize: number;

@@ -314,6 +314,7 @@ export default function App() {
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
   const [tradeDate, setTradeDate] = useState('');
+  const [tradeExitTime, setTradeExitTime] = useState('');
   const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
   const [tradeType, setTradeType] = useState<'Buy' | 'Sell'>('Buy');
   const [tradeLotSize, setTradeLotSize] = useState('0.1');
@@ -1356,6 +1357,19 @@ export default function App() {
       } else {
         setTradeDate('');
       }
+      
+      if (trade.exitTime) {
+        try {
+          const d = new Date(trade.exitTime);
+          const offset = d.getTimezoneOffset();
+          const localDate = new Date(d.getTime() - offset * 60 * 1000);
+          setTradeExitTime(localDate.toISOString().slice(0, 16));
+        } catch (e) {
+          setTradeExitTime('');
+        }
+      } else {
+        setTradeExitTime('');
+      }
       setTradeSymbol(trade.symbol);
       setTradeType(trade.type as 'Buy' | 'Sell');
       setTradeLotSize(String(trade.lotSize));
@@ -1452,6 +1466,7 @@ export default function App() {
       lotSize: tradeLotSize,
       entryPrice: tradeEntryPrice,
       exitPrice: tradeExitPrice,
+      exitTime: tradeExitTime ? new Date(tradeExitTime).toISOString() : undefined,
       stopLoss: tradeSL || null,
       takeProfit: tradeTP || null,
       profit: tradeProfit,
@@ -3912,81 +3927,92 @@ export default function App() {
               </div>
 
               {/* Big log Table with Scrollable Box container (Desktop) */}
-              <div className="hidden md:block max-h-[500px] overflow-y-auto overflow-x-auto border border-slate-100 rounded-xl relative shadow-inner">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-100">
-                    <tr className="text-slate-500 uppercase font-bold text-[10px]">
-                      <th className="py-3 pl-4">Execution Date</th>
-                      <th className="py-3">Symbol</th>
-                      <th className="py-3">Type</th>
-                      <th className="py-3">Lot Size</th>
-                      <th className="py-3">Entry & Exit Price</th>
-                      <th className="py-3">Emotion State</th>
-                      <th className="py-3">Net Profit</th>
-                      <th className="py-3 text-right pr-4">Action</th>
+              <div className="hidden md:block overflow-x-auto border border-[#1f2937] rounded-xl relative shadow-2xl bg-[#0a0d14]">
+                <table className="w-full text-center border-collapse text-xs">
+                  <thead className="sticky top-0 bg-[#0a0d14] z-10 border-b border-[#1f2937]">
+                    <tr className="text-white font-bold text-[11.5px] tracking-wide">
+                      <th className="py-4 px-4 font-bold text-center">Symbol</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Type</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Entry</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Exit</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Entry Time</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Exit Time</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Volume</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Net Profit</th>
+                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTrades.map((t) => (
-                      <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
-                        <td className="py-3 pl-4 text-slate-500 whitespace-nowrap">
-                          {new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                          {t.isMt5Sync && (
-                            <span className="ml-1.5 inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 text-[9px] font-extrabold px-1 rounded uppercase tracking-wider">
-                              <Radio className="h-2 w-2 animate-pulse" /> Sync
+                    {filteredTrades.map((t) => {
+                      const entryDate = new Date(t.date);
+                      const exitDate = t.exitTime ? new Date(t.exitTime) : null;
+                      return (
+                        <tr key={t.id} className="border-b border-[#1f2937] hover:bg-white/[0.02] transition">
+                          <td className="py-4 px-4 font-medium text-slate-200 whitespace-nowrap text-center">
+                            {t.symbol}
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] text-center">
+                            <span className={`inline-flex items-center justify-center px-4 py-1.5 rounded-full text-[11px] font-bold ${
+                              t.type === 'Buy' || t.type === 'buy' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            }`}>
+                              {t.type}
                             </span>
-                          )}
-                        </td>
-                        <td className="py-3 font-bold text-slate-900">{t.symbol}</td>
-                        <td className="py-3">
-                          <span className={`font-semibold px-2 py-0.5 rounded ${
-                            t.type === 'Buy' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                          }`}>
-                            {t.type}
-                          </span>
-                        </td>
-                        <td className="py-3 font-mono font-medium text-slate-600">{t.lotSize}</td>
-                        <td className="py-3 font-mono text-slate-500 whitespace-nowrap">
-                          {t.entryPrice} → {t.exitPrice}
-                        </td>
-                        <td className="py-3">
-                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                            t.emotion === 'Calm' ? 'bg-slate-100 text-slate-700' :
-                            t.emotion === 'Anxious' || t.emotion === 'Revenge' ? 'bg-rose-50 text-rose-700' :
-                            t.emotion === 'Excited' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}>
-                            {t.emotion || 'Calm'}
-                          </span>
-                        </td>
-                        <td className="py-3">
-                          <span className={`font-extrabold ${t.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {t.profit >= 0 ? '+' : ''}{formatValue(t.profit)}
-                          </span>
-                        </td>
-                        <td className="py-3 text-right pr-4">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleOpenTradeModal(t)}
-                              className="p-1 hover:bg-slate-100 rounded text-slate-500"
-                              title="Edit position details"
-                            >
-                              <Edit3 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTrade(t.id)}
-                              className="p-1 hover:bg-rose-50 rounded text-rose-600"
-                              title="Delete position"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] font-medium text-slate-300 text-center">
+                            {t.entryPrice}
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] font-medium text-slate-300 text-center">
+                            {t.exitPrice}
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] text-slate-300 text-center">
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="font-medium text-[11.5px]">{entryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                              <span className="text-[10px] text-slate-400">{entryDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] text-slate-300 text-center">
+                            {exitDate ? (
+                              <div className="flex flex-col items-center justify-center gap-0.5">
+                                <span className="font-medium text-[11.5px]">{exitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                <span className="text-[10px] text-slate-400">{exitDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                              </div>
+                            ) : (
+                              <span className="font-medium text-slate-500">-</span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] font-medium text-slate-300 text-center">
+                            {t.lotSize}
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] text-center">
+                            <span className={`font-medium ${t.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {t.profit >= 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(t.profit)}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 border-l border-[#1f2937] text-center">
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                onClick={() => handleOpenTradeModal(t)}
+                                className="text-slate-400 hover:text-white transition"
+                                title="Edit position details"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTrade(t.id)}
+                                className="text-rose-500/80 hover:text-rose-500 transition"
+                                title="Delete position"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
 
                     {filteredTrades.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="text-center py-10 text-slate-400">
+                        <td colSpan={9} className="text-center py-10 text-slate-500">
                           No matching recorded trades. Clear filters or add your first position.
                         </td>
                       </tr>
@@ -4048,69 +4074,134 @@ export default function App() {
 
         {/* 4. PORTFOLIO ACCOUNTS VIEW */}
         {activeTab === 'accounts' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              
-              {/* Account cards */}
-              {accounts.map((acc) => {
+          <div className="space-y-5 max-w-7xl">
+
+            {/* Desktop View: Table — theme-aware */}
+            <div className={`hidden md:block rounded-2xl overflow-hidden border shadow-xl ${
+              theme === 'dark'
+                ? 'bg-[#0f1117] border-white/5'
+                : 'bg-white border-slate-200'
+            }`}>
+              {/* Header */}
+              <div className={`grid grid-cols-[2fr_1.5fr_1.8fr_1fr_1.2fr_1.5fr_1.5fr_1.2fr] text-[11px] font-bold uppercase tracking-widest px-5 py-3.5 border-b ${
+                theme === 'dark'
+                  ? 'text-slate-400 border-white/10'
+                  : 'text-slate-500 border-slate-200 bg-slate-50'
+              }`}>
+                <span>Name</span>
+                <span>Number</span>
+                <span>Provider</span>
+                <span>Type</span>
+                <span>Platform</span>
+                <span>Balance</span>
+                <span>Last Sync</span>
+                <span>Actions</span>
+              </div>
+
+              {/* Account Rows */}
+              {accounts.length === 0 && (
+                <div className="py-16 text-center text-slate-500 text-sm">
+                  No accounts connected yet.
+                </div>
+              )}
+              {accounts.map((acc, idx) => {
                 const isActive = acc.id === selectedAccountId;
-                const accountProfit = acc.currentBalance - acc.startingBalance;
+                const lastSyncText = (() => {
+                  if (!acc.lastSyncedAt) return '—';
+                  const diff = Date.now() - new Date(acc.lastSyncedAt).getTime();
+                  const mins = Math.floor(diff / 60000);
+                  const hrs = Math.floor(mins / 60);
+                  const days = Math.floor(hrs / 24);
+                  if (mins < 2) return 'Just now';
+                  if (mins < 60) return `${mins} minutes ago`;
+                  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+                  return `${days} day${days > 1 ? 's' : ''} ago`;
+                })();
+
                 return (
-                  <div 
-                    key={acc.id} 
-                    className={`bg-white border rounded-xl p-6 relative transition duration-200 flex flex-col justify-between space-y-4 ${
-                      isActive ? 'border-slate-900 ring-1 ring-slate-900 shadow-xs' : 'border-slate-100 hover:border-slate-200'
+                  <div
+                    key={acc.id}
+                    onClick={() => {
+                      setSelectedAccountId(acc.id);
+                      persistSelectedAccount(acc.id);
+                      fetchTradesAndParams(acc.id);
+                    }}
+                    className={`grid grid-cols-[2fr_1.5fr_1.8fr_1fr_1.2fr_1.5fr_1.5fr_1.2fr] items-center px-5 py-4 cursor-pointer transition-colors duration-150 ${
+                      idx !== accounts.length - 1
+                        ? theme === 'dark' ? 'border-b border-white/[0.05]' : 'border-b border-slate-100'
+                        : ''
+                    } ${isActive
+                        ? theme === 'dark' ? 'bg-white/[0.06]' : 'bg-slate-50'
+                        : theme === 'dark' ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50/60'
                     }`}
                   >
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-extrabold text-slate-900 text-sm">{acc.name}</h4>
-                          <span className="text-[10px] text-slate-400 block font-semibold">{acc.broker} • {acc.platform}{acc.institutionType ? ` • ${acc.institutionType}` : ''}</span>
-                        </div>
-                        <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                          acc.accountType === 'Live' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+                    {/* Name */}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 shadow-[0_0_6px_#34d399]" />}
+                      <span className={`text-[13px] font-semibold truncate ${
+                        theme === 'dark' ? 'text-white' : 'text-slate-800'
+                      }`}>{acc.name}</span>
+                    </div>
+
+                    {/* Number */}
+                    <span className={`text-[12px] font-mono truncate ${
+                      theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+                    }`}>{acc.broker || '—'}</span>
+
+                    {/* Provider */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
+                        theme === 'dark' ? 'bg-slate-700/60' : 'bg-slate-100'
+                      }`}>
+                        <span className={`text-[9px] font-extrabold uppercase leading-none ${
+                          theme === 'dark' ? 'text-blue-300' : 'text-blue-600'
                         }`}>
-                          {acc.accountType}
+                          {(acc.broker || 'B').slice(0, 2)}
                         </span>
                       </div>
-
-                      <div className="pt-3 border-t border-slate-50 space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-400">Starting Capital</span>
-                          <span className="font-mono text-slate-700 font-bold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency }).format(acc.startingBalance)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-400">Current Balance</span>
-                          <span className="font-mono text-slate-900 font-extrabold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency }).format(acc.currentBalance)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-400">P/L Return</span>
-                          <span className={`font-mono font-bold ${accountProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {accountProfit >= 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency }).format(accountProfit)}
-                          </span>
-                        </div>
+                      <div className="leading-tight min-w-0">
+                        <span className={`text-[12px] font-semibold block truncate ${
+                          theme === 'dark' ? 'text-slate-200' : 'text-slate-700'
+                        }`}>{acc.broker || '—'}</span>
+                        <span className="text-[9px] text-slate-500 uppercase tracking-wider">{acc.institutionType || 'BROKER'}</span>
                       </div>
                     </div>
 
-                    <div className="flex gap-2 mt-4 pt-3 border-t border-slate-50">
-                      {isActive ? (
-                        <span className="flex-grow text-center py-1.5 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg select-none inline-flex items-center justify-center gap-1">
-                          <Check className="h-3.5 w-3.5 text-emerald-500" /> Active Portfolio
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setSelectedAccountId(acc.id);
-                            persistSelectedAccount(acc.id);
-                            fetchTradesAndParams(acc.id);
-                          }}
-                          className="flex-grow text-center py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition"
-                        >
-                          Activate Portfolio
-                        </button>
-                      )}
-                       <button
+                    {/* Type */}
+                    <span className={`text-[11px] font-extrabold uppercase tracking-wider ${
+                      acc.accountType === 'Live' ? 'text-emerald-400' : 'text-amber-400'
+                    }`}>
+                      {acc.accountType}
+                    </span>
+
+                    {/* Platform */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                        <Terminal className="h-3 w-3 text-blue-400" />
+                      </div>
+                      <span className="text-[12px] font-semibold text-slate-300">{acc.platform || 'MT5'}</span>
+                    </div>
+
+                    {/* Balance */}
+                    <span className="text-[13px] font-bold text-white font-mono">
+                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency || 'USD', minimumFractionDigits: 2 }).format(acc.currentBalance)}
+                    </span>
+
+                    {/* Last Sync */}
+                    <span className="text-[12px] text-slate-400">{lastSyncText}</span>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => setActiveTab('mt5')}
+                        title="Go to MT5 Sync"
+                        className={`p-1.5 rounded-lg transition text-slate-400 hover:text-blue-500 ${
+                          theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                        }`}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
+                      <button
                         onClick={() => {
                           setEditingAccount(acc);
                           setEditAccName(acc.name);
@@ -4118,29 +4209,192 @@ export default function App() {
                           setEditAccCurrency(acc.currency || 'USD');
                           setShowEditAccountModal(true);
                         }}
-                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center justify-center"
-                        title="Edit Account Name, Currency and Starting Capital"
+                        title="Edit Account"
+                        className={`p-1.5 rounded-lg transition text-slate-400 hover:text-amber-500 ${
+                          theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                        }`}
                       >
-                        <Edit3 className="h-4 w-4" />
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingAccount(acc);
+                          setShowEditAccountModal(true);
+                        }}
+                        title="Delete Account"
+                        className={`p-1.5 rounded-lg transition text-slate-400 hover:text-rose-500 ${
+                          theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                        }`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
                 );
               })}
-
-              {/* Dotted Create Card */}
-              <button
-                onClick={() => { 
-                  setShowAccountModal(true); 
-                  setAccountCreationMethod('select'); 
-                }}
-                data-tour="create-portfolio"
-                className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition h-56 text-xs font-bold bg-white"
-              >
-                <Plus className="h-6 w-6 text-slate-400" />
-                Connect New Portfolio Account
-              </button>
             </div>
+
+            {/* Mobile View: Card List */}
+            <div className={`md:hidden rounded-2xl px-5 pt-5 pb-2 ${ theme === 'dark' ? 'bg-[#0f1117]' : 'bg-white border border-slate-200 shadow-sm' }`}>
+              {/* Title row */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Connected Accounts</p>
+                  <h2 className={`text-2xl font-extrabold ${ theme === 'dark' ? 'text-white' : 'text-slate-900' }`}>
+                    {accounts.length} account{accounts.length !== 1 ? 's' : ''}
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Add new */}
+                  <button
+                    onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+                    title="Add Account"
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition ${ theme === 'dark' ? 'text-slate-300 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100' }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Account rows */}
+              {accounts.length === 0 && (
+                <div className="py-10 text-center text-slate-500 text-sm">
+                  No accounts connected yet. Add one to get started.
+                </div>
+              )}
+
+              {accounts.map((acc, idx) => {
+                const isActive = acc.id === selectedAccountId;
+                const lastSyncText = (() => {
+                  if (!acc.lastSyncedAt) return '—';
+                  const diff = Date.now() - new Date(acc.lastSyncedAt).getTime();
+                  const mins = Math.floor(diff / 60000);
+                  const hrs = Math.floor(mins / 60);
+                  const days = Math.floor(hrs / 24);
+                  if (mins < 2) return 'Just now';
+                  if (mins < 60) return `${mins} minutes ago`;
+                  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+                  return `${days} day${days > 1 ? 's' : ''} ago`;
+                })();
+
+                const brokerInitials = (acc.broker || 'B').slice(0, 2).toUpperCase();
+                const balanceStr = (() => {
+                  const cur = acc.currency || 'USD';
+                  try {
+                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(acc.currentBalance);
+                  } catch {
+                    return `${cur} ${acc.currentBalance.toFixed(2)}`;
+                  }
+                })();
+
+                return (
+                  <div
+                    key={acc.id}
+                    onClick={() => {
+                      setSelectedAccountId(acc.id);
+                      persistSelectedAccount(acc.id);
+                      fetchTradesAndParams(acc.id);
+                    }}
+                    className={`flex flex-col py-4 cursor-pointer transition-colors duration-150 ${ idx !== accounts.length - 1 ? (theme === 'dark' ? 'border-b border-white/[0.06]' : 'border-b border-slate-100') : '' } ${ isActive ? (theme === 'dark' ? 'bg-white/[0.03] -mx-5 px-5' : 'bg-slate-50 -mx-5 px-5') : '' }`}
+                  >
+                    <div className="flex items-center gap-4 w-full">
+                      {/* Broker avatar */}
+                      <div className="relative flex-shrink-0">
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-md ${ theme === 'dark' ? 'bg-slate-700/60' : 'bg-slate-100' }`}>
+                          <span className={`text-[13px] font-black lowercase leading-none ${ theme === 'dark' ? 'text-slate-300' : 'text-slate-700' }`}>{brokerInitials.toLowerCase()}</span>
+                        </div>
+                        {/* Platform sub-icon */}
+                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-blue-600 border-2 border-[#0f1117] flex items-center justify-center">
+                          <Terminal className="h-2.5 w-2.5 text-white" />
+                        </div>
+                      </div>
+
+                      {/* Center info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={`text-[15px] font-bold truncate ${ theme === 'dark' ? 'text-white' : 'text-slate-900' }`}>
+                            {acc.name}
+                          </span>
+                          <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide ${ acc.accountType === 'Live' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-500/20 text-slate-300' }`}>
+                            {acc.accountType}
+                          </span>
+                          {isActive && (
+                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded uppercase tracking-wide">Active</span>
+                          )}
+                        </div>
+                        <p className={`text-[12px] truncate ${ theme === 'dark' ? 'text-slate-400' : 'text-slate-500' }`}>
+                          {acc.broker || '—'} • {acc.platform || 'MT5'}{acc.broker ? ` • #${(acc.broker).replace(/\D/g, '') || acc.id.slice(0,8)}` : ''}
+                        </p>
+                      </div>
+
+                      {/* Right side */}
+                      <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                        <span className={`text-[15px] font-bold font-mono ${ theme === 'dark' ? 'text-white' : 'text-slate-900' }`}>
+                          {balanceStr}
+                        </span>
+                        <span className="text-[11px] text-slate-500">{lastSyncText}</span>
+                      </div>
+
+                      {/* Chevron */}
+                      <ChevronRight className={`h-4 w-4 flex-shrink-0 transition-transform ${ isActive ? 'rotate-90' : '' } ${ theme === 'dark' ? 'text-slate-600' : 'text-slate-300' }`} />
+                    </div>
+
+                    {/* Expandable Action Bar */}
+                    {isActive && (
+                      <div className={`mt-4 pt-3 flex items-center justify-between border-t ${ theme === 'dark' ? 'border-white/5' : 'border-slate-200' }`}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setActiveTab('mt5'); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-500 hover:bg-blue-500/10 transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Sync
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAccount(acc);
+                              setEditAccName(acc.name);
+                              setEditAccStartingBalance(String(acc.startingBalance));
+                              setEditAccCurrency(acc.currency || 'USD');
+                              setShowEditAccountModal(true);
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${ theme === 'dark' ? 'text-slate-300 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100' }`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAccount(acc);
+                              setShowEditAccountModal(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add Account Button (Visible on both desktop & mobile) */}
+            <button
+              onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+              data-tour="create-portfolio"
+              className={`w-full border-2 border-dashed rounded-2xl py-5 flex items-center justify-center gap-2.5 transition text-sm font-semibold ${
+                theme === 'dark'
+                  ? 'border-white/10 hover:border-white/20 text-slate-400 hover:text-slate-200 bg-transparent'
+                  : 'border-slate-300 hover:border-slate-400 text-slate-500 hover:text-slate-700 bg-transparent'
+              }`}
+            >
+              <Plus className="h-5 w-5" />
+              Connect New Portfolio Account
+            </button>
+
           </div>
         )}
 
@@ -6188,30 +6442,57 @@ export default function App() {
             <form onSubmit={handleSaveTrade} className="p-5 space-y-5">
               
               {/* Date & Time */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">Trade Date &amp; Time</label>
-                <div className="relative">
-                  <input
-                    id="tradeDateInput"
-                    type="datetime-local"
-                    value={tradeDate}
-                    onChange={(e) => setTradeDate(e.target.value)}
-                    className="bg-white border border-slate-200 text-sm rounded-xl p-3 pr-10 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all [&::-webkit-calendar-picker-indicator]:hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const input = document.getElementById('tradeDateInput') as HTMLInputElement;
-                      if (input) {
-                        input.focus();
-                        try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
-                      }
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10"
-                    title="Open date & time picker"
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </button>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Entry Time</label>
+                  <div className="relative">
+                    <input
+                      id="tradeDateInput"
+                      type="datetime-local"
+                      value={tradeDate}
+                      onChange={(e) => setTradeDate(e.target.value)}
+                      className="bg-white border border-slate-200 text-sm rounded-xl p-3 pr-10 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all [&::-webkit-calendar-picker-indicator]:hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('tradeDateInput') as HTMLInputElement;
+                        if (input) {
+                          input.focus();
+                          try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
+                        }
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10"
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Exit Time (Optional)</label>
+                  <div className="relative">
+                    <input
+                      id="tradeExitTimeInput"
+                      type="datetime-local"
+                      value={tradeExitTime}
+                      onChange={(e) => setTradeExitTime(e.target.value)}
+                      className="bg-white border border-slate-200 text-sm rounded-xl p-3 pr-10 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all [&::-webkit-calendar-picker-indicator]:hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('tradeExitTimeInput') as HTMLInputElement;
+                        if (input) {
+                          input.focus();
+                          try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
+                        }
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10"
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
