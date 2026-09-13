@@ -240,6 +240,7 @@ export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Scroll UI state
   const [isScrolled, setIsScrolled] = useState(false);
@@ -3152,53 +3153,61 @@ export default function App() {
       
       <div className="flex flex-1 md:overflow-hidden relative pt-[60px]">
       {/* Sidebar Navigation */}
-      <aside className="hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 transition-all duration-300 md:h-full overflow-hidden w-24 py-3">
-        <div className="space-y-4 w-full flex flex-col items-center">
-
+      <aside className={`hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 md:h-full overflow-hidden ${desktopSidebarOpen ? 'w-64' : 'w-24 items-center'} py-5`}>
+        <div className={`space-y-6 w-full flex flex-col ${desktopSidebarOpen ? 'items-start px-6' : 'items-center'}`}>
+          <div className={`flex w-full ${desktopSidebarOpen ? 'justify-end' : 'justify-center'} mb-2`}>
+            <button
+              onClick={() => setDesktopSidebarOpen(!desktopSidebarOpen)}
+              className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all"
+              title="Toggle Sidebar"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          </div>
 
           {/* Primary Sidebar Links */}
-          <nav className="flex flex-col gap-1 w-full px-2">
+          <nav className="flex flex-col gap-2 w-full px-2">
             {isAdmin && (
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 title="Admin Panel"
-                className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+                className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-200 ${
                   activeTab === 'admin' 
                     ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                     : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
                 }`}
               >
-                <Shield className="h-4 w-4" />
-                <span className="text-[9px] font-bold">Admin</span>
+                <Shield className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+                <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Admin</span>
               </button>
             )}
             
             <button
               onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
               title="Dashboard"
-              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-300 ease-out ${
                 activeTab === 'dashboard' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <BarChart3 className="h-4 w-4" />
-              <span className="text-[9px] font-bold">Dashboard</span>
+              <BarChart3 className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Dashboard</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('journal'); setMobileMenuOpen(false); }}
               title="Trading Journal"
-              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-200 ${
                 activeTab === 'journal' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <BookOpen className="h-4 w-4" />
-              <span className="text-[9px] font-bold">Journal</span>
+              <BookOpen className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Journal</span>
               {trades.length > 0 && (
-                <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-blue-500 text-white rounded-full font-bold shadow-sm">
+                <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1 right-1'} flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-blue-500 text-white rounded-full font-bold shadow-sm`}>
                   {trades.length}
                 </span>
               )}
@@ -3207,16 +3216,16 @@ export default function App() {
             <button
               onClick={() => { setActiveTab('accounts'); setMobileMenuOpen(false); }}
               title="Portfolio Accounts"
-              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-200 ${
                 activeTab === 'accounts' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Layers className="h-4 w-4" />
-              <span className="text-[9px] font-bold">Accounts</span>
+              <Layers className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Accounts</span>
               {accounts.length > 0 && (
-                <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-emerald-500 text-white rounded-full font-bold shadow-sm">
+                <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1 right-1'} flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-emerald-500 text-white rounded-full font-bold shadow-sm`}>
                   {accounts.length}
                 </span>
               )}
@@ -3225,82 +3234,82 @@ export default function App() {
             <button
               onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
               title="Analytics"
-              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-300 ease-out ${
                 activeTab === 'analytics' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-[9px] font-bold">Analytics</span>
+              <TrendingUp className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Analytics</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('calendar'); setMobileMenuOpen(false); }}
               title="Calendar"
-              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-300 ease-out ${
                 activeTab === 'calendar' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Calendar className="h-4 w-4" />
-              <span className="text-[9px] font-bold">Calendar</span>
+              <Calendar className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Calendar</span>
             </button>
 
             <button
               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News"
-              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-200 ${
                 activeTab === 'fxnews' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-              <span className="text-[9px] font-bold">FX News</span>
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+              <Newspaper className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'fxnews' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>FX News</span>
+              <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1.5 right-1.5'} h-1.5 w-1.5 bg-blue-500 rounded-full`} />
             </button>
 
             <button
               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
               title="MT5 Sync"
-              className={`flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-300 ease-out ${
                 activeTab === 'mt5' 
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Terminal className="h-4 w-4" />
-              <span className="text-[9px] font-bold">MT5 Sync</span>
+              <Terminal className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>MT5 Sync</span>
             </button>
 
             <button
               onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
               title="Tools"
-              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-200 ${
                 activeTab === 'tools' 
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
-              <span className="text-[9px] font-bold">Tools</span>
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+              <Wrench className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Tools</span>
+              <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1.5 right-1.5'} h-1.5 w-1.5 bg-emerald-500 rounded-full`} />
             </button>
 
             <button
               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
               title="AI Mentor"
-              className={`relative flex flex-col items-center justify-center gap-1 w-full h-14 rounded-2xl transition-all duration-200 mx-auto ${
+              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl transition-all duration-300 ease-out ${
                 activeTab === 'insights' 
-                  ? 'bg-slate-200 text-indigo-700 dark:bg-slate-800 dark:text-indigo-400 shadow-sm' 
+                  ? 'bg-slate-200 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 dark:shadow-[inset_0_1px_1px_rgba(99,102,241,0.2),0_0_20px_rgba(99,102,241,0.1)] dark:border dark:border-indigo-500/20 shadow-sm transform dark:scale-105' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-indigo-600 dark:hover:text-indigo-400'
               }`}
             >
-              <Brain className={`h-4 w-4 ${activeTab === 'insights' ? 'text-indigo-600 dark:text-indigo-400' : 'text-indigo-500'}`} />
-              <span className="text-[9px] font-bold">AI Mentor</span>
-              <span className="absolute top-1 right-1 h-1 w-1 bg-indigo-500 rounded-full animate-ping" />
+              <Brain className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'insights' ? 'text-indigo-600 dark:text-indigo-400' : 'text-indigo-500'}`} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>AI Mentor</span>
+              <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1 right-1'} h-1 w-1 bg-indigo-500 rounded-full animate-ping`} />
             </button>
 
           </nav>
@@ -3896,6 +3905,30 @@ export default function App() {
                     <option value="Revenge">Revenge</option>
                   </select>
 
+                  {(() => {
+                    const tradesWithExit = filteredTrades.filter(t => t.exitTime);
+                    if (tradesWithExit.length === 0) return null;
+                    const totalDuration = tradesWithExit.reduce((acc, t) => {
+                      return acc + (new Date(t.exitTime!).getTime() - new Date(t.date).getTime());
+                    }, 0);
+                    const avgDurationMs = totalDuration / tradesWithExit.length;
+                    const days = Math.floor(avgDurationMs / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((avgDurationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((avgDurationMs % (1000 * 60 * 60)) / (1000 * 60));
+                    
+                    let formatAvg = '';
+                    if (days > 0) formatAvg += `${days}d `;
+                    if (hours > 0) formatAvg += `${hours}h `;
+                    formatAvg += `${minutes}m`;
+
+                    return (
+                      <div className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-400 rounded-lg text-xs font-semibold whitespace-nowrap">
+                        <Clock className="h-3.5 w-3.5" />
+                        Avg Hold: {formatAvg}
+                      </div>
+                    );
+                  })()}
+
                   {(journalFilterSymbol || journalFilterEmotion || searchQuery) && (
                     <button
                       onClick={() => { setJournalFilterSymbol(''); setJournalFilterEmotion(''); setSearchQuery(''); }}
@@ -3927,19 +3960,19 @@ export default function App() {
               </div>
 
               {/* Big log Table with Scrollable Box container (Desktop) */}
-              <div className="hidden md:block overflow-x-auto border border-[#1f2937] rounded-xl relative shadow-2xl bg-[#0a0d14]">
+              <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-[#1f2937] rounded-xl relative shadow-xl dark:shadow-2xl bg-white dark:bg-[#0a0d14]">
                 <table className="w-full text-center border-collapse text-xs">
-                  <thead className="sticky top-0 bg-[#0a0d14] z-10 border-b border-[#1f2937]">
-                    <tr className="text-white font-bold text-[11.5px] tracking-wide">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-[#0a0d14] z-10 border-b border-slate-200 dark:border-[#1f2937]">
+                    <tr className="text-slate-900 dark:text-white font-bold text-[11.5px] tracking-wide">
                       <th className="py-4 px-4 font-bold text-center">Symbol</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Type</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Entry</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Exit</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Entry Time</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Exit Time</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Volume</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Net Profit</th>
-                      <th className="py-4 px-4 font-bold border-l border-[#1f2937] text-center">Action</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Type</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Entry</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Exit</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Entry Time</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Exit Time</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Volume</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Net Profit</th>
+                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3947,59 +3980,59 @@ export default function App() {
                       const entryDate = new Date(t.date);
                       const exitDate = t.exitTime ? new Date(t.exitTime) : null;
                       return (
-                        <tr key={t.id} className="border-b border-[#1f2937] hover:bg-white/[0.02] transition">
-                          <td className="py-4 px-4 font-medium text-slate-200 whitespace-nowrap text-center">
+                        <tr key={t.id} className="border-b border-slate-100 dark:border-[#1f2937] hover:bg-slate-50 dark:hover:bg-white/[0.02] transition">
+                          <td className="py-4 px-4 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap text-center">
                             {t.symbol}
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
                             <span className={`inline-flex items-center justify-center px-4 py-1.5 rounded-full text-[11px] font-bold ${
-                              t.type === 'Buy' || t.type === 'buy' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              t.type === 'Buy' || t.type === 'buy' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                             }`}>
                               {t.type}
                             </span>
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] font-medium text-slate-300 text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] font-medium text-slate-700 dark:text-slate-300 text-center">
                             {t.entryPrice}
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] font-medium text-slate-300 text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] font-medium text-slate-700 dark:text-slate-300 text-center">
                             {t.exitPrice}
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] text-slate-300 text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-slate-700 dark:text-slate-300 text-center">
                             <div className="flex flex-col items-center justify-center gap-0.5">
                               <span className="font-medium text-[11.5px]">{entryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                              <span className="text-[10px] text-slate-400">{entryDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400">{entryDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
                             </div>
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] text-slate-300 text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-slate-700 dark:text-slate-300 text-center">
                             {exitDate ? (
                               <div className="flex flex-col items-center justify-center gap-0.5">
                                 <span className="font-medium text-[11.5px]">{exitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                <span className="text-[10px] text-slate-400">{exitDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400">{exitDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
                               </div>
                             ) : (
-                              <span className="font-medium text-slate-500">-</span>
+                              <span className="font-medium text-slate-400 dark:text-slate-500">-</span>
                             )}
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] font-medium text-slate-300 text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] font-medium text-slate-700 dark:text-slate-300 text-center">
                             {t.lotSize}
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] text-center">
-                            <span className={`font-medium ${t.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
+                            <span className={`font-medium ${t.profit >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'}`}>
                               {t.profit >= 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(t.profit)}
                             </span>
                           </td>
-                          <td className="py-4 px-4 border-l border-[#1f2937] text-center">
+                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
                             <div className="flex items-center justify-center gap-3">
                               <button
                                 onClick={() => handleOpenTradeModal(t)}
-                                className="text-slate-400 hover:text-white transition"
+                                className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition"
                                 title="Edit position details"
                               >
                                 <Edit3 className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => handleDeleteTrade(t.id)}
-                                className="text-rose-500/80 hover:text-rose-500 transition"
+                                className="text-rose-500/80 hover:text-rose-600 dark:hover:text-rose-500 transition"
                                 title="Delete position"
                               >
                                 <Trash2 className="h-4 w-4" />
