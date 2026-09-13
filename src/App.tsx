@@ -2452,11 +2452,11 @@ export default function App() {
     const BORDER = 'FFB7C4D6';
     const BRAND = 'FF1F4E79';
 
-    const TABLE_COLS = 12;
-    const SPACER_COL = 13;
-    const SUMMARY_LABEL_COL = 14;
-    const SUMMARY_VALUE_COL = 15;
-    const TOTAL_COLS = 15;
+    const TABLE_COLS = 8;
+    const SPACER_COL = 9;
+    const SUMMARY_LABEL_COL = 10;
+    const SUMMARY_VALUE_COL = 11;
+    const TOTAL_COLS = 11;
 
     const solid = (rgb: string) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: rgb } });
     const fnt = (size: number, color: string, bold = false) => ({ name: 'Calibri', size, bold, color: { argb: color } });
@@ -2477,6 +2477,19 @@ export default function App() {
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Journal');
+
+    ws.getColumn(1).width = 12; // Symbol
+    ws.getColumn(2).width = 10; // Type
+    ws.getColumn(3).width = 15; // Entry
+    ws.getColumn(4).width = 15; // Exit
+    ws.getColumn(5).width = 22; // Entry Time
+    ws.getColumn(6).width = 22; // Exit Time
+    ws.getColumn(7).width = 10; // Volume
+    ws.getColumn(8).width = 15; // Net Profit
+    
+    // Summary table columns
+    ws.getColumn(10).width = 25; // Summary Label
+    ws.getColumn(11).width = 15; // Summary Value
 
     const outlineMergedRow = (rowNum: number) => {
       for (let c = 1; c <= TOTAL_COLS; c++) {
@@ -2579,7 +2592,7 @@ export default function App() {
     bL.border = { ...bL.border, left: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
     bV.border = { ...bV.border, right: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
 
-    const headers = ['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion', 'Notes'];
+    const headers = ['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit'];
     const hr = ws.getRow(TABLE_HEADER);
     headers.forEach((h, i) => {
       const c = hr.getCell(i + 1);
@@ -2591,32 +2604,32 @@ export default function App() {
     });
     hr.height = 22;
 
-    const fmtDate = (iso: string): string => {
+    const fmtDateTime = (iso: string): string => {
       const d = new Date(iso);
       if (isNaN(d.getTime())) return iso;
       const p = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
     };
 
     inRange.forEach((t, idx) => {
       const row = ws.getRow(DATA_START + idx);
+      const exitDate = t.exitTime ? new Date(t.exitTime) : null;
       const vals: (string | number)[] = [
-        fmtDate(t.date), t.symbol, t.type, t.lotSize, t.entryPrice, t.exitPrice,
-        t.profit, t.commission, t.swap, t.strategy || '', t.emotion || '', t.notes || '',
+        t.symbol, t.type, t.entryPrice, t.exitPrice,
+        fmtDateTime(t.date), exitDate ? fmtDateTime(t.exitTime!) : '-',
+        t.lotSize, t.profit
       ];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = v;
         c.border = borderAll(BORDER);
-        c.alignment = i === 0 || i >= 9 ? algn('left') : i === 1 || i === 2 ? algn('center') : algn('right');
-        if (i === 3) c.numFmt = '0.00';
-        if (i === 4 || i === 5) c.numFmt = '0.00000';
-        if (i === 6 || i === 7 || i === 8) {
+        c.alignment = i >= 4 && i <= 5 ? algn('left') : i === 0 || i === 1 ? algn('center') : algn('right');
+        if (i === 6) c.numFmt = '0.00';
+        // Note: Entry/Exit prices (i=2, i=3) are left with General formatting to avoid trailing zeros
+        if (i === 7) {
           c.numFmt = '#,##0.00';
           const num = Number(v);
-          c.font = i === 6
-            ? fnt(10, num > 0 ? GREEN : num < 0 ? RED : GRAY, num !== 0)
-            : fnt(10, num > 0 ? GREEN : num < 0 ? RED : TEXT_COLOR);
+          c.font = fnt(10, num > 0 ? GREEN : num < 0 ? RED : GRAY, num !== 0);
         }
         if (idx % 2 === 1) c.fill = solid(ALT_FILL);
       });
@@ -2625,27 +2638,26 @@ export default function App() {
 
     const netProfit = stats.netProfit;
     const totLots = inRange.reduce((s, t) => s + (Number(t.lotSize) || 0), 0);
-    const totCommission = inRange.reduce((s, t) => s + (Number(t.commission) || 0), 0);
-    const totSwap = inRange.reduce((s, t) => s + (Number(t.swap) || 0), 0);
     const tr = ws.getRow(TOTAL);
     tr.getCell(1).value = 'TOTALS';
-    tr.getCell(4).value = totLots;
-    tr.getCell(7).value = netProfit;
-    tr.getCell(8).value = totCommission;
-    tr.getCell(9).value = totSwap;
-    [1, 4, 7, 8, 9].forEach(col => {
+    tr.getCell(7).value = totLots;
+    tr.getCell(8).value = netProfit;
+    
+    // Format all cells in the TOTALS row up to column 8
+    for (let col = 1; col <= 8; col++) {
       const c = tr.getCell(col);
       c.fill = solid(TOTAL_FILL);
       c.alignment = col === 1 ? algn('left') : algn('right');
       c.border = { ...borderAll(BORDER), top: { style: 'medium', color: { argb: BLUE } } };
-      if (col >= 7) {
-        c.numFmt = '#,##0.00';
+      
+      if (col === 7 || col === 8) {
+        c.numFmt = col === 7 ? '0.00' : '#,##0.00';
         const num = Number(c.value);
         c.font = fnt(10, num > 0 ? GREEN : num < 0 ? RED : NAVY_TEXT, true);
       } else {
         c.font = fnt(10, NAVY_TEXT, true);
       }
-    });
+    }
     tr.height = 22;
 
     ws.getRow(SPACER_AFTER).height = 6;
@@ -2759,29 +2771,36 @@ export default function App() {
 
     const lastY = (doc as any).lastAutoTable?.finalY || 45;
     autoTable(doc, {
-      head: [['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion']],
-      body: inRange.map(t => [
-        new Date(t.date).toLocaleDateString(),
-        t.symbol,
-        t.type,
-        String(t.lotSize),
-        String(t.entryPrice),
-        String(t.exitPrice),
-        `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`,
-        String(t.commission),
-        String(t.swap),
-        t.strategy || '',
-        t.emotion || '',
-      ]),
+      head: [['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit']],
+      body: inRange.map(t => {
+        const entryDate = new Date(t.date);
+        const exitDate = t.exitTime ? new Date(t.exitTime) : null;
+        
+        const fmtDateTime = (d: Date) => {
+          if (isNaN(d.getTime())) return '-';
+          return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        };
+
+        return [
+          t.symbol,
+          t.type,
+          String(t.entryPrice),
+          String(t.exitPrice),
+          fmtDateTime(entryDate),
+          exitDate ? fmtDateTime(exitDate) : '-',
+          String(t.lotSize),
+          `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+        ];
+      }),
       startY: lastY + 8,
       theme: 'striped',
       headStyles: { fillColor: [47, 91, 142], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
       bodyStyles: { fontSize: 7 },
       alternateRowStyles: { fillColor: [242, 245, 249] },
       styles: { cellPadding: 1.8, valign: 'middle', overflow: 'linebreak' },
-      columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
+      columnStyles: { 6: { halign: 'center' }, 7: { halign: 'right' } },
       didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 6) {
+        if (data.section === 'body' && data.column.index === 7) {
           const val = parseFloat(String(data.cell.raw));
           if (val > 0) data.cell.styles.textColor = [16, 122, 87];
           else if (val < 0) data.cell.styles.textColor = [180, 35, 50];
@@ -5018,7 +5037,8 @@ export default function App() {
 
         {/* 6. CONSOLIDATED SETTINGS VIEW */}
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          <div className="flex flex-col space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             
             {/* Settings Inner Tabs Navigation */}
             {/* Settings Inner Tabs Navigation */}
@@ -6010,6 +6030,10 @@ export default function App() {
               )}
 
             </div>
+            </div>
+            <div className="mt-8 border-t border-slate-200 dark:border-slate-800 pt-8">
+              <LegalFooter />
+            </div>
           </div>
         )}
 
@@ -6041,8 +6065,7 @@ export default function App() {
           <TradingTools />
         )}
 
-        {/* Site footer with legal links */}
-        <LegalFooter />
+
 
       </main>
       </div>
