@@ -3132,14 +3132,23 @@ export default function App() {
               className="p-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#FBFBFA] dark:border-slate-900"></span>
+              {/* We'll assume a dummy notifications array of length 0 for now. In a real app, check notifications.length > 0 */}
+              {false && (
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#FBFBFA] dark:border-slate-900"></span>
+              )}
             </button>
             
             {/* Notification Dropdown */}
             {showMobileNavNotifications && (
               <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
                   <h3 className="font-bold text-sm">Notifications</h3>
+                  <button 
+                    onClick={() => setShowMobileNavNotifications(false)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
                 <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
                   <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
@@ -4204,157 +4213,112 @@ export default function App() {
         {activeTab === 'accounts' && (
           <div className="space-y-5 max-w-7xl">
 
-            {/* Desktop View: Table — theme-aware */}
-            <div className={`hidden md:block rounded-2xl overflow-hidden border shadow-xl ${
-              theme === 'dark'
-                ? 'bg-[#0f1117] border-white/5'
-                : 'bg-white border-slate-200'
-            }`}>
-              {/* Header */}
-              <div className={`grid grid-cols-[2fr_1.5fr_1.8fr_1fr_1.2fr_1.5fr_1.5fr_1.2fr] text-[11px] font-bold uppercase tracking-widest px-5 py-3.5 border-b ${
-                theme === 'dark'
-                  ? 'text-slate-400 border-white/10'
-                  : 'text-slate-500 border-slate-200 bg-slate-50'
-              }`}>
-                <span>Name</span>
-                <span>Number</span>
-                <span>Provider</span>
-                <span>Type</span>
-                <span>Platform</span>
-                <span>Balance</span>
-                <span>Last Sync</span>
-                <span>Actions</span>
-              </div>
-
-              {/* Account Rows */}
+            {/* Universal View: Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
               {accounts.length === 0 && (
-                <div className="py-16 text-center text-slate-500 text-sm">
+                <div className="col-span-full py-16 text-center text-slate-500 text-sm border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
                   No accounts connected yet.
                 </div>
               )}
               {accounts.map((acc, idx) => {
                 const isActive = acc.id === selectedAccountId;
-                const lastSyncText = (() => {
-                  if (!acc.lastSyncedAt) return '—';
-                  const diff = Date.now() - new Date(acc.lastSyncedAt).getTime();
-                  const mins = Math.floor(diff / 60000);
-                  const hrs = Math.floor(mins / 60);
-                  const days = Math.floor(hrs / 24);
-                  if (mins < 2) return 'Just now';
-                  if (mins < 60) return `${mins} minutes ago`;
-                  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
-                  return `${days} day${days > 1 ? 's' : ''} ago`;
-                })();
+                const plReturn = acc.currentBalance - acc.startingBalance;
+                
+                const cur = acc.currency || 'USD';
+                const formatCur = (val: number) => {
+                  try {
+                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(val);
+                  } catch {
+                    return `${cur} ${val.toFixed(2)}`;
+                  }
+                };
+
+                const startingCapitalStr = formatCur(acc.startingBalance);
+                const currentBalanceStr = formatCur(acc.currentBalance);
+                
+                // Format P/L Return with + or - sign
+                const formattedPlReturn = formatCur(Math.abs(plReturn));
+                const plReturnStr = plReturn >= 0 ? `+${formattedPlReturn}` : `-${formattedPlReturn}`;
 
                 return (
                   <div
                     key={acc.id}
-                    onClick={() => {
-                      setSelectedAccountId(acc.id);
-                      persistSelectedAccount(acc.id);
-                      fetchTradesAndParams(acc.id);
-                    }}
-                    className={`grid grid-cols-[2fr_1.5fr_1.8fr_1fr_1.2fr_1.5fr_1.5fr_1.2fr] items-center px-5 py-4 cursor-pointer transition-colors duration-150 ${
-                      idx !== accounts.length - 1
-                        ? theme === 'dark' ? 'border-b border-white/[0.05]' : 'border-b border-slate-100'
-                        : ''
-                    } ${isActive
-                        ? theme === 'dark' ? 'bg-white/[0.06]' : 'bg-slate-50'
-                        : theme === 'dark' ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50/60'
-                    }`}
+                    className={`rounded-2xl border flex flex-col overflow-hidden transition-all duration-300 ${
+                      theme === 'dark' 
+                        ? 'bg-[#0f1117] border-white/5 shadow-xl' 
+                        : 'bg-white border-slate-200 shadow-sm'
+                    } ${isActive ? (theme === 'dark' ? 'ring-1 ring-blue-500/50 shadow-blue-500/10' : 'ring-1 ring-blue-500 shadow-md') : 'hover:shadow-md'}`}
                   >
-                    {/* Name */}
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 shadow-[0_0_6px_#34d399]" />}
-                      <span className={`text-[13px] font-semibold truncate ${
-                        theme === 'dark' ? 'text-white' : 'text-slate-800'
-                      }`}>{acc.name}</span>
-                    </div>
-
-                    {/* Number */}
-                    <span className={`text-[12px] font-mono truncate ${
-                      theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
-                    }`}>{acc.broker || '—'}</span>
-
-                    {/* Provider */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
-                        theme === 'dark' ? 'bg-slate-700/60' : 'bg-slate-100'
-                      }`}>
-                        <span className={`text-[9px] font-extrabold uppercase leading-none ${
-                          theme === 'dark' ? 'text-blue-300' : 'text-blue-600'
+                    {/* Header */}
+                    <div className="p-5 pb-4 border-b border-slate-100 dark:border-white/5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-[16px] font-extrabold truncate ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                          {acc.name}
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                          acc.accountType === 'Live' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-500/10 text-slate-500'
                         }`}>
-                          {(acc.broker || 'B').slice(0, 2)}
+                          {acc.accountType}
                         </span>
                       </div>
-                      <div className="leading-tight min-w-0">
-                        <span className={`text-[12px] font-semibold block truncate ${
-                          theme === 'dark' ? 'text-slate-200' : 'text-slate-700'
-                        }`}>{acc.broker || '—'}</span>
-                        <span className="text-[9px] text-slate-500 uppercase tracking-wider">{acc.institutionType || 'BROKER'}</span>
-                      </div>
+                      <p className={`text-[11px] font-medium truncate ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {acc.broker || 'B'} • {acc.platform || 'MT5'} {acc.institutionType ? `• ${acc.institutionType}` : ''}
+                      </p>
                     </div>
 
-                    {/* Type */}
-                    <span className={`text-[11px] font-extrabold uppercase tracking-wider ${
-                      acc.accountType === 'Live' ? 'text-emerald-400' : 'text-amber-400'
-                    }`}>
-                      {acc.accountType}
-                    </span>
-
-                    {/* Platform */}
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                        <Terminal className="h-3 w-3 text-blue-400" />
+                    {/* Stats */}
+                    <div className="px-5 py-5 space-y-3 flex-1 text-[13px]">
+                      <div className="flex items-center justify-between">
+                        <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Starting Capital</span>
+                        <span className={`font-mono font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{startingCapitalStr}</span>
                       </div>
-                      <span className="text-[12px] font-semibold text-slate-300">{acc.platform || 'MT5'}</span>
+                      <div className="flex items-center justify-between">
+                        <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Current Balance</span>
+                        <span className={`font-mono font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{currentBalanceStr}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>P/L Return</span>
+                        <span className={`font-mono font-bold ${plReturn >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{plReturnStr}</span>
+                      </div>
                     </div>
-
-                    {/* Balance */}
-                    <span className="text-[13px] font-bold text-white font-mono">
-                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency || 'USD', minimumFractionDigits: 2 }).format(acc.currentBalance)}
-                    </span>
-
-                    {/* Last Sync */}
-                    <span className="text-[12px] text-slate-400">{lastSyncText}</span>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                    <div className="px-5 pb-5 flex items-center gap-3">
+                      {isActive ? (
+                        <button
+                          className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 transition ${
+                            theme === 'dark' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'
+                          }`}
+                        >
+                          <Check className="h-4 w-4" /> Active Portfolio
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setSelectedAccountId(acc.id);
+                            persistSelectedAccount(acc.id);
+                            fetchTradesAndParams(acc.id);
+                          }}
+                          className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-center transition bg-blue-600 hover:bg-blue-700 text-white`}
+                        >
+                          Activate Portfolio
+                        </button>
+                      )}
                       <button
-                        onClick={() => setActiveTab('mt5')}
-                        title="Go to MT5 Sync"
-                        className={`p-1.5 rounded-lg transition text-slate-400 hover:text-blue-500 ${
-                          theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-100'
-                        }`}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setEditingAccount(acc);
                           setEditAccName(acc.name);
                           setEditAccStartingBalance(String(acc.startingBalance));
                           setEditAccCurrency(acc.currency || 'USD');
                           setShowEditAccountModal(true);
                         }}
-                        title="Edit Account"
-                        className={`p-1.5 rounded-lg transition text-slate-400 hover:text-amber-500 ${
-                          theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                        className={`w-[42px] h-[42px] shrink-0 rounded-xl flex items-center justify-center border transition ${
+                          theme === 'dark' ? 'border-white/10 hover:bg-white/5 text-slate-400' : 'border-slate-200 hover:bg-slate-50 text-slate-500'
                         }`}
+                        title="Edit Account Name, Currency and Starting Capital"
                       >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingAccount(acc);
-                          setShowEditAccountModal(true);
-                        }}
-                        title="Delete Account"
-                        className={`p-1.5 rounded-lg transition text-slate-400 hover:text-rose-500 ${
-                          theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-100'
-                        }`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Edit3 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -4362,152 +4326,7 @@ export default function App() {
               })}
             </div>
 
-            {/* Mobile View: Card List */}
-            <div className={`md:hidden rounded-2xl px-5 pt-5 pb-2 ${ theme === 'dark' ? 'bg-[#0f1117]' : 'bg-white border border-slate-200 shadow-sm' }`}>
-              {/* Title row */}
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Connected Accounts</p>
-                  <h2 className={`text-2xl font-extrabold ${ theme === 'dark' ? 'text-white' : 'text-slate-900' }`}>
-                    {accounts.length} account{accounts.length !== 1 ? 's' : ''}
-                  </h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Add new */}
-                  <button
-                    onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
-                    title="Add Account"
-                    className={`w-8 h-8 rounded-full flex items-center justify-center transition ${ theme === 'dark' ? 'text-slate-300 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100' }`}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
 
-              {/* Account rows */}
-              {accounts.length === 0 && (
-                <div className="py-10 text-center text-slate-500 text-sm">
-                  No accounts connected yet. Add one to get started.
-                </div>
-              )}
-
-              {accounts.map((acc, idx) => {
-                const isActive = acc.id === selectedAccountId;
-                const lastSyncText = (() => {
-                  if (!acc.lastSyncedAt) return '—';
-                  const diff = Date.now() - new Date(acc.lastSyncedAt).getTime();
-                  const mins = Math.floor(diff / 60000);
-                  const hrs = Math.floor(mins / 60);
-                  const days = Math.floor(hrs / 24);
-                  if (mins < 2) return 'Just now';
-                  if (mins < 60) return `${mins} minutes ago`;
-                  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
-                  return `${days} day${days > 1 ? 's' : ''} ago`;
-                })();
-
-                const brokerInitials = (acc.broker || 'B').slice(0, 2).toUpperCase();
-                const balanceStr = (() => {
-                  const cur = acc.currency || 'USD';
-                  try {
-                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(acc.currentBalance);
-                  } catch {
-                    return `${cur} ${acc.currentBalance.toFixed(2)}`;
-                  }
-                })();
-
-                return (
-                  <div
-                    key={acc.id}
-                    onClick={() => {
-                      setSelectedAccountId(acc.id);
-                      persistSelectedAccount(acc.id);
-                      fetchTradesAndParams(acc.id);
-                    }}
-                    className={`flex flex-col py-4 cursor-pointer transition-colors duration-150 ${ idx !== accounts.length - 1 ? (theme === 'dark' ? 'border-b border-white/[0.06]' : 'border-b border-slate-100') : '' } ${ isActive ? (theme === 'dark' ? 'bg-white/[0.03] -mx-5 px-5' : 'bg-slate-50 -mx-5 px-5') : '' }`}
-                  >
-                    <div className="flex items-center gap-4 w-full">
-                      {/* Broker avatar */}
-                      <div className="relative flex-shrink-0">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-md ${ theme === 'dark' ? 'bg-slate-700/60' : 'bg-slate-100' }`}>
-                          <span className={`text-[13px] font-black lowercase leading-none ${ theme === 'dark' ? 'text-slate-300' : 'text-slate-700' }`}>{brokerInitials.toLowerCase()}</span>
-                        </div>
-                        {/* Platform sub-icon */}
-                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-blue-600 border-2 border-[#0f1117] flex items-center justify-center">
-                          <Terminal className="h-2.5 w-2.5 text-white" />
-                        </div>
-                      </div>
-
-                      {/* Center info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-[15px] font-bold truncate ${ theme === 'dark' ? 'text-white' : 'text-slate-900' }`}>
-                            {acc.name}
-                          </span>
-                          <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide ${ acc.accountType === 'Live' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-500/20 text-slate-300' }`}>
-                            {acc.accountType}
-                          </span>
-                          {isActive && (
-                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded uppercase tracking-wide">Active</span>
-                          )}
-                        </div>
-                        <p className={`text-[12px] truncate ${ theme === 'dark' ? 'text-slate-400' : 'text-slate-500' }`}>
-                          {acc.broker || '—'} • {acc.platform || 'MT5'}{acc.broker ? ` • #${(acc.broker).replace(/\D/g, '') || acc.id.slice(0,8)}` : ''}
-                        </p>
-                      </div>
-
-                      {/* Right side */}
-                      <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                        <span className={`text-[15px] font-bold font-mono ${ theme === 'dark' ? 'text-white' : 'text-slate-900' }`}>
-                          {balanceStr}
-                        </span>
-                        <span className="text-[11px] text-slate-500">{lastSyncText}</span>
-                      </div>
-
-                      {/* Chevron */}
-                      <ChevronRight className={`h-4 w-4 flex-shrink-0 transition-transform ${ isActive ? 'rotate-90' : '' } ${ theme === 'dark' ? 'text-slate-600' : 'text-slate-300' }`} />
-                    </div>
-
-                    {/* Expandable Action Bar */}
-                    {isActive && (
-                      <div className={`mt-4 pt-3 flex items-center justify-between border-t ${ theme === 'dark' ? 'border-white/5' : 'border-slate-200' }`}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActiveTab('mt5'); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-500 hover:bg-blue-500/10 transition-colors"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" /> Sync
-                        </button>
-                        
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingAccount(acc);
-                              setEditAccName(acc.name);
-                              setEditAccStartingBalance(String(acc.startingBalance));
-                              setEditAccCurrency(acc.currency || 'USD');
-                              setShowEditAccountModal(true);
-                            }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${ theme === 'dark' ? 'text-slate-300 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100' }`}
-                          >
-                            <Edit3 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingAccount(acc);
-                              setShowEditAccountModal(true);
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Delete
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
 
             {/* Add Account Button (Visible on both desktop & mobile) */}
             <button
