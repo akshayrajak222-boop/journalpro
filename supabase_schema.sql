@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS trades (
   lot_size FLOAT,
   entry_price FLOAT,
   exit_price FLOAT,
+  exit_time TIMESTAMPTZ,
   stop_loss FLOAT,
   take_profit FLOAT,
   profit FLOAT,
