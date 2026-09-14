@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
@@ -17,6 +18,13 @@ import {
 } from './src/types.js';
 import { EA_TEMPLATE } from './src/eaTemplate.js';
 import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
+// metaapi.cloud-sdk's "exports.import" points at a browser build (esm-web) that
+// references `window` and crashes in Node. Import the CommonJS build directly.
+import MetaApiModule from 'metaapi.cloud-sdk/dist/index';
+// The SDK ships as CommonJS; keep this resilient to both esbuild/tsx interop
+// styles (__esModule true => the class is the default export).
+const MetaApi: any = (MetaApiModule as any).default || MetaApiModule;
 
 // Absolute file paths for database persistence
 const DB_FILE = path.join(process.cwd(), 'db.json');
@@ -494,6 +502,821 @@ function generateEaSource(account: any, apiUrl: string): string {
     .split('__FXJP_WEBREQUEST_HOST__').join(host);
 }
 
+// ==========================================
+// EA AUTHENTICATION (Phase 2: HMAC + replay protection)
+// Signature = HMAC-SHA256(secret = sha256(ea_token),
+//             message = "<timestamp>.<accountId>.<rawBody>")
+// Legacy plain-token auth stays enabled unless EA_ALLOW_LEGACY_TOKEN=false.
+// ==========================================
+
+function sha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function safeTokenEqual(a: string, b: string): boolean {
+  try {
+    const aBuf = Buffer.from(a, 'utf8');
+    const bBuf = Buffer.from(b, 'utf8');
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto.timingSafeEqual(aBuf, bBuf);
+  } catch {
+    return false;
+  }
+}
+
+function hmacSign(message: string, token: string): string {
+  return crypto.createHmac('sha256', sha256Hex(token)).update(message, 'utf8').digest('hex');
+}
+
+// Build the HMAC message exactly as the EA does: "<timestamp>.<accountId>.<rawBody>"
+function eaHmacMessage(timestamp: string, accountId: string, rawBody: string): string {
+  return `${timestamp}.${accountId}.${rawBody || ''}`;
+}
+
+// Verify the HMAC signature + timestamp window on an EA request.
+// Also checks the optional requestId against the account's processed set (TTL 24h).
+function verifyEaSignature(req: any, account: any, token: string): { ok: boolean; code?: string; reason?: string } {
+  const headerSig = (req.headers['x-ea-signature'] || '').toString().trim();
+  const headerTs = (req.headers['x-ea-timestamp'] || '').toString().trim();
+  const accountId = String(account.id || '');
+  const rawBody = typeof req.rawBody === 'string' ? req.rawBody : '';
+
+  if (!headerSig || !headerTs) {
+    return { ok: false, code: 'EA_SIGNATURE_MISSING', reason: 'Missing X-EA-Signature / X-EA-Timestamp headers' };
+  }
+
+  // Replay window: reject timestamps older/newer than ±EA_SIGNATURE_WINDOW_MIN
+  const ts = Date.parse(headerTs);
+  if (Number.isNaN(ts)) {
+    return { ok: false, code: 'EA_BAD_TIMESTAMP', reason: 'X-EA-Timestamp is not a valid date' };
+  }
+  const windowMin = parseFloat(process.env.EA_SIGNATURE_WINDOW_MIN || '5');
+  const now = Date.now();
+  if (Math.abs(now - ts) > windowMin * 60 * 1000) {
+    return { ok: false, code: 'EA_STALE_TIMESTAMP', reason: 'Request timestamp outside allowed window' };
+  }
+
+  const expected = hmacSign(eaHmacMessage(headerTs, accountId, rawBody), token);
+  const provided = Buffer.from(headerSig, 'utf8');
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const sigOk = provided.length === expectedBuf.length && crypto.timingSafeEqual(provided, expectedBuf);
+  if (!sigOk) {
+    return { ok: false, code: 'SIGNATURE_MISMATCH', reason: 'HMAC signature does not match' };
+  }
+
+  // Optional idempotency key: drop retransmissions of the same requestId within 24h
+  const requestId = (req.headers['x-ea-request-id'] || '').toString().trim();
+  if (requestId) {
+    if (!account.eaProcessedRequests) account.eaProcessedRequests = {};
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const known = account.eaProcessedRequests[requestId];
+    if (known && known.ts > cutoff) {
+      return { ok: false, code: 'EA_REPLAY', reason: 'requestId already processed' };
+    }
+  }
+
+  return { ok: true };
+}
+
+// Resolve the EA token for a request: Authorization Bearer header first
+// (Phase 2), then the legacy JSON body `token` field (EA_ALLOW_LEGACY_TOKEN).
+function resolveEaToken(req: any, bodyToken?: string): string {
+  const auth = (req.headers['authorization'] || '').toString().trim();
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  if (process.env.EA_ALLOW_LEGACY_TOKEN !== 'false') return (bodyToken || '').toString().trim();
+  return '';
+}
+
+// Shared auth for EA machine-to-machine endpoints.
+// Resolves the account, verifies the token (constant-time) and HMAC signature.
+// Returns { db, account, token } on success or an HTTP-ready error response.
+async function authEaRequest(req: any, res: any, bodyToken?: string): Promise<{ db: any; account: any; token: string } | null> {
+  const accountId = String(req.headers['x-ea-account-id'] || req.body?.accountId || '');
+  if (!accountId) {
+    res.status(400).json({ error: 'accountId is required', code: 'EA_ACCOUNT_REQUIRED' });
+    return null;
+  }
+
+  const db = await findDbByAccountId(accountId);
+  if (!db) {
+    res.status(404).json({ error: 'Account not found', code: 'EA_ACCOUNT_NOT_FOUND' });
+    return null;
+  }
+  const account = db.accounts.find((a: any) => a.id === accountId);
+  if (!account) {
+    res.status(404).json({ error: 'Account not found', code: 'EA_ACCOUNT_NOT_FOUND' });
+    return null;
+  }
+
+  const token = resolveEaToken(req, bodyToken);
+  if (!token || !account.eaToken || !safeTokenEqual(token, account.eaToken)) {
+    res.status(401).json({ error: 'Invalid EA token. Reset the token from your dashboard and download a new EA file.', code: 'EA_AUTH_FAILED' });
+    return null;
+  }
+  if (account.eaTokenRevokedAt) {
+    res.status(401).json({ error: 'EA token revoked. Download a fresh EA file.', code: 'EA_TOKEN_REVOKED' });
+    return null;
+  }
+
+  const sig = verifyEaSignature(req, account, token);
+  if (!sig.ok) {
+    // Legacy EA builds sign nothing; only allow the missing-signature path when
+    // the client did not send signature headers at all AND legacy auth is enabled.
+    const legacyAllowed = process.env.EA_ALLOW_LEGACY_TOKEN !== 'false';
+    const sentSignatureHeaders = !!((req.headers['x-ea-signature'] || '') || (req.headers['x-ea-timestamp'] || ''));
+    if (!(legacyAllowed && !sentSignatureHeaders)) {
+      res.status(401).json({ error: sig.reason, code: sig.code });
+      return null;
+    }
+  } else {
+    const requestId = (req.headers['x-ea-request-id'] || '').toString().trim();
+    if (requestId) {
+      account.eaProcessedRequests = account.eaProcessedRequests || {};
+      account.eaProcessedRequests[requestId] = { ts: Date.now() };
+    }
+  }
+
+  return { db, account, token };
+}
+
+// Append a sanitized audit / sync log entry to the account's DB and (optionally) Supabase
+function logEaEvent(db: any, account: any, event: string, level: string, message: string, requestId?: string) {
+  try {
+    if (!Array.isArray(db.mt5SyncLogs)) db.mt5SyncLogs = [];
+    db.mt5SyncLogs.push({
+      accountId: account.id,
+      userId: db.users?.[0]?.id,
+      requestId: requestId || null,
+      event,
+      level,
+      message,
+      createdAt: new Date().toISOString()
+    });
+    if (db.mt5SyncLogs.length > 2000) db.mt5SyncLogs = db.mt5SyncLogs.slice(-2000);
+  } catch (e) {
+    console.error('[EA] logEaEvent error:', e);
+  }
+}
+
+// Persist a deal to the account-scoped stream (mt5_deals_v2) in memory + Supabase
+function addEaDeal(db: any, account: any, deal: any, userId: string | undefined) {
+  if (!Array.isArray(db.mt5Deals)) db.mt5Deals = [];
+  db.mt5Deals.push({ ...deal, accountId: account.id, userId });
+  if (!Array.isArray(db.mt5DealsV2)) db.mt5DealsV2 = [];
+  const existing = db.mt5DealsV2.find((d: any) => d.accountId === account.id && d.ticket === deal.ticket);
+  if (existing) Object.assign(existing, { ...deal, userId });
+  else db.mt5DealsV2.push({ accountId: account.id, userId, ticket: deal.ticket, deal, createdAt: new Date().toISOString() });
+  if (db.mt5DealsV2.length > 20000) db.mt5DealsV2 = db.mt5DealsV2.slice(-20000);
+}
+
+// ---- Cloud (investor-password) credential helpers ----------------------
+// The investor password is ONLY used by the cloud bridge path and is never
+// stored in plaintext. It is encrypted with AES-256-GCM under a random DEK;
+// the DEK is then wrapped (envelope) with a master key from the environment.
+// Everything is packed into `investorPasswordEnc` so the schema's three
+// columns remain sufficient.
+
+function cloudMasterKey(): Buffer | null {
+  const raw = process.env.MT5_CREDENTIAL_MASTER_KEY?.trim();
+  if (!raw) return null;
+  const hex = raw.length === 64 ? raw : sha256Hex(raw);
+  return Buffer.from(hex, 'hex');
+}
+
+function encryptInvestorPassword(plaintext: string): { enc: string; keyId: string } | null {
+  const master = cloudMasterKey();
+  if (!master) return null;
+  const dek = crypto.randomBytes(32);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', dek, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const wrapIv = crypto.randomBytes(12);
+  const wc = crypto.createCipheriv('aes-256-gcm', master, wrapIv);
+  const wct = Buffer.concat([wc.update(dek), wc.final()]);
+  const wt = wc.getAuthTag();
+  // layout: iv(12) + tag(16) + wrapIv(12) + wrapTag(16) + wrappedDEK(32) + ct
+  const payload = Buffer.concat([iv, tag, wrapIv, wt, wct, ct]);
+  const keyId = 'env:' + sha256Hex(master.toString('hex')).slice(0, 8);
+  return { enc: payload.toString('base64'), keyId };
+}
+
+function decryptInvestorPassword(account: any): string | null {
+  try {
+    const encB64 = account.investorPasswordEnc;
+    if (!encB64) return null;
+    const master = cloudMasterKey();
+    if (!master) return null;
+    const payload = Buffer.from(encB64, 'base64');
+    const iv = payload.subarray(0, 12);
+    const tag = payload.subarray(12, 28);
+    const wrapIv = payload.subarray(28, 40);
+    const wrapTag = payload.subarray(40, 56);
+    const wct = payload.subarray(56, 88);
+    const ct = payload.subarray(88);
+    const wd = crypto.createDecipheriv('aes-256-gcm', master, wrapIv);
+    wd.setAuthTag(wrapTag);
+    const dek = Buffer.concat([wd.update(wct), wd.final()]);
+    const d = crypto.createDecipheriv('aes-256-gcm', dek, iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(ct), d.final()]).toString('utf8');
+  } catch (e: any) {
+    console.error('[Cloud] decryptInvestorPassword failed:', e?.message || e);
+    return null;
+  }
+}
+
+function clearInvestorPassword(account: any) {
+  delete account.investorPasswordEnc;
+  delete account.passwordEncNonce;
+  delete account.passwordKmsKeyId;
+}
+
+// Append a PENDING connect job for the cloud/VPS worker queue
+function enqueueConnectJob(db: any, account: any, action: string): string {
+  if (!Array.isArray(db.mt5ConnectJobs)) db.mt5ConnectJobs = [];
+  const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+  db.mt5ConnectJobs.push({
+    id: jobId,
+    accountId: account.id,
+    userId: db.users?.[0]?.id,
+    action,
+    status: 'PENDING',
+    attempts: 0,
+    payload: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  return jobId;
+}
+
+// ---- Cloud (MetaApi) worker ------------------------------------------------
+// Processes PENDING mt5_connect_jobs with the MetaApi cloud SDK. The investor
+// password is never logged; it is decrypted just-in-time from the AES envelope
+// and used only to (re)deploy the MetaApi cloud terminal for the account.
+
+const META_DEAL_TYPE: Record<string, number> = {
+  DEAL_TYPE_BUY: 0,
+  DEAL_TYPE_SELL: 1,
+  DEAL_TYPE_BALANCE: 2,
+  DEAL_TYPE_CREDIT: 3,
+  DEAL_TYPE_CHARGE: 4,
+  DEAL_TYPE_CORRECTION: 5,
+  DEAL_TYPE_BONUS: 6,
+  DEAL_TYPE_COMMISSION: 7,
+  DEAL_TYPE_COMMISSION_DAILY: 8,
+  DEAL_TYPE_COMMISSION_MONTHLY: 9,
+  DEAL_TYPE_COMMISSION_AGENT_DAILY: 10,
+  DEAL_TYPE_COMMISSION_AGENT_MONTHLY: 11,
+  DEAL_TYPE_INTEREST: 12,
+  DEAL_TYPE_BUY_CANCELED: 13,
+  DEAL_TYPE_SELL_CANCELED: 14,
+  DEAL_TYPE_DIVIDEND: 15,
+  DEAL_TYPE_DIVIDEND_FRANKED: 16,
+  DEAL_TYPE_TAX: 17
+};
+const META_DEAL_ENTRY: Record<string, number> = {
+  DEAL_ENTRY_IN: 0,
+  DEAL_ENTRY_OUT: 1,
+  DEAL_ENTRY_INOUT: 2,
+  DEAL_ENTRY_OUT_BY: 3
+};
+
+let cloudApi: any = null;
+const cloudWorkers = new Map<string, { account: any; connection: any; failing: boolean }>();
+const cloudJobLocks = new Set<string>();
+
+function getCloudApi(): any {
+  const token = process.env.META_API_TOKEN?.trim();
+  if (!token) return null;
+  if (!cloudApi) {
+    cloudApi = new MetaApi(token, {
+      application: 'journalpro',
+      requestTimeout: 60,
+      connectTimeout: 60
+    });
+  }
+  return cloudApi;
+}
+
+function cloudErrorCode(e: any): string {
+  const code = e?.details?.code || e?.code;
+  if (code) return String(code);
+  if (e instanceof Error && /timeout/i.test(e.message || '')) return 'CLOUD_TIMEOUT';
+  return 'CLOUD_SYNC_FAILED';
+}
+
+function cloudErrorMessage(e: any): string {
+  return String(e?.details?.message || e?.message || e || 'Unknown cloud worker error');
+}
+
+function setCloudJob(db: any, job: any, status: string, message: string) {
+  job.status = status;
+  job.updatedAt = new Date().toISOString();
+  job.statusMessage = String(message).slice(0, 200);
+  logEaEvent(db, { id: job.accountId }, 'CLOUD_' + status, 'info', String(message).slice(0, 200));
+}
+
+function failCloudJob(db: any, job: any, account: any, e: any) {
+  const code = cloudErrorCode(e);
+  const message = cloudErrorMessage(e);
+  job.status = 'FAILED';
+  job.errorCode = code;
+  job.errorMessage = message.slice(0, 500);
+  job.attempts = (job.attempts || 0) + 1;
+  job.updatedAt = new Date().toISOString();
+  if (account) {
+    account.connectionStatus = 'Error';
+    account.eaStatus = 'Error';
+    if (!Array.isArray(db.mt5ConnectionErrors)) db.mt5ConnectionErrors = [];
+    db.mt5ConnectionErrors.push({
+      accountId: account.id,
+      userId: db.users?.[0]?.id,
+      errorCode: code,
+      errorMessage: message.slice(0, 500),
+      occurredAt: new Date().toISOString(),
+      resolvedAt: null
+    });
+    logEaEvent(db, account, 'CLOUD_JOB_FAILED', 'error', `${code}: ${message.slice(0, 200)}`);
+  }
+}
+
+function mapMetaDeal(d: any): any {
+  const type = META_DEAL_TYPE[d.type];
+  const entry = META_DEAL_ENTRY[d.entryType];
+  if (type === undefined || entry === undefined) return null;
+  return {
+    ticket: Number(d.id),
+    positionId: Number(d.positionId) || 0,
+    time: Math.floor(new Date(d.time).getTime() / 1000),
+    type,
+    entry,
+    magic: Number(d.magic) || 0,
+    symbol: String(d.symbol || '').toUpperCase(),
+    volume: parseFloat(d.volume) || 0,
+    price: parseFloat(d.price) || 0,
+    profit: parseFloat(d.profit) || 0,
+    commission: parseFloat(d.commission) || 0,
+    swap: parseFloat(d.swap) || 0,
+    comment: String(d.comment || '')
+  };
+}
+
+function replaceCloudPositions(db: any, account: any, positions: any[]) {
+  if (!Array.isArray(db.mt5OpenPositions)) db.mt5OpenPositions = [];
+  const posMap = new Map<string, any>();
+  for (const p of positions) {
+    posMap.set(`${account.id}:${p.id}`, {
+      accountId: account.id,
+      userId: db.users?.[0]?.id,
+      positionId: Number(p.id),
+      ticket: Number(p.id),
+      symbol: String(p.symbol || '').toUpperCase(),
+      side: String(p.type === 'POSITION_TYPE_BUY' ? 'Buy' : p.type === 'POSITION_TYPE_SELL' ? 'Sell' : p.type || ''),
+      volume: p.volume,
+      openTime: p.time ? new Date(p.time).toISOString() : new Date().toISOString(),
+      openPrice: p.openPrice,
+      sl: p.stopLoss ?? null,
+      tp: p.takeProfit ?? null,
+      commission: p.commission ?? 0,
+      swap: p.swap ?? 0,
+      profit: p.profit ?? 0,
+      currentPrice: p.currentPrice ?? null,
+      updatedAt: new Date().toISOString()
+    });
+  }
+  db.mt5OpenPositions = db.mt5OpenPositions.filter((op: any) => op.accountId !== account.id);
+  db.mt5OpenPositions.push(...posMap.values());
+}
+
+function replaceCloudPendingOrders(db: any, account: any, orders: any[]) {
+  if (!Array.isArray(db.mt5PendingOrders)) db.mt5PendingOrders = [];
+  const orderMap = new Map<string, any>();
+  for (const o of orders) {
+    orderMap.set(`${account.id}:${o.id}`, {
+      accountId: account.id,
+      userId: db.users?.[0]?.id,
+      orderId: Number(o.id),
+      symbol: String(o.symbol || '').toUpperCase(),
+      type: String(o.type || ''),
+      volume: o.volume,
+      openPrice: o.openPrice,
+      sl: o.stopLoss ?? null,
+      tp: o.takeProfit ?? null,
+      magic: o.magic ?? 0,
+      state: String(o.state || ''),
+      updatedAt: new Date().toISOString()
+    });
+  }
+  db.mt5PendingOrders = db.mt5PendingOrders.filter((op: any) => op.accountId !== account.id);
+  db.mt5PendingOrders.push(...orderMap.values());
+}
+
+function pushCloudSnapshot(db: any, account: any, info: any) {
+  if (!Array.isArray(db.mt5Snapshots)) db.mt5Snapshots = [];
+  db.mt5Snapshots.push({
+    accountId: account.id,
+    userId: db.users?.[0]?.id,
+    balance: info?.balance ?? account.currentBalance ?? null,
+    equity: info?.equity ?? account.equity ?? null,
+    margin: info?.margin ?? null,
+    marginFree: info?.marginFree ?? null,
+    marginLevel: info?.marginLevel ?? null,
+    currency: info?.currency || account.currency || null,
+    leverage: info?.leverage ?? null,
+    capturedAt: new Date().toISOString()
+  });
+  if (db.mt5Snapshots.length > 20000) db.mt5Snapshots = db.mt5Snapshots.slice(-20000);
+}
+
+// Re-establish (or reuse) the cached RPC connection for a cloud account.
+// Used after a server restart where accounts are still marked Connected.
+async function ensureCloudSession(api: any, account: any) {
+  const existing = cloudWorkers.get(account.id);
+  if (existing && existing.connection) return existing;
+  if (!account.mt5CloudAccountId) throw new Error('No cloud terminal is assigned to this account');
+  const ma = await api.metatraderAccountApi.getAccount(account.mt5CloudAccountId);
+  if (ma.state !== 'DEPLOYED') {
+    await ma.deploy();
+    await ma.waitDeployed(300, 5000);
+  }
+  await ma.waitConnected(300, 5000);
+  const connection = ma.getRPCConnection();
+  await connection.connect();
+  await connection.waitSynchronized(300);
+  const session = { account: ma, connection, failing: false };
+  cloudWorkers.set(account.id, session);
+  return session;
+}
+
+async function cloudSyncNow(db: any, account: any, session: any, initial: boolean) {
+  const conn = session.connection;
+  const info = await conn.getAccountInformation();
+  const currency = info?.currency || account.currency || 'USD';
+  const now = new Date();
+
+  const backfillDays = Math.max(1, parseInt(process.env.MT5_CLOUD_BACKFILL_DAYS || '90', 10));
+  const start = initial
+    ? new Date(now.getTime() - backfillDays * 86400000)
+    : new Date((account.eaLastSyncTime ? new Date(account.eaLastSyncTime).getTime() : now.getTime()) - 120000);
+
+  let deals: any[] = [];
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res: any = await conn.getDealsByTimeRange(start, now);
+    deals = (res?.deals || []).map(mapMetaDeal).filter(Boolean);
+    if (!res?.synchronizing) break;
+    await new Promise((r) => setTimeout(r, 10000 * (attempt + 1)));
+  }
+
+  const moneyFlows = deals
+    .filter((d: any) => !d.symbol && (d.type === DEAL_TYPE_BALANCE || d.type === DEAL_TYPE_CREDIT))
+    .map((d: any) => ({
+      ticket: d.ticket,
+      type: d.type === DEAL_TYPE_BALANCE ? (d.profit >= 0 ? 'DEPOSIT' : 'WITHDRAWAL') : 'CREDIT',
+      amount: d.profit,
+      currency,
+      time: d.time
+    }));
+
+  const summary = applyEaSyncPayload(db, account, deals, moneyFlows, {
+    balance: info?.balance,
+    equity: info?.equity,
+    currency
+  });
+
+  let positions: any[] = [];
+  try { positions = await conn.getPositions(); } catch { /* positions are optional */ }
+  let orders: any[] = [];
+  try { orders = await conn.getOrders(); } catch { /* orders are optional */ }
+  replaceCloudPositions(db, account, positions);
+  replaceCloudPendingOrders(db, account, orders);
+
+  account.currency = currency;
+  if (info?.leverage) account.leverage = info?.leverage;
+  if (info?.server) account.mt5Server = info?.server;
+  pushCloudSnapshot(db, account, info);
+
+  account.eaLastSyncTime = new Date().toISOString();
+  account.lastHeartbeatAt = new Date().toISOString();
+  logEaEvent(db, account, 'CLOUD_SYNC', 'info',
+    `Cloud sync: ${summary.added} new deals, ${summary.moneyFlowAdded} new money flows, ${positions.length} open positions, ${orders.length} pending orders`);
+  await saveDatabase(db, db.users?.[0]?.email);
+}
+
+async function runCloudConnect(db: any, job: any, account: any) {
+  setCloudJob(db, job, 'IN_PROGRESS', 'Decrypting MT5 investor credentials');
+  const password = decryptInvestorPassword(account);
+  if (!password) {
+    throw new Error('Investor password could not be decrypted (is MT5_CREDENTIAL_MASTER_KEY configured?)');
+  }
+  const login = String(account.mt5Login || '').trim();
+  const server = String(account.mt5Server || '').trim();
+  if (!login || !server) throw new Error('MT5 login/server are not set on this account');
+  account.isMt5Sync = true;
+
+  const api = getCloudApi();
+  if (!api) throw new Error('META_API_TOKEN is not configured on this deployment');
+
+  setCloudJob(db, job, 'PROVISIONING', 'Locating existing MetaApi terminal');
+  const accounts = await api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+  let ma: any = accounts.find(
+    (a: any) => a.version === 5 && String(a.login) === login && String(a.server) === server
+  );
+  if (ma) {
+    // Refresh credentials so the terminal connects with the investor password
+    // the user just entered (even if an earlier session reused this account).
+    setCloudJob(db, job, 'PROVISIONING', 'Updating credentials on existing terminal');
+    try {
+      await ma.update({ name: ma.name || `JournalPro ${login}`, server, magic: 0, password });
+    } catch (e) {
+      console.error('[Cloud] update existing account failed:', cloudErrorMessage(e));
+    }
+    setCloudJob(db, job, 'DEPLOYING', 'Restarting terminal with updated credentials');
+    await ma.redeploy();
+    await ma.waitDeployed(300, 5000);
+  } else {
+    setCloudJob(db, job, 'PROVISIONING', 'Creating cloud terminal (a few minutes)');
+    ma = await api.metatraderAccountApi.createAccount({
+      name: `JournalPro ${login}`,
+      type: 'cloud-g2',
+      login,
+      password,
+      server,
+      platform: 'mt5',
+      magic: 0,
+      quoteStreamingIntervalInSeconds: 0
+    });
+    if (ma.state !== 'DEPLOYED') {
+      try { await ma.deploy(); } catch { /* may already be deploying */ }
+    }
+    setCloudJob(db, job, 'DEPLOYING', 'Starting cloud terminal (a few minutes)');
+    await ma.waitDeployed(300, 5000);
+  }
+  account.mt5CloudAccountId = ma.id;
+  account.mt5CloudRegion = ma.region;
+  setCloudJob(db, job, 'CONNECTING', 'Connecting to broker');
+  await ma.waitConnected(300, 5000);
+  const connection = ma.getRPCConnection();
+  await connection.connect();
+  await connection.waitSynchronized(300);
+
+  cloudWorkers.set(account.id, { account: ma, connection, failing: false });
+
+  setCloudJob(db, job, 'SYNCING', 'Importing account history');
+  await cloudSyncNow(db, account, { account: ma, connection, failing: false }, true);
+
+  account.syncMethod = 'CLOUD';
+  account.connectionStatus = 'Connected';
+  account.eaStatus = 'Connected';
+  account.eaTerminalLogin = login;
+  account.eaTerminalServer = server;
+  account.eaConnectedAt = account.eaConnectedAt || new Date().toISOString();
+
+  setCloudJob(db, job, 'CONNECTED', 'Cloud sync connected');
+  logEaEvent(db, account, 'CLOUD_CONNECTED', 'info', 'Cloud sync connected via MetaApi');
+  await saveDatabase(db, db.users?.[0]?.email);
+}
+
+async function runCloudDisconnect(db: any, job: any, account: any) {
+  setCloudJob(db, job, 'IN_PROGRESS', 'Deprovisioning cloud terminal');
+  const api = getCloudApi();
+  if (api) {
+    const cached = cloudWorkers.get(account.id);
+    if (cached) {
+      try { await cached.connection.disconnect(); } catch { /* best effort */ }
+      try { await cached.account.remove(); } catch { /* best effort */ }
+      cloudWorkers.delete(account.id);
+    } else if (account.mt5CloudAccountId) {
+      try {
+        const ma = await api.metatraderAccountApi.getAccount(account.mt5CloudAccountId);
+        await ma.remove();
+      } catch { /* account may already be gone */ }
+    }
+  }
+  delete account.mt5CloudAccountId;
+  delete account.mt5CloudRegion;
+  setCloudJob(db, job, 'DONE', 'Cloud sync disconnected');
+  logEaEvent(db, account, 'CLOUD_DISCONNECTED', 'info', 'Cloud terminal deprovisioned');
+  await saveDatabase(db, db.users?.[0]?.email);
+}
+
+async function runCloudJob(db: any, job: any) {
+  const account = db.accounts?.find((a: any) => a.id === job.accountId);
+  if (!account) {
+    failCloudJob(db, job, null, new Error('Account not found'));
+    return;
+  }
+  try {
+    if (job.action === 'CONNECT') await runCloudConnect(db, job, account);
+    else if (job.action === 'DISCONNECT') await runCloudDisconnect(db, job, account);
+    else throw new Error(`Unknown job action: ${job.action}`);
+  } catch (e) {
+    failCloudJob(db, job, account, e);
+  }
+}
+
+async function processCloudJobs() {
+  const api = getCloudApi();
+  if (!api) return;
+  for (const db of userDatabases.values()) {
+    if (!db || !Array.isArray(db.mt5ConnectJobs)) continue;
+    for (const job of db.mt5ConnectJobs) {
+      if (job.status !== 'PENDING') continue;
+      if (cloudJobLocks.has(job.id)) continue;
+      cloudJobLocks.add(job.id);
+      setImmediate(() => {
+        runCloudJob(db, job).catch(() => {}).finally(() => cloudJobLocks.delete(job.id));
+      });
+    }
+  }
+}
+
+async function cloudSyncLoopTick() {
+  const api = getCloudApi();
+  if (!api) return;
+  for (const [uid, db] of userDatabases) {
+    for (const account of db?.accounts || []) {
+      if (account.syncMethod !== 'CLOUD' || account.connectionStatus !== 'Connected') continue;
+      try {
+        const session = await ensureCloudSession(api, account);
+        await cloudSyncNow(db, account, session, false);
+        session.failing = false;
+      } catch (e) {
+        console.error('[Cloud] sync failed for account', account.id, cloudErrorMessage(e));
+        cloudWorkers.delete(account.id);
+        if (!Array.isArray(db.mt5ConnectionErrors)) db.mt5ConnectionErrors = [];
+        db.mt5ConnectionErrors.push({
+          accountId: account.id,
+          userId: db.users?.[0]?.id,
+          errorCode: 'CLOUD_SYNC_LOST',
+          errorMessage: String(cloudErrorMessage(e)).slice(0, 500),
+          occurredAt: new Date().toISOString(),
+          resolvedAt: null
+        });
+        account.connectionStatus = 'Error';
+        logEaEvent(db, account, 'CLOUD_SYNC_LOST', 'error', String(cloudErrorMessage(e)).slice(0, 200));
+        await saveDatabase(db, db.users?.[0]?.email);
+      }
+    }
+  }
+}
+
+function startCloudWorker() {
+  setInterval(() => { processCloudJobs().catch(() => {}); }, 5000);
+  const syncSeconds = Math.max(10, parseInt(process.env.MT5_CLOUD_SYNC_INTERVAL_SECONDS || '60', 10));
+  setInterval(() => { cloudSyncLoopTick().catch(() => {}); }, syncSeconds * 1000);
+  setTimeout(() => { processCloudJobs().catch(() => {}); }, 2000);
+  setTimeout(() => { cloudSyncLoopTick().catch(() => {}); }, 15000);
+}
+
+// Strict payload schemas for EA endpoints (unknown fields rejected via .strict())
+const finiteNumber = () => z.number().finite();
+const positiveInt = () => z.number().int().positive();
+const boundedString = (max: number) => z.string().max(max);
+// Legacy EA builds send the token in the body; Phase 2 EAs send it in the
+// Authorization header. `token` is therefore accepted (but never required).
+const legacyTokenField = { token: boundedString(128).optional() };
+
+const EaValidateSchema = z.object({
+  accountId: boundedString(64),
+  login: boundedString(24),
+  server: boundedString(64),
+  build: positiveInt().optional(),
+  terminal: z.object({
+    login: boundedString(24).optional(),
+    server: boundedString(64).optional(),
+    build: positiveInt().optional()
+  }).optional(),
+  ...legacyTokenField
+}).strict();
+
+const EaAccountSchema = z.object({
+  accountId: boundedString(64),
+  balance: finiteNumber(),
+  equity: finiteNumber(),
+  margin: finiteNumber().optional(),
+  marginFree: finiteNumber().optional(),
+  marginLevel: finiteNumber().optional(),
+  currency: boundedString(8).optional(),
+  leverage: z.number().int().min(1).max(10000).optional(),
+  ...legacyTokenField
+}).strict();
+
+const EaPositionSchema = z.object({
+  accountId: boundedString(64),
+  positions: z.array(z.object({
+    positionId: z.union([z.number(), z.string()]),
+    ticket: z.union([z.number(), z.string()]),
+    symbol: boundedString(32),
+    side: boundedString(8),
+    volume: finiteNumber(),
+    openTime: z.number(),
+    openPrice: finiteNumber(),
+    sl: finiteNumber().nullable().optional(),
+    tp: finiteNumber().nullable().optional(),
+    commission: finiteNumber().optional(),
+    swap: finiteNumber().optional(),
+    profit: finiteNumber().optional(),
+    currentPrice: finiteNumber().optional()
+  }).strict()).max(500),
+  ...legacyTokenField
+}).strict();
+
+const EaOrderSchema = z.object({
+  accountId: boundedString(64),
+  orders: z.array(z.object({
+    orderId: z.union([z.number(), z.string()]),
+    symbol: boundedString(32),
+    type: boundedString(32),
+    volume: finiteNumber(),
+    openPrice: finiteNumber(),
+    sl: finiteNumber().nullable().optional(),
+    tp: finiteNumber().nullable().optional(),
+    magic: z.number().int().optional(),
+    state: boundedString(16).optional()
+  }).strict()).max(500),
+  ...legacyTokenField
+}).strict();
+
+const EaDealSchema = z.object({
+  ticket: z.union([z.number(), z.string()]),
+  positionId: z.union([z.number(), z.string()]).optional(),
+  time: z.number(),
+  type: z.number().int(),
+  entry: z.number().int(),
+  magic: z.number().int().optional(),
+  symbol: boundedString(32).optional(),
+  volume: finiteNumber().optional(),
+  price: finiteNumber().optional(),
+  profit: finiteNumber().optional(),
+  commission: finiteNumber().optional(),
+  swap: finiteNumber().optional(),
+  comment: boundedString(200).optional()
+}).strict();
+
+const EaMoneyFlowSchema = z.object({
+  ticket: z.union([z.number(), z.string()]),
+  type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'CREDIT', 'INTEREST']),
+  amount: finiteNumber(),
+  currency: boundedString(8).optional(),
+  time: z.number()
+}).strict();
+
+const EaSyncSchema = z.object({
+  accountId: boundedString(64),
+  deals: z.array(EaDealSchema).max(200),
+  moneyFlows: z.array(EaMoneyFlowSchema).max(200).optional(),
+  account: z.object({
+    balance: finiteNumber().optional(),
+    equity: finiteNumber().optional(),
+    currency: boundedString(8).optional()
+  }).optional(),
+  ...legacyTokenField
+}).strict();
+
+const EaHeartbeatSchema = z.object({
+  accountId: boundedString(64),
+  balance: finiteNumber().optional(),
+  equity: finiteNumber().optional(),
+  tradeCount: z.number().int().nonnegative().optional(),
+  ...legacyTokenField
+}).strict();
+
+const EaErrorSchema = z.object({
+  accountId: boundedString(64),
+  code: boundedString(64).optional(),
+  message: boundedString(500).optional(),
+  terminal: boundedString(200).optional(),
+  ...legacyTokenField
+}).strict();
+
+// Cloud bridge (investor password) endpoints — user-authenticated
+const CloudConnectSchema = z.object({
+  accountId: boundedString(64),
+  login: boundedString(24).regex(/^\d{1,12}$/, 'MT5 login must be numeric'),
+  server: boundedString(64),
+  investorPassword: boundedString(256).min(1, 'Investor password is required')
+}).strict();
+
+const CloudDisconnectSchema = z.object({
+  accountId: boundedString(64)
+}).strict();
+
+// Parse and validate an EA body against a schema; on failure reply 400 and return null
+function validateEaBody(res: any, schema: any, body: any): any | null {
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({
+      error: 'Invalid payload',
+      code: 'EA_BAD_PAYLOAD',
+      detail: first ? `${first.path.join('.')}: ${first.message}` : 'schema mismatch'
+    });
+    return null;
+  }
+  return parsed.data;
+}
+
 // Locate a user's DB by trading account id (used by token-authenticated EA calls)
 async function findDbByAccountId(accountId: string): Promise<any | null> {
   if (useSupabase) {
@@ -861,7 +1684,11 @@ async function saveDatabase(
         'is_mt5_sync',
         'ea_token', 'ea_status', 'ea_last_deal_id', 'ea_last_sync_time',
         'ea_sync_trade_count', 'ea_connected_at', 'ea_terminal_login',
-        'ea_terminal_server', 'created_at', 'updated_at'
+        'ea_terminal_server', 'created_at', 'updated_at',
+        'mt5_login', 'mt5_server', 'mt5_build', 'sync_method',
+        'connection_status', 'last_heartbeat_at', 'backfill_start', 'backfill_end',
+        'investor_password_enc', 'password_enc_nonce', 'password_kms_key_id',
+        'disconnected_at'
       ]);
       const accs = toSnake(data.accounts).map((a: any) => {
         const clean: any = {};
@@ -908,6 +1735,146 @@ async function saveDatabase(
         user_id: d.user_id || uid
       }));
       await supabase.from('mt5_deals').upsert(deals, { onConflict: 'id' });
+    }
+    // Upsert MT5 deals v2 (account-scoped deal stream, PK = (account_id, ticket))
+    if (data.mt5DealsV2 && data.mt5DealsV2.length > 0) {
+      const dealsV2 = data.mt5DealsV2.map((d: any) => ({
+        account_id: d.accountId,
+        user_id: d.userId || uid,
+        ticket: Number(d.ticket),
+        position_id: d.deal?.positionId ?? d.deal?.position_id ?? 0,
+        deal: d.deal
+      }));
+      const { error: errV2 } = await supabase.from('mt5_deals_v2').upsert(dealsV2, { onConflict: 'account_id,ticket' });
+      if (errV2) console.error('[saveDatabase] mt5_deals_v2 upsert error:', errV2);
+    }
+    // Insert account snapshots (append-only time series)
+    if (data.mt5Snapshots && data.mt5Snapshots.length > 0) {
+      const snaps = data.mt5Snapshots.map((s: any) => ({
+        account_id: s.accountId,
+        user_id: s.userId || uid,
+        balance: s.balance,
+        equity: s.equity,
+        margin: s.margin,
+        margin_free: s.marginFree,
+        margin_level: s.marginLevel,
+        currency: s.currency,
+        leverage: s.leverage,
+        captured_at: s.capturedAt
+      }));
+      const { error: snapErr } = await supabase.from('mt5_account_snapshots').insert(snaps);
+      if (snapErr) console.error('[saveDatabase] mt5_account_snapshots insert error:', snapErr);
+    }
+    // Open positions: replace-on-snapshot (delete this account's rows, then insert)
+    if (data.mt5OpenPositions) {
+      const posAccountIds = [...new Set(data.mt5OpenPositions.map((p: any) => p.accountId))];
+      for (const aid of posAccountIds) {
+        await supabase.from('mt5_open_positions').delete().eq('account_id', aid);
+      }
+      if (data.mt5OpenPositions.length > 0) {
+        const posRows = data.mt5OpenPositions.map((p: any) => ({
+          account_id: p.accountId,
+          user_id: p.userId || uid,
+          position_id: p.positionId,
+          ticket: p.ticket,
+          symbol: p.symbol,
+          side: p.side,
+          volume: p.volume,
+          open_time: p.openTime,
+          open_price: p.openPrice,
+          sl: p.sl,
+          tp: p.tp,
+          commission: p.commission,
+          swap: p.swap,
+          profit: p.profit,
+          current_price: p.currentPrice,
+          updated_at: p.updatedAt
+        }));
+        const { error: posErr } = await supabase.from('mt5_open_positions').insert(posRows);
+        if (posErr) console.error('[saveDatabase] mt5_open_positions insert error:', posErr);
+      }
+    }
+    // Pending orders: replace-on-snapshot (delete this account's rows, then insert)
+    if (data.mt5PendingOrders) {
+      const orderAccountIds = [...new Set(data.mt5PendingOrders.map((o: any) => o.accountId))];
+      for (const aid of orderAccountIds) {
+        await supabase.from('mt5_pending_orders').delete().eq('account_id', aid);
+      }
+      if (data.mt5PendingOrders.length > 0) {
+        const orderRows = data.mt5PendingOrders.map((o: any) => ({
+          account_id: o.accountId,
+          user_id: o.userId || uid,
+          order_id: o.orderId,
+          symbol: o.symbol,
+          type: o.type,
+          volume: o.volume,
+          open_price: o.openPrice,
+          sl: o.sl,
+          tp: o.tp,
+          magic: o.magic,
+          state: o.state,
+          updated_at: o.updatedAt
+        }));
+        const { error: orderErr } = await supabase.from('mt5_pending_orders').insert(orderRows);
+        if (orderErr) console.error('[saveDatabase] mt5_pending_orders insert error:', orderErr);
+      }
+    }
+    // Money flows: upsert on (account_id, ticket)
+    if (data.mt5MoneyFlows && data.mt5MoneyFlows.length > 0) {
+      const flowRows = data.mt5MoneyFlows.map((f: any) => ({
+        account_id: f.accountId,
+        user_id: f.userId || uid,
+        ticket: f.ticket,
+        flow_type: f.flowType,
+        amount: f.amount,
+        currency: f.currency,
+        time: f.time
+      }));
+      const { error: flowErr } = await supabase.from('mt5_money_flows').upsert(flowRows, { onConflict: 'account_id,ticket' });
+      if (flowErr) console.error('[saveDatabase] mt5_money_flows upsert error:', flowErr);
+    }
+    // Sync logs + connection errors: insert (append-only)
+    if (data.mt5SyncLogs && data.mt5SyncLogs.length > 0) {
+      const logRows = data.mt5SyncLogs.map((l: any) => ({
+        account_id: l.accountId,
+        user_id: l.userId || uid,
+        request_id: l.requestId || null,
+        event: l.event,
+        level: l.level,
+        message: l.message
+      }));
+      const { error: logErr } = await supabase.from('mt5_sync_logs').insert(logRows);
+      if (logErr) console.error('[saveDatabase] mt5_sync_logs insert error:', logErr);
+    }
+    if (data.mt5ConnectionErrors && data.mt5ConnectionErrors.length > 0) {
+      const errRows = data.mt5ConnectionErrors.map((e: any) => ({
+        account_id: e.accountId,
+        user_id: e.userId || uid,
+        error_code: e.errorCode,
+        error_message: e.errorMessage,
+        occurred_at: e.occurredAt,
+        resolved_at: e.resolvedAt
+      }));
+      const { error: connErr } = await supabase.from('mt5_connection_errors').insert(errRows);
+      if (connErr) console.error('[saveDatabase] mt5_connection_errors insert error:', connErr);
+    }
+    // Cloud/VPS connect jobs (upsert so worker status updates persist)
+    if (data.mt5ConnectJobs && data.mt5ConnectJobs.length > 0) {
+      const jobRows = data.mt5ConnectJobs.map((j: any) => ({
+        id: j.id,
+        account_id: j.accountId,
+        user_id: j.userId || uid,
+        action: j.action,
+        payload: j.payload || null,
+        status: j.status || 'PENDING',
+        attempts: j.attempts || 0,
+        worker_id: j.workerId || null,
+        last_error: j.lastError || null,
+        claimed_at: j.claimedAt || null,
+        updated_at: j.updatedAt || j.createdAt
+      }));
+      const { error: jobErr } = await supabase.from('mt5_connect_jobs').upsert(jobRows, { onConflict: 'id' });
+      if (jobErr) console.error('[saveDatabase] mt5_connect_jobs upsert error:', jobErr);
     }
   } catch(err) {
     console.error('[AxyFx SQL Save Error]', err);
@@ -1040,9 +2007,50 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     legacyHeaders: false,
   });
 
+  // Rate limiter for EA machine-to-machine endpoints.
+  // Per account: 10 req / 5s (the EA cadence is 30s so this is generous);
+  // per token: 60 req / 60s; global EA IP cap 300 req / min.
+  const eaAccountLimiter = rateLimit({
+    windowMs: 5 * 1000,
+    max: 10,
+    message: { error: 'Too many requests from this account. Retry shortly.', code: 'EA_RATE_LIMITED' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: any) => {
+      const accountId = String(req.headers['x-ea-account-id'] || req.body?.accountId || 'unknown');
+      return `ea_acc_${accountId}`;
+    }
+  });
+  const eaTokenLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    message: { error: 'Too many requests from this EA token. Retry shortly.', code: 'EA_RATE_LIMITED' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: any) => {
+      const auth = (req.headers['authorization'] || '').toString().trim();
+      const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (req.body?.token || 'unknown');
+      return `ea_tok_${sha256Hex(token).slice(0, 16)}`;
+    }
+  });
+  const eaIpLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    message: { error: 'Too many requests from this IP. Retry shortly.', code: 'EA_RATE_LIMITED' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  const eaProtection = [eaAccountLimiter, eaTokenLimiter, eaIpLimiter];
+
   // Middleware
   app.use(cookieParser());
-  app.use(express.json({ limit: '15mb' }));
+  app.use(express.json({
+    limit: '15mb',
+    // Capture the raw request body for HMAC signature verification
+    verify: (req: any, _res: any, buf: Buffer) => {
+      req.rawBody = buf.toString('utf8');
+    }
+  }));
 
   // CORS middleware — allow browser requests from both domains
   app.use((req, res, next) => {
@@ -2459,45 +3467,238 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     res.json({ message: 'EA token reset. Download a fresh EA file for this account.', account });
   });
 
-  // EA handshake: validates the embedded token and records terminal info
-  app.post('/api/mt5/ea/authenticate', async (req, res) => {
-    const { accountId, token, terminal } = req.body;
-    if (!accountId || !token) return res.status(400).json({ error: 'accountId and token are required' });
+  // EA handshake (legacy): validates the embedded body token and records terminal info.
+  // Kept for backward compatibility with previously downloaded EA files.
+  app.post('/api/mt5/ea/authenticate', ...eaProtection, async (req, res) => {
+    const body = req.body || {};
+    if (!body.accountId || !body.token) return res.status(400).json({ error: 'accountId and token are required' });
 
-    const db = await findDbByAccountId(accountId);
-    if (!db) return res.status(404).json({ error: 'Account not found' });
-    const account = db.accounts.find((a: any) => a.id === accountId);
-    if (!account) return res.status(404).json({ error: 'Account not found' });
-    if (!account.eaToken || account.eaToken !== token) {
-      return res.status(401).json({ error: 'Invalid EA token. Reset the token from your dashboard and download a new EA file.' });
-    }
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
 
-    if (terminal && typeof terminal === 'object') {
-      if (terminal.login !== undefined) account.eaTerminalLogin = String(terminal.login);
-      if (terminal.server !== undefined) account.eaTerminalServer = String(terminal.server);
+    if (body.terminal && typeof body.terminal === 'object') {
+      if (body.terminal.login !== undefined) account.eaTerminalLogin = String(body.terminal.login);
+      if (body.terminal.server !== undefined) account.eaTerminalServer = String(body.terminal.server);
     }
     account.eaStatus = 'Connected';
+    account.connectionStatus = 'Connected';
     account.eaConnectedAt = account.eaConnectedAt || new Date().toISOString();
+    account.lastHeartbeatAt = new Date().toISOString();
 
+    logEaEvent(db, account, 'EA_AUTHENTICATE', 'info', 'EA handshake (legacy) succeeded');
     await saveDatabase(db, db.users?.[0]?.email);
     res.json({ ok: true, status: 'Connected', lastDealId: account.eaLastDealId || 0 });
   });
 
-  // EA sync: receives a batch of deals + account info, recomputes trades, upserts
-  app.post('/api/mt5/ea/sync', async (req, res) => {
-    const { accountId, token, account, deals } = req.body;
-    if (!accountId || !token) return res.status(400).json({ error: 'accountId and token are required' });
-    if (!Array.isArray(deals)) return res.status(400).json({ error: 'deals[] is required' });
+  // EA validate (Phase 2): handshake with login/server/build verification.
+  // Requires Authorization: Bearer <token> + HMAC headers from the EA.
+  app.post('/api/mt5/ea/validate', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaValidateSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
 
-    const db = await findDbByAccountId(accountId);
-    if (!db) return res.status(404).json({ error: 'Account not found' });
-    const acc = db.accounts.find((a: any) => a.id === accountId);
-    if (!acc) return res.status(404).json({ error: 'Account not found' });
-    if (!acc.eaToken || acc.eaToken !== token) {
-      return res.status(401).json({ error: 'Invalid EA token' });
+    const terminal = body.terminal || {};
+    const reportedLogin = body.login || terminal.login;
+    const reportedServer = body.server || terminal.server;
+
+    if (reportedLogin !== undefined && reportedLogin !== '') {
+      account.eaTerminalLogin = String(reportedLogin);
+      if (account.mt5Login && String(account.mt5Login) !== String(reportedLogin)) {
+        logEaEvent(db, account, 'EA_VALIDATE_FAIL', 'warn', 'Terminal login does not match portfolio login');
+        return res.status(403).json({ error: 'Terminal login does not match the portfolio account login', code: 'EA_LOGIN_MISMATCH' });
+      }
     }
+    if (reportedServer !== undefined && reportedServer !== '') {
+      account.eaTerminalServer = String(reportedServer);
+      if (account.mt5Server && String(account.mt5Server) !== String(reportedServer)) {
+        logEaEvent(db, account, 'EA_VALIDATE_FAIL', 'warn', 'Terminal server does not match portfolio server');
+        return res.status(403).json({ error: 'Terminal server does not match the portfolio account server', code: 'EA_SERVER_MISMATCH' });
+      }
+    }
+    if (body.build) account.mt5Build = String(body.build);
 
-    // 1. Merge new deals (dedupe by ticket within this account)
+    account.eaStatus = 'Connected';
+    account.connectionStatus = 'Connected';
+    account.eaConnectedAt = account.eaConnectedAt || new Date().toISOString();
+    account.lastHeartbeatAt = new Date().toISOString();
+
+    logEaEvent(db, account, 'EA_VALIDATE', 'info', 'EA validate succeeded');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, status: 'Connected', lastDealId: account.eaLastDealId || 0, portfolioId: account.id });
+  });
+
+  // EA account snapshot: balance/equity/margin time series
+  app.post('/api/mt5/ea/account', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaAccountSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
+
+    if (!Array.isArray(db.mt5Snapshots)) db.mt5Snapshots = [];
+    db.mt5Snapshots.push({
+      accountId: account.id,
+      userId: db.users?.[0]?.id,
+      balance: body.balance,
+      equity: body.equity,
+      margin: body.margin ?? null,
+      marginFree: body.marginFree ?? null,
+      marginLevel: body.marginLevel ?? null,
+      currency: body.currency || account.currency || null,
+      leverage: body.leverage ?? null,
+      capturedAt: new Date().toISOString()
+    });
+    if (db.mt5Snapshots.length > 20000) db.mt5Snapshots = db.mt5Snapshots.slice(-20000);
+
+    account.currentBalance = body.balance;
+    account.equity = body.equity;
+    if (body.currency) account.currency = body.currency;
+    if (body.leverage) account.leverage = body.leverage;
+    account.eaStatus = 'Connected';
+    account.connectionStatus = 'Connected';
+    account.lastHeartbeatAt = new Date().toISOString();
+
+    logEaEvent(db, account, 'EA_ACCOUNT', 'info', 'Account snapshot recorded');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, captured: true });
+  });
+
+  // EA open positions: replace-on-snapshot for the account
+  app.post('/api/mt5/ea/positions', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaPositionSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
+
+    if (!Array.isArray(db.mt5OpenPositions)) db.mt5OpenPositions = [];
+    const posMap = new Map<string, any>();
+    for (const p of body.positions) {
+      posMap.set(`${account.id}:${p.positionId}`, {
+        accountId: account.id,
+        userId: db.users?.[0]?.id,
+        positionId: Number(p.positionId),
+        ticket: Number(p.ticket),
+        symbol: String(p.symbol || '').toUpperCase(),
+        side: String(p.side || ''),
+        volume: p.volume,
+        openTime: new Date(p.openTime * 1000).toISOString(),
+        openPrice: p.openPrice,
+        sl: p.sl ?? null,
+        tp: p.tp ?? null,
+        commission: p.commission ?? 0,
+        swap: p.swap ?? 0,
+        profit: p.profit ?? 0,
+        currentPrice: p.currentPrice ?? null,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    db.mt5OpenPositions = db.mt5OpenPositions.filter((op: any) => op.accountId !== account.id);
+    db.mt5OpenPositions.push(...posMap.values());
+
+    account.eaStatus = 'Connected';
+    account.connectionStatus = 'Connected';
+    account.lastHeartbeatAt = new Date().toISOString();
+
+    logEaEvent(db, account, 'EA_POSITIONS', 'info', `Open positions snapshot: ${body.positions.length}`);
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, positions: body.positions.length });
+  });
+
+  // EA pending orders: replace-on-snapshot for the account
+  app.post('/api/mt5/ea/orders', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaOrderSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
+
+    if (!Array.isArray(db.mt5PendingOrders)) db.mt5PendingOrders = [];
+    const orderMap = new Map<string, any>();
+    for (const o of body.orders) {
+      orderMap.set(`${account.id}:${o.orderId}`, {
+        accountId: account.id,
+        userId: db.users?.[0]?.id,
+        orderId: Number(o.orderId),
+        symbol: String(o.symbol || '').toUpperCase(),
+        type: String(o.type || ''),
+        volume: o.volume,
+        openPrice: o.openPrice,
+        sl: o.sl ?? null,
+        tp: o.tp ?? null,
+        magic: o.magic ?? 0,
+        state: String(o.state || ''),
+        updatedAt: new Date().toISOString()
+      });
+    }
+    db.mt5PendingOrders = db.mt5PendingOrders.filter((op: any) => op.accountId !== account.id);
+    db.mt5PendingOrders.push(...orderMap.values());
+
+    account.eaStatus = 'Connected';
+    account.connectionStatus = 'Connected';
+    account.lastHeartbeatAt = new Date().toISOString();
+
+    logEaEvent(db, account, 'EA_ORDERS', 'info', `Pending orders snapshot: ${body.orders.length}`);
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, orders: body.orders.length });
+  });
+
+  // EA heartbeat: liveness + current balance/equity
+  app.post('/api/mt5/ea/heartbeat', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaHeartbeatSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
+
+    if (body.balance !== undefined) account.currentBalance = body.balance;
+    if (body.equity !== undefined) account.equity = body.equity;
+    if (body.tradeCount !== undefined) account.eaSyncTradeCount = body.tradeCount;
+    account.eaStatus = 'Connected';
+    account.connectionStatus = 'Connected';
+    account.lastHeartbeatAt = new Date().toISOString();
+
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true });
+  });
+
+  // EA error reporting (sanitized client-side errors)
+  app.post('/api/mt5/ea/error', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaErrorSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account } = auth;
+
+    if (!Array.isArray(db.mt5ConnectionErrors)) db.mt5ConnectionErrors = [];
+    db.mt5ConnectionErrors.push({
+      accountId: account.id,
+      userId: db.users?.[0]?.id,
+      errorCode: body.code || 'EA_ERROR',
+      errorMessage: String(body.message || '').slice(0, 500),
+      occurredAt: new Date().toISOString(),
+      resolvedAt: null
+    });
+    if (db.mt5ConnectionErrors.length > 1000) db.mt5ConnectionErrors = db.mt5ConnectionErrors.slice(-1000);
+    account.connectionStatus = 'Error';
+
+    logEaEvent(db, account, 'EA_ERROR', 'error', `${body.code || 'EA_ERROR'}: ${String(body.message || '').slice(0, 200)}`);
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true });
+  });
+
+  // Shared MT5 sync pipeline used by BOTH the EA (/api/mt5/ea/sync) and the
+  // MetaApi cloud worker. Merges deals, applies money flows, recomputes journal
+  // trades, and updates account balance/equity from the authoritative payload.
+  function applyEaSyncPayload(db: any, acc: any, deals: any[], moneyFlows: any[], account: any) {
+    const userId = db.users?.[0]?.id;
+    const accountId = String(acc.id);
+
+    // 1. Merge new deals (dedupe by ticket within this account) into both the
+    //    legacy flat stream and the account-scoped mt5_deals_v2 stream
     if (!Array.isArray(db.mt5Deals)) db.mt5Deals = [];
     const seen = new Set<number>(
       db.mt5Deals.filter((d: any) => d.accountId === accountId).map((d: any) => d.ticket)
@@ -2508,11 +3709,34 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       const d = normalizeDeal(raw);
       if (!d.ticket) continue;
       if (!seen.has(d.ticket)) {
-        db.mt5Deals.push({ ...d, accountId });
+        addEaDeal(db, acc, d, userId);
         seen.add(d.ticket);
         added++;
       }
       if (d.ticket > maxTicket) maxTicket = d.ticket;
+    }
+
+    // 1b. Money flows (deposits / withdrawals / credit) — deduped by (account, ticket)
+    let moneyFlowAdded = 0;
+    if (Array.isArray(moneyFlows)) {
+      if (!Array.isArray(db.mt5MoneyFlows)) db.mt5MoneyFlows = [];
+      for (const mf of moneyFlows) {
+        const ticket = Number(mf.ticket);
+        if (!ticket) continue;
+        if (!db.mt5MoneyFlows.some((f: any) => f.accountId === acc.id && f.ticket === ticket)) {
+          db.mt5MoneyFlows.push({
+            accountId: acc.id,
+            userId,
+            ticket,
+            flowType: mf.type,
+            amount: Number(mf.amount) || 0,
+            currency: mf.currency || acc.currency || null,
+            time: new Date(Number(mf.time) * 1000).toISOString()
+          });
+          moneyFlowAdded++;
+        }
+      }
+      if (db.mt5MoneyFlows.length > 20000) db.mt5MoneyFlows = db.mt5MoneyFlows.slice(-20000);
     }
 
     // 2. Recompute journal trades from the full deal stream and upsert
@@ -2569,15 +3793,205 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     }
 
     acc.eaStatus = 'Connected';
+    acc.connectionStatus = 'Connected';
     acc.eaConnectedAt = acc.eaConnectedAt || new Date().toISOString();
     acc.eaLastSyncTime = new Date().toISOString();
+    acc.lastHeartbeatAt = new Date().toISOString();
     acc.eaLastDealId = maxTicket;
     acc.eaSyncTradeCount = db.trades.filter(
       (t: any) => t.accountId === accountId && t.type !== 'Deposit' && t.type !== 'Withdrawal'
     ).length;
 
+    return { inserted, updated, added, moneyFlowAdded, maxTicket };
+  }
+
+  // EA sync: receives a batch of closed deals + money flows + account info,
+  // recomputes trades, upserts the account-scoped deal stream and money flows.
+  app.post('/api/mt5/ea/sync', ...eaProtection, async (req, res) => {
+    const body = validateEaBody(res, EaSyncSchema, req.body || {});
+    if (!body) return;
+    const auth = await authEaRequest(req, res, body.token);
+    if (!auth) return;
+    const { db, account: acc } = auth;
+    const { deals, moneyFlows, account } = body;
+    const summary = applyEaSyncPayload(db, acc, deals, moneyFlows, account);
+
+    logEaEvent(db, acc, 'EA_SYNC', 'info', `Deals: ${summary.added} new / ${deals.length} received; money flows: ${summary.moneyFlowAdded} new`);
     await saveDatabase(db, db.users?.[0]?.email);
-    res.json({ ok: true, inserted, updated, totalTrades: acc.eaSyncTradeCount, cursor: maxTicket, status: acc.eaStatus });
+    res.json({ ok: true, inserted: summary.inserted, updated: summary.updated, totalTrades: acc.eaSyncTradeCount, cursor: summary.maxTicket, status: acc.eaStatus });
+  });
+
+  // User-facing connection status for an MT5 portfolio account
+  app.get('/api/mt5/:accountId/status', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const account = db.accounts.find((a: any) => a.id === req.params.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    const openPositions = Array.isArray(db.mt5OpenPositions)
+      ? db.mt5OpenPositions.filter((p: any) => p.accountId === account.id)
+      : [];
+    const pendingOrders = Array.isArray(db.mt5PendingOrders)
+      ? db.mt5PendingOrders.filter((o: any) => o.accountId === account.id)
+      : [];
+    const moneyFlows = Array.isArray(db.mt5MoneyFlows)
+      ? db.mt5MoneyFlows.filter((f: any) => f.accountId === account.id)
+      : [];
+    const lastErrors = Array.isArray(db.mt5ConnectionErrors)
+      ? db.mt5ConnectionErrors.filter((e: any) => e.accountId === account.id).slice(-5)
+      : [];
+    const snapshots = Array.isArray(db.mt5Snapshots)
+      ? db.mt5Snapshots.filter((s: any) => s.accountId === account.id).slice(-500)
+      : [];
+    const connectJobs = Array.isArray(db.mt5ConnectJobs)
+      ? db.mt5ConnectJobs.filter((j: any) => j.accountId === account.id).slice(-5)
+      : [];
+
+    // Reconcile accounts stuck in Validating from a cloud connect that has no
+    // broker worker configured (e.g. META_API_TOKEN missing).
+    const workerConfigured = !!process.env.META_API_TOKEN?.trim();
+    const cloudStuckValidating = account.syncMethod === 'CLOUD'
+      && account.connectionStatus === 'Validating'
+      && !workerConfigured;
+    let connStatus = account.connectionStatus || account.eaStatus || 'Not Connected';
+    let resolvedErrors = lastErrors;
+    if (cloudStuckValidating) {
+      connStatus = 'Error';
+      const cloudUnavailable = {
+        errorCode: 'CLOUD_WORKER_UNAVAILABLE',
+        errorMessage: 'Cloud sync worker is not configured on this deployment (META_API_TOKEN missing). Use the EA method.',
+        occurredAt: new Date().toISOString(),
+        resolvedAt: null
+      };
+      resolvedErrors = [cloudUnavailable, ...lastErrors];
+    }
+
+    res.json({
+      accountId: account.id,
+      status: connStatus,
+      eaStatus: account.eaStatus || 'Not Connected',
+      syncMethod: account.syncMethod || 'EA',
+      cloudConnected: !!account.investorPasswordEnc,
+      workerConfigured,
+      connectJobs,
+      lastSyncTime: account.eaLastSyncTime || null,
+      lastHeartbeatAt: account.lastHeartbeatAt || null,
+      lastDealId: account.eaLastDealId || 0,
+      syncTradeCount: account.eaSyncTradeCount || 0,
+      startingBalance: account.startingBalance || 0,
+      currentBalance: account.currentBalance || 0,
+      equity: account.equity || 0,
+      terminalLogin: account.eaTerminalLogin || account.mt5Login || null,
+      terminalServer: account.eaTerminalServer || account.mt5Server || null,
+      openPositions,
+      pendingOrders,
+      moneyFlows,
+      lastErrors: resolvedErrors,
+      snapshots
+    });
+  });
+
+  // User-facing cloud connect: validate + encrypt the investor password and
+  // enqueue a CONNECT job for the cloud/VPS worker. The raw password is never
+  // stored — only the AES-256-GCM envelope. Fails closed if no master key is
+  // configured (no plaintext fallback).
+  // NOTE: registered before the /api/mt5/:accountId/... routes so `cloud` is
+  // never captured as an accountId.
+  app.post('/api/mt5/cloud/connect', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const body = validateEaBody(res, CloudConnectSchema, req.body || {});
+    if (!body) return;
+
+    const account = db.accounts.find((a: any) => a.id === body.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    // A cloud connect needs a broker worker (MetaApi token or VPS worker) to
+    // actually reach MT5. Without one, fail fast instead of leaving the account
+    // stuck in Validating.
+    if (!process.env.META_API_TOKEN?.trim()) {
+      return res.status(503).json({
+        error: 'The cloud sync worker is not configured on this deployment yet (META_API_TOKEN is missing). Use the EA method, which needs no extra setup.',
+        code: 'CLOUD_WORKER_UNAVAILABLE'
+      });
+    }
+
+    const enc = encryptInvestorPassword(body.investorPassword);
+    if (!enc) {
+      return res.status(503).json({
+        error: 'Cloud sync is not configured on this deployment yet. Use the EA method instead.',
+        code: 'CLOUD_NOT_CONFIGURED'
+      });
+    }
+
+    account.investorPasswordEnc = enc.enc;
+    account.passwordEncNonce = '';
+    account.passwordKmsKeyId = enc.keyId;
+    account.mt5Login = body.login;
+    account.mt5Server = body.server;
+    account.syncMethod = 'CLOUD';
+    account.connectionStatus = 'Validating';
+    account.lastHeartbeatAt = undefined;
+    account.eaStatus = 'Not Connected';
+
+    const jobId = enqueueConnectJob(db, account, 'CONNECT');
+    logEaEvent(db, account, 'CLOUD_CONNECT_REQUESTED', 'info', 'Cloud connect requested; investor password stored encrypted');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, jobId, syncMethod: 'CLOUD', status: 'Validating' });
+  });
+
+  // User-facing cloud disconnect: remove the encrypted credential + enqueue DISCONNECT
+  app.post('/api/mt5/cloud/disconnect', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const body = validateEaBody(res, CloudDisconnectSchema, req.body || {});
+    if (!body) return;
+
+    const account = db.accounts.find((a: any) => a.id === body.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    clearInvestorPassword(account);
+    account.syncMethod = 'EA';
+    account.connectionStatus = 'Disconnected';
+    account.lastHeartbeatAt = undefined;
+    account.disconnectedAt = new Date().toISOString();
+
+    enqueueConnectJob(db, account, 'DISCONNECT');
+    logEaEvent(db, account, 'CLOUD_DISCONNECT', 'warn', 'Cloud sync disconnected; encrypted credentials removed');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, status: 'Disconnected' });
+  });
+
+  // User-facing disconnect: revoke the EA token and mark the account disconnected
+  app.post('/api/mt5/:accountId/disconnect', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const account = db.accounts.find((a: any) => a.id === req.params.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    account.eaToken = undefined;
+    account.eaStatus = 'Not Connected';
+    account.connectionStatus = 'Disconnected';
+    account.eaConnectedAt = undefined;
+    account.lastHeartbeatAt = undefined;
+    account.eaTokenRevokedAt = new Date().toISOString();
+    account.disconnectedAt = new Date().toISOString();
+
+    logEaEvent(db, account, 'EA_DISCONNECT', 'warn', 'User disconnected the MT5 sync');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, status: 'Disconnected' });
   });
 
   // ==========================================
@@ -3829,6 +5243,7 @@ RESTRICTIONS:
         appType: 'spa'
       }).then((vite) => {
         app.use(vite.middlewares);
+        startCloudWorker();
         app.listen(PORT, '0.0.0.0', () => {
           console.log(`[AxyFx Journal Server] Dev listening on http://0.0.0.0:${PORT}`);
         });
@@ -3843,7 +5258,8 @@ RESTRICTIONS:
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
-    
+
+    startCloudWorker();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`[AxyFx Journal Server] Prod listening on http://0.0.0.0:${PORT}`);
     });
