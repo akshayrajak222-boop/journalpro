@@ -3205,46 +3205,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Active Workspace Switcher */}
-          <div className={`bg-[#f4f4f3] border border-slate-200/40 rounded-lg ${sidebarCollapsed ? 'p-1.5 text-center flex flex-col items-center gap-1' : 'p-2.5'}`} title="Active Portfolio">
-            {sidebarCollapsed ? (
-              <button
-                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
-                className="text-slate-600 hover:text-slate-900 bg-white/80 hover:bg-white p-2 rounded-md transition duration-150 shadow-2xs"
-                title="Manage Portfolio Accounts"
-              >
-                💼
-              </button>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
-                  <button
-                    onClick={() => { 
-                      setShowAccountModal(true); 
-                      setAccountCreationMethod('select'); 
-                    }}
-                    title="Connect New Portfolio Account"
-                    className="text-slate-400 hover:text-slate-900 hover:bg-slate-200/50 p-1 rounded transition duration-150"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
-                <select
-                  value={selectedAccountId}
-                  onChange={handleAccountChange}
-                  className="w-full bg-transparent border-none text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer pr-2 select-none"
-                >
-                  {accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>
-                      💼 {acc.name} ({acc.platform})
-                    </option>
-                  ))}
-                  {accounts.length === 0 && <option value="">No Accounts Registered</option>}
-                </select>
-              </>
-            )}
-          </div>
+
 
           {/* Primary Sidebar Links */}
           <nav className="flex flex-col gap-2 w-full px-2">
