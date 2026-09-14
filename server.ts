@@ -567,7 +567,8 @@ function recomputeMt5TradesForAccount(account: any, deals: any[], skipBalanceTic
     result.push({
       id: `mt5ea_${account.id}_${posId}`,
       accountId: account.id,
-      date: new Date(lastOut.time * 1000).toISOString(),
+      date: new Date(inDeal.time * 1000).toISOString(),
+      exitTime: new Date(lastOut.time * 1000).toISOString(),
       symbol: lastOut.symbol || inDeal.symbol || 'UNKNOWN',
       type: (lastOut.type === DEAL_TYPE_SELL ? 'Sell' : 'Buy') as any,
       lotSize: lastOut.volume || inDeal.volume || 0.01,
