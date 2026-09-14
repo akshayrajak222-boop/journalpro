@@ -432,6 +432,25 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
     }
   }
 
+  async function handleCloudSync() {
+    if (!account) return;
+    try {
+      const res = await authFetch('/api/mt5/cloud/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: account.id })
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || 'Cloud sync failed to start. Please try again.');
+        return;
+      }
+      onRefresh();
+    } catch (e) {
+      setError('Cloud sync failed to start. Please try again.');
+    }
+  }
+
   function derivePhase(): Phase {
     if (downloading || copying || resetting) return 'Collecting';
     if (status?.syncMethod === 'CLOUD' && status.cloudConnected) {
@@ -1006,11 +1025,23 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
       {/* Live sync status */}
       {(connected || status?.lastSyncTime) && status && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="font-black text-slate-900 dark:text-white text-sm">Live Sync Status</h3>
-            <button onClick={pollStatus} className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
-              <RefreshCw className={`h-3.5 w-3.5 ${phase === 'Syncing' ? 'animate-spin' : ''}`} /> Refresh
-            </button>
+            <div className="flex items-center gap-3">
+              {status?.syncMethod === 'CLOUD' && (
+                <button 
+                  onClick={handleCloudSync} 
+                  disabled={phase === 'Syncing' || phase === 'Validating'} 
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${phase === 'Syncing' || phase === 'Validating' ? 'animate-spin' : ''}`} /> 
+                  {phase === 'Syncing' || phase === 'Validating' ? 'Syncing...' : 'Sync Now'}
+                </button>
+              )}
+              <button onClick={pollStatus} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:underline">
+                <RefreshCw className={`h-3.5 w-3.5 ${phase === 'Syncing' ? 'animate-spin' : ''}`} /> Refresh
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

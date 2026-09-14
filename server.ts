@@ -1017,8 +1017,10 @@ async function runCloudConnect(db: any, job: any, account: any) {
   const api = getCloudApi();
   if (!api) throw new Error('META_API_TOKEN is not configured on this deployment');
 
-  setCloudJob(db, job, 'PROVISIONING', 'Locating existing MetaApi terminal');
-  const accounts = await api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+  let ma: any = null;
+  try {
+    setCloudJob(db, job, 'PROVISIONING', 'Locating existing MetaApi terminal');
+    const accounts = await api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
   let ma: any = accounts.find(
     (a: any) => a.version === 5 && String(a.login) === login && String(a.server) === server
   );
@@ -1062,19 +1064,90 @@ async function runCloudConnect(db: any, job: any, account: any) {
 
   cloudWorkers.set(account.id, { account: ma, connection, failing: false });
 
-  setCloudJob(db, job, 'SYNCING', 'Importing account history');
-  await cloudSyncNow(db, account, { account: ma, connection, failing: false }, true);
+    setCloudJob(db, job, 'SYNCING', 'Importing account history');
+    await cloudSyncNow(db, account, { account: ma, connection, failing: false }, true);
+    
+    setCloudJob(db, job, 'IN_PROGRESS', 'Deprovisioning temporary cloud terminal');
+    try { await connection.disconnect(); } catch {}
+    try { await ma.remove(); } catch {}
+    cloudWorkers.delete(account.id);
+    delete account.mt5CloudAccountId;
+    delete account.mt5CloudRegion;
 
-  account.syncMethod = 'CLOUD';
-  account.connectionStatus = 'Connected';
-  account.eaStatus = 'Connected';
-  account.eaTerminalLogin = login;
-  account.eaTerminalServer = server;
-  account.eaConnectedAt = account.eaConnectedAt || new Date().toISOString();
+    account.syncMethod = 'CLOUD';
+    account.connectionStatus = 'Connected';
+    account.eaStatus = 'Connected';
+    account.eaTerminalLogin = login;
+    account.eaTerminalServer = server;
+    account.eaConnectedAt = account.eaConnectedAt || new Date().toISOString();
 
-  setCloudJob(db, job, 'CONNECTED', 'Cloud sync connected');
-  logEaEvent(db, account, 'CLOUD_CONNECTED', 'info', 'Cloud sync connected via MetaApi');
-  await saveDatabase(db, db.users?.[0]?.email);
+    setCloudJob(db, job, 'CONNECTED', 'Cloud sync completed and terminal removed');
+    logEaEvent(db, account, 'CLOUD_CONNECTED', 'info', 'Cloud sync connected and synced via MetaApi');
+    await saveDatabase(db, db.users?.[0]?.email);
+  } catch (e) {
+    if (ma) {
+      try { await ma.remove(); } catch {}
+    }
+    cloudWorkers.delete(account.id);
+    delete account.mt5CloudAccountId;
+    throw e;
+  }
+}
+
+async function runCloudSyncNow(db: any, job: any, account: any) {
+  setCloudJob(db, job, 'IN_PROGRESS', 'Decrypting MT5 investor credentials for sync');
+  const password = decryptInvestorPassword(account);
+  if (!password) {
+    throw new Error('Investor password could not be decrypted');
+  }
+  const login = String(account.mt5Login || '').trim();
+  const server = String(account.mt5Server || '').trim();
+  if (!login || !server) throw new Error('MT5 login/server are not set');
+
+  const api = getCloudApi();
+  if (!api) throw new Error('META_API_TOKEN is not configured');
+
+  let ma: any = null;
+  try {
+    setCloudJob(db, job, 'PROVISIONING', 'Creating temporary cloud terminal for sync (a few minutes)');
+    ma = await api.metatraderAccountApi.createAccount({
+      name: `JournalPro Sync ${login}`,
+      type: 'cloud-g2',
+      login,
+      password,
+      server,
+      platform: 'mt5',
+      magic: 0,
+      quoteStreamingIntervalInSeconds: 0
+    });
+    if (ma.state !== 'DEPLOYED') {
+      try { await ma.deploy(); } catch { /* may already be deploying */ }
+    }
+    setCloudJob(db, job, 'DEPLOYING', 'Starting temporary cloud terminal');
+    await ma.waitDeployed(300, 5000);
+    
+    setCloudJob(db, job, 'CONNECTING', 'Connecting to broker');
+    await ma.waitConnected(300, 5000);
+    const connection = ma.getRPCConnection();
+    await connection.connect();
+    await connection.waitSynchronized(300);
+
+    setCloudJob(db, job, 'SYNCING', 'Fetching new trades');
+    await cloudSyncNow(db, account, { account: ma, connection, failing: false }, false);
+
+    setCloudJob(db, job, 'IN_PROGRESS', 'Deprovisioning temporary cloud terminal');
+    try { await connection.disconnect(); } catch {}
+    try { await ma.remove(); } catch {}
+
+    setCloudJob(db, job, 'DONE', 'Sync completed successfully');
+    logEaEvent(db, account, 'CLOUD_SYNC_DONE', 'info', 'Manual cloud sync completed');
+    await saveDatabase(db, db.users?.[0]?.email);
+  } catch (e) {
+    if (ma) {
+      try { await ma.remove(); } catch {}
+    }
+    throw e;
+  }
 }
 
 async function runCloudDisconnect(db: any, job: any, account: any) {
@@ -1109,6 +1182,7 @@ async function runCloudJob(db: any, job: any) {
   try {
     if (job.action === 'CONNECT') await runCloudConnect(db, job, account);
     else if (job.action === 'DISCONNECT') await runCloudDisconnect(db, job, account);
+    else if (job.action === 'SYNC_NOW') await runCloudSyncNow(db, job, account);
     else throw new Error(`Unknown job action: ${job.action}`);
   } catch (e) {
     failCloudJob(db, job, account, e);
@@ -1163,10 +1237,12 @@ async function cloudSyncLoopTick() {
 
 function startCloudWorker() {
   setInterval(() => { processCloudJobs().catch(() => {}); }, 5000);
-  const syncSeconds = Math.max(10, parseInt(process.env.MT5_CLOUD_SYNC_INTERVAL_SECONDS || '60', 10));
-  setInterval(() => { cloudSyncLoopTick().catch(() => {}); }, syncSeconds * 1000);
-  setTimeout(() => { processCloudJobs().catch(() => {}); }, 2000);
-  setTimeout(() => { cloudSyncLoopTick().catch(() => {}); }, 15000);
+  const syncSeconds = Math.max(10, parseInt(process.env.MT5_CLOUD_SYNC_INTERVAL_SECONDS || '60', 10));  // setInterval(() => { cloudSyncLoopTick().catch(() => {}); }, syncSeconds * 1000);
+}
+
+export function startCloudWorkers() {
+  setInterval(() => { processCloudJobs().catch(() => {}); }, 2000);
+  // setTimeout(() => { cloudSyncLoopTick().catch(() => {}); }, 15000);;
 }
 
 // Strict payload schemas for EA endpoints (unknown fields rejected via .strict())
@@ -3969,6 +4045,33 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     logEaEvent(db, account, 'CLOUD_DISCONNECT', 'warn', 'Cloud sync disconnected; encrypted credentials removed');
     await saveDatabase(db, db.users?.[0]?.email);
     res.json({ ok: true, status: 'Disconnected' });
+  });
+
+  // User-facing cloud sync: triggers an on-demand sync job for the investor password
+  app.post('/api/mt5/cloud/sync', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    const body = validateEaBody(res, CloudDisconnectSchema, req.body || {});
+    if (!body) return;
+
+    const account = db.accounts.find((a: any) => a.id === body.accountId);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (account.userId !== currentUser.id) return res.status(403).json({ error: 'Access denied' });
+
+    if (account.syncMethod !== 'CLOUD') {
+      return res.status(400).json({ error: 'Account is not configured for cloud sync' });
+    }
+
+    if (!account.investorPasswordEnc) {
+       return res.status(400).json({ error: 'Cloud sync credentials not found. Please reconnect.' });
+    }
+
+    const jobId = enqueueConnectJob(db, account, 'SYNC_NOW');
+    logEaEvent(db, account, 'CLOUD_SYNC_REQUESTED', 'info', 'Manual on-demand cloud sync requested');
+    await saveDatabase(db, db.users?.[0]?.email);
+    res.json({ ok: true, jobId, status: 'Validating' });
   });
 
   // User-facing disconnect: revoke the EA token and mark the account disconnected

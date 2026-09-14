@@ -1,0 +1,1856 @@
+﻿diff --git a/src/App.tsx b/src/App.tsx
+index fd32283..e724a96 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -7,7 +7,7 @@ import {
+   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
+   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
+   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
+-  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy, Lock, Flame
++  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy, Lock, Flame, MessageSquare
+ } from 'lucide-react';
+ import { 
+   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
+@@ -240,13 +240,30 @@ export default function App() {
+   // Navigation
+   const [activeTab, setActiveTab] = useState<string>('dashboard');
+   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
++  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
+   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+   // Scroll UI state
+   const [isScrolled, setIsScrolled] = useState(false);
++  const [showMobileNavNotifications, setShowMobileNavNotifications] = useState(false);
++  const [showMobileNavProfile, setShowMobileNavProfile] = useState(false);
+ 
+   const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
+     setIsScrolled(e.currentTarget.scrollTop > 150);
+   };
++
++  React.useEffect(() => {
++    const handleWindowScroll = () => {
++      if (window.scrollY > 150) {
++        setIsScrolled(true);
++      } else if (window.scrollY <= 150 && isScrolled) {
++        setIsScrolled(false);
++      } else {
++        setIsScrolled(window.scrollY > 150);
++      }
++    };
++    window.addEventListener('scroll', handleWindowScroll, { passive: true });
++    return () => window.removeEventListener('scroll', handleWindowScroll);
++  }, [isScrolled]);
+   const [fxNewsInitialTab, setFxNewsInitialTab] = useState<'news' | 'calendar'>('news');
+ 
+   const openEconomicCalendar = () => {
+@@ -297,7 +314,10 @@ export default function App() {
+   // Trade form fields
+   const [showTradeModal, setShowTradeModal] = useState(false);
+   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
++  const [selectedNote, setSelectedNote] = useState<string | null>(null);
++  const [journalPage, setJournalPage] = useState(1);
+   const [tradeDate, setTradeDate] = useState('');
++  const [tradeExitTime, setTradeExitTime] = useState('');
+   const [tradeSymbol, setTradeSymbol] = useState(() => localStorage.getItem('lastTradeSymbol') || 'XAUUSD');
+   const [tradeType, setTradeType] = useState<'Buy' | 'Sell'>('Buy');
+   const [tradeLotSize, setTradeLotSize] = useState('0.1');
+@@ -361,6 +381,7 @@ export default function App() {
+   // Unified settings tab state
+   const [settingsTab, setSettingsTab] = useState<'achievements' | 'general' | 'notifications' | 'subscription' | 'about' | 'theme' | 'risk' | 'help'>('achievements');
+   const [activeAboutForm, setActiveAboutForm] = useState<'none' | 'support' | 'bug' | 'feature'>('none');
++  const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
+ 
+   // Sign-out confirmation modal
+   const [showSignOutModal, setShowSignOutModal] = useState(false);
+@@ -1339,6 +1360,19 @@ export default function App() {
+       } else {
+         setTradeDate('');
+       }
++      
++      if (trade.exitTime) {
++        try {
++          const d = new Date(trade.exitTime);
++          const offset = d.getTimezoneOffset();
++          const localDate = new Date(d.getTime() - offset * 60 * 1000);
++          setTradeExitTime(localDate.toISOString().slice(0, 16));
++        } catch (e) {
++          setTradeExitTime('');
++        }
++      } else {
++        setTradeExitTime('');
++      }
+       setTradeSymbol(trade.symbol);
+       setTradeType(trade.type as 'Buy' | 'Sell');
+       setTradeLotSize(String(trade.lotSize));
+@@ -1435,6 +1469,7 @@ export default function App() {
+       lotSize: tradeLotSize,
+       entryPrice: tradeEntryPrice,
+       exitPrice: tradeExitPrice,
++      exitTime: tradeExitTime ? new Date(tradeExitTime).toISOString() : undefined,
+       stopLoss: tradeSL || null,
+       takeProfit: tradeTP || null,
+       profit: tradeProfit,
+@@ -2282,6 +2317,11 @@ export default function App() {
+     profit: parseFloat(monthlyMap[my].toFixed(2))
+   })).sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
+ 
++  // Reset journal page when filters change
++  useEffect(() => {
++    setJournalPage(1);
++  }, [searchQuery, journalFilterSymbol, journalFilterEmotion]);
++
+   // Filter trades for tabular journal
+   const filteredTrades = trades.filter(t => {
+     const matchesSearch = t.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+@@ -2419,11 +2459,11 @@ export default function App() {
+     const BORDER = 'FFB7C4D6';
+     const BRAND = 'FF1F4E79';
+ 
+-    const TABLE_COLS = 12;
+-    const SPACER_COL = 13;
+-    const SUMMARY_LABEL_COL = 14;
+-    const SUMMARY_VALUE_COL = 15;
+-    const TOTAL_COLS = 15;
++    const TABLE_COLS = 10;
++    const SPACER_COL = 11;
++    const SUMMARY_LABEL_COL = 12;
++    const SUMMARY_VALUE_COL = 13;
++    const TOTAL_COLS = 13;
+ 
+     const solid = (rgb: string) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: rgb } });
+     const fnt = (size: number, color: string, bold = false) => ({ name: 'Calibri', size, bold, color: { argb: color } });
+@@ -2445,6 +2485,21 @@ export default function App() {
+     const wb = new ExcelJS.Workbook();
+     const ws = wb.addWorksheet('Journal');
+ 
++    ws.getColumn(1).width = 12; // Symbol
++    ws.getColumn(2).width = 10; // Type
++    ws.getColumn(3).width = 15; // Entry
++    ws.getColumn(4).width = 15; // Exit
++    ws.getColumn(5).width = 30; // Entry Time
++    ws.getColumn(6).width = 30; // Exit Time
++    ws.getColumn(7).width = 10; // Volume
++    ws.getColumn(8).width = 15; // Net Profit
++    ws.getColumn(9).width = 15; // Emotion
++    ws.getColumn(10).width = 40; // Notes
++    
++    // Summary table columns
++    ws.getColumn(12).width = 25; // Summary Label
++    ws.getColumn(13).width = 15; // Summary Value
++
+     const outlineMergedRow = (rowNum: number) => {
+       for (let c = 1; c <= TOTAL_COLS; c++) {
+         const cell = ws.getCell(rowNum, c);
+@@ -2530,7 +2585,7 @@ export default function App() {
+       lc.border = borderAll(BORDER);
+       vc.font = fnt(10, s.color || TEXT_COLOR, !!s.bold);
+       vc.fill = solid('FFFFFFFF');
+-      vc.alignment = algn('right');
++      vc.alignment = algn('center');
+       vc.border = borderAll(BORDER);
+       vc.numFmt = s.numFmt;
+       ws.getRow(r).height = 20;
+@@ -2546,7 +2601,7 @@ export default function App() {
+     bL.border = { ...bL.border, left: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
+     bV.border = { ...bV.border, right: { style: 'medium', color: { argb: BLUE } }, bottom: { style: 'medium', color: { argb: BLUE } } };
+ 
+-    const headers = ['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion', 'Notes'];
++    const headers = ['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit', 'Emotion', 'Notes'];
+     const hr = ws.getRow(TABLE_HEADER);
+     headers.forEach((h, i) => {
+       const c = hr.getCell(i + 1);
+@@ -2558,32 +2613,33 @@ export default function App() {
+     });
+     hr.height = 22;
+ 
+-    const fmtDate = (iso: string): string => {
++    const fmtDateTime = (iso: string): string => {
+       const d = new Date(iso);
+       if (isNaN(d.getTime())) return iso;
+       const p = (n: number) => String(n).padStart(2, '0');
+-      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
++      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+     };
+ 
+     inRange.forEach((t, idx) => {
+       const row = ws.getRow(DATA_START + idx);
++      const exitDate = t.exitTime ? new Date(t.exitTime) : null;
+       const vals: (string | number)[] = [
+-        fmtDate(t.date), t.symbol, t.type, t.lotSize, t.entryPrice, t.exitPrice,
+-        t.profit, t.commission, t.swap, t.strategy || '', t.emotion || '', t.notes || '',
++        t.symbol, t.type, t.entryPrice, t.exitPrice,
++        fmtDateTime(t.date), exitDate ? fmtDateTime(t.exitTime!) : '-',
++        t.lotSize, t.profit,
++        t.emotion || '-', t.notes || '-'
+       ];
+       vals.forEach((v, i) => {
+         const c = row.getCell(i + 1);
+         c.value = v;
+         c.border = borderAll(BORDER);
+-        c.alignment = i === 0 || i >= 9 ? algn('left') : i === 1 || i === 2 ? algn('center') : algn('right');
+-        if (i === 3) c.numFmt = '0.00';
+-        if (i === 4 || i === 5) c.numFmt = '0.00000';
+-        if (i === 6 || i === 7 || i === 8) {
++        c.alignment = i === 4 || i === 5 ? algn('left') : i === 9 ? { ...algn('left'), wrapText: true } : algn('center');
++        if (i === 6) c.numFmt = '0.00';
++        // Note: Entry/Exit prices (i=2, i=3) are left with General formatting to avoid trailing zeros
++        if (i === 7) {
+           c.numFmt = '#,##0.00';
+           const num = Number(v);
+-          c.font = i === 6
+-            ? fnt(10, num > 0 ? GREEN : num < 0 ? RED : GRAY, num !== 0)
+-            : fnt(10, num > 0 ? GREEN : num < 0 ? RED : TEXT_COLOR);
++          c.font = fnt(10, num > 0 ? GREEN : num < 0 ? RED : GRAY, num !== 0);
+         }
+         if (idx % 2 === 1) c.fill = solid(ALT_FILL);
+       });
+@@ -2592,27 +2648,26 @@ export default function App() {
+ 
+     const netProfit = stats.netProfit;
+     const totLots = inRange.reduce((s, t) => s + (Number(t.lotSize) || 0), 0);
+-    const totCommission = inRange.reduce((s, t) => s + (Number(t.commission) || 0), 0);
+-    const totSwap = inRange.reduce((s, t) => s + (Number(t.swap) || 0), 0);
+     const tr = ws.getRow(TOTAL);
+     tr.getCell(1).value = 'TOTALS';
+-    tr.getCell(4).value = totLots;
+-    tr.getCell(7).value = netProfit;
+-    tr.getCell(8).value = totCommission;
+-    tr.getCell(9).value = totSwap;
+-    [1, 4, 7, 8, 9].forEach(col => {
++    tr.getCell(7).value = totLots;
++    tr.getCell(8).value = netProfit;
++    
++    // Format all cells in the TOTALS row up to column 10
++    for (let col = 1; col <= 10; col++) {
+       const c = tr.getCell(col);
+       c.fill = solid(TOTAL_FILL);
+-      c.alignment = col === 1 ? algn('left') : algn('right');
++      c.alignment = col === 1 ? algn('left') : algn('center');
+       c.border = { ...borderAll(BORDER), top: { style: 'medium', color: { argb: BLUE } } };
+-      if (col >= 7) {
+-        c.numFmt = '#,##0.00';
++      
++      if (col === 7 || col === 8) {
++        c.numFmt = col === 7 ? '0.00' : '#,##0.00';
+         const num = Number(c.value);
+         c.font = fnt(10, num > 0 ? GREEN : num < 0 ? RED : NAVY_TEXT, true);
+       } else {
+         c.font = fnt(10, NAVY_TEXT, true);
+       }
+-    });
++    }
+     tr.height = 22;
+ 
+     ws.getRow(SPACER_AFTER).height = 6;
+@@ -2726,29 +2781,38 @@ export default function App() {
+ 
+     const lastY = (doc as any).lastAutoTable?.finalY || 45;
+     autoTable(doc, {
+-      head: [['Date', 'Symbol', 'Type', 'Lots', 'Entry', 'Exit', 'Profit', 'Commission', 'Swap', 'Strategy', 'Emotion']],
+-      body: inRange.map(t => [
+-        new Date(t.date).toLocaleDateString(),
+-        t.symbol,
+-        t.type,
+-        String(t.lotSize),
+-        String(t.entryPrice),
+-        String(t.exitPrice),
+-        `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`,
+-        String(t.commission),
+-        String(t.swap),
+-        t.strategy || '',
+-        t.emotion || '',
+-      ]),
++      head: [['Symbol', 'Type', 'Entry', 'Exit', 'Entry Time', 'Exit Time', 'Volume', 'Net Profit', 'Emotion', 'Notes']],
++      body: inRange.map(t => {
++        const entryDate = new Date(t.date);
++        const exitDate = t.exitTime ? new Date(t.exitTime) : null;
++        
++        const fmtDateTime = (d: Date) => {
++          if (isNaN(d.getTime())) return '-';
++          return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
++        };
++
++        return [
++          t.symbol,
++          t.type,
++          String(t.entryPrice),
++          String(t.exitPrice),
++          fmtDateTime(entryDate),
++          exitDate ? fmtDateTime(exitDate) : '-',
++          String(t.lotSize),
++          `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`,
++          t.emotion || '-',
++          t.notes || '-'
++        ];
++      }),
+       startY: lastY + 8,
+       theme: 'striped',
+       headStyles: { fillColor: [47, 91, 142], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+       bodyStyles: { fontSize: 7 },
+       alternateRowStyles: { fillColor: [242, 245, 249] },
+       styles: { cellPadding: 1.8, valign: 'middle', overflow: 'linebreak' },
+-      columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
++      columnStyles: { 6: { halign: 'center' }, 7: { halign: 'right' } },
+       didParseCell: (data) => {
+-        if (data.section === 'body' && data.column.index === 6) {
++        if (data.section === 'body' && data.column.index === 7) {
+           const val = parseFloat(String(data.cell.raw));
+           if (val > 0) data.cell.styles.textColor = [16, 122, 87];
+           else if (val < 0) data.cell.styles.textColor = [180, 35, 50];
+@@ -3039,348 +3103,274 @@ export default function App() {
+ 
+   // Primary Platform Shell Layout
+   return (
+-    <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col md:flex-row">
+-      
+-      {/* Sidebar Navigation */}
+-      <aside className={`bg-[#FBFBFA] border-r border-slate-200/80 flex-shrink-0 flex flex-col justify-between z-20 transition-all duration-300 md:h-full md:overflow-y-auto ${
+-        mobileMenuOpen 
+-          ? 'fixed inset-y-0 left-0 translate-x-0 shadow-2xl bg-white w-64 p-5' 
+-          : (sidebarCollapsed ? 'hidden md:flex md:w-[72px] p-3' : 'hidden md:flex md:w-64 p-5')
+-      }`}>
+-        <div className="space-y-6">
+-          {/* Brand Logo */}
+-          <div className={`flex ${sidebarCollapsed ? 'flex-col items-center gap-3' : 'items-center justify-between'} pb-2 border-b border-slate-100`}>
+-            <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+-              <Logo size={24} />
+-              {!sidebarCollapsed && (
+-                <div>
+-                  <h1 className="text-sm font-bold tracking-tight text-slate-900 font-display">FX Journal Pro</h1>
+-                </div>
+-              )}
+-            </div>
+-            <div className="flex items-center gap-1">
+-              {/* Mobile close toggle */}
+-              <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-slate-700 text-xs p-1">
+-                Ô£ò
+-              </button>
+-              {/* Desktop collapse toggle (3 lines / expand menu) */}
+-              <button 
+-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)} 
+-                className="hidden md:flex text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 p-1.5 rounded transition"
+-                title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+-              >
+-                <Menu className="h-4 w-4" />
+-              </button>
+-            </div>
++    <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#FBFBFA]/40 font-sans antialiased text-slate-800 flex flex-col">
++      {/* Unified Top Header */}
++      <header className="fixed top-0 left-0 right-0 h-[60px] z-[50] bg-[#FBFBFA]/90 dark:bg-slate-950/90 backdrop-blur-xl px-5 flex items-center justify-between">
++        {/* Top Left: Logo & Brand */}
++        <div className="flex items-center gap-2.5">
++          <Logo size={28} />
++          <div className="text-[14px] font-extrabold leading-tight text-slate-800 dark:text-slate-200 tracking-wide uppercase">
++            FXJournalPro
+           </div>
++        </div>
++        
++        {/* Top Right: Actions */}
++        <div className="flex items-center gap-3">
++          {/* Theme Toggle */}
++          <button
++            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
++            className="p-1.5 border border-slate-200/80 rounded-lg hover:bg-slate-50 transition text-slate-500 dark:border-white/10 dark:hover:bg-slate-900/40 shadow-xs dark:text-slate-400 flex items-center justify-center"
++            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
++          >
++            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
++          </button>
+ 
+-          {/* Active Workspace Switcher */}
+-          <div className={`bg-[#f4f4f3] border border-slate-200/40 rounded-lg ${sidebarCollapsed ? 'p-1.5 text-center flex flex-col items-center gap-1' : 'p-2.5'}`} title="Active Portfolio">
+-            {sidebarCollapsed ? (
+-              <button
+-                onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
+-                className="text-slate-600 hover:text-slate-900 bg-white/80 hover:bg-white p-2 rounded-md transition duration-150 shadow-2xs"
+-                title="Manage Portfolio Accounts"
+-              >
+-                ­ƒÆ╝
+-              </button>
+-            ) : (
+-              <>
+-                <div className="flex items-center justify-between mb-1">
+-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Active Portfolio</span>
+-                  <button
+-                    onClick={() => { 
+-                      setShowAccountModal(true); 
+-                      setAccountCreationMethod('select'); 
+-                    }}
+-                    title="Connect New Portfolio Account"
+-                    className="text-slate-400 hover:text-slate-900 hover:bg-slate-200/50 p-1 rounded transition duration-150"
++          {/* Notification Bell */}
++          <div className="relative">
++            <button 
++              onClick={() => { setShowMobileNavNotifications(!showMobileNavNotifications); setShowMobileNavProfile(false); }}
++              className="p-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors relative"
++            >
++              <Bell className="h-5 w-5" />
++              {/* We'll assume a dummy notifications array of length 0 for now. In a real app, check notifications.length > 0 */}
++              {false && (
++                <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#FBFBFA] dark:border-slate-900"></span>
++              )}
++            </button>
++            
++            {/* Notification Dropdown */}
++            {showMobileNavNotifications && (
++              <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
++                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
++                  <h3 className="font-bold text-sm">Notifications</h3>
++                  <button 
++                    onClick={() => setShowMobileNavNotifications(false)}
++                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                   >
+-                    <Plus className="h-3 w-3" />
++                    <X className="h-4 w-4" />
+                   </button>
+                 </div>
+-                <select
+-                  value={selectedAccountId}
+-                  onChange={handleAccountChange}
+-                  className="w-full bg-transparent border-none text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer pr-2 select-none"
+-                >
+-                  {accounts.map(acc => (
+-                    <option key={acc.id} value={acc.id}>
+-                      ­ƒÆ╝ {acc.name} ({acc.platform})
+-                    </option>
+-                  ))}
+-                  {accounts.length === 0 && <option value="">No Accounts Registered</option>}
+-                </select>
+-              </>
++                <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
++                  <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
++                  <p>No new notifications</p>
++                </div>
++              </div>
++            )}
++          </div>
++          
++          {/* User Profile */}
++          <div className="relative">
++            <button 
++              onClick={() => { setShowMobileNavProfile(!showMobileNavProfile); setShowMobileNavNotifications(false); }}
++              className="p-0.5 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-white"
++            >
++              <div className="bg-[#FBFBFA] dark:bg-slate-900 rounded-full p-0.5">
++                <User className="h-4 w-4 text-slate-700 dark:text-slate-300" />
++              </div>
++            </button>
++            
++            {/* Profile Dropdown */}
++            {showMobileNavProfile && (
++              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
++                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
++                  <p className="font-bold text-sm truncate">Hello, {user?.name || 'Trader'}</p>
++                </div>
++                <div className="p-2 space-y-1">
++                  <button onClick={() => { setActiveTab('settings'); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2">
++                    <Shield className="h-4 w-4" /> Account Settings
++                  </button>
++
++                  <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
++                  <button onClick={() => { handleLogout(); setShowMobileNavProfile(false); }} className="w-full text-left px-3 py-2 text-sm text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2">
++                    <LogOut className="h-4 w-4" /> Logout
++                  </button>
++                </div>
++              </div>
+             )}
+           </div>
++        </div>
++      </header>
++      
++      <div className="flex flex-1 md:overflow-hidden relative pt-[60px]">
++      {/* Sidebar Navigation */}
++      <aside className={`hidden md:flex bg-white dark:bg-slate-950 border-r border-slate-200/80 dark:border-slate-800/80 flex-shrink-0 flex-col items-center justify-between z-20 md:h-full overflow-hidden ${desktopSidebarOpen ? 'w-64' : 'w-24 items-center'} py-5`}>
++        <div className={`space-y-6 w-full flex flex-col ${desktopSidebarOpen ? 'items-start px-6' : 'items-center'}`}>
++          <div className={`flex w-full ${desktopSidebarOpen ? 'justify-end' : 'justify-center'} mb-2`}>
++            <button
++              onClick={() => setDesktopSidebarOpen(!desktopSidebarOpen)}
++              className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all"
++              title="Toggle Sidebar"
++            >
++              <Menu className="h-6 w-6" />
++            </button>
++          </div>
+ 
+           {/* Primary Sidebar Links */}
+-          <nav className={`space-y-1.5 ${sidebarCollapsed ? 'flex flex-col items-center' : ''}`}>
++          <nav className="flex flex-col gap-2 w-full px-2">
+             {isAdmin && (
+               <button
+                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
+                 title="Admin Panel"
+-                className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                  sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+-                } ${
+-                  activeTab === 'admin' ? 'bg-[#efefee] text-slate-900' : 'text-red-500 hover:bg-red-50 hover:text-red-600'
++                className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                  activeTab === 'admin' 
++                    ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
++                    : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
+                 }`}
+               >
+-                <Shield className="h-4 w-4 text-red-500" />
+-                {!sidebarCollapsed && 'Admin Panel'}
++                <Shield className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++                <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Admin</span>
+               </button>
+             )}
+             
+             <button
+               onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
+               title="Dashboard"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+-              } ${
+-                activeTab === 'dashboard' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'dashboard' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <BarChart3 className="h-4 w-4 text-slate-500" />
+-              {!sidebarCollapsed && 'Dashboard'}
++              <BarChart3 className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Dashboard</span>
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('journal'); setMobileMenuOpen(false); }}
+               title="Trading Journal"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+-              } ${
+-                activeTab === 'journal' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'journal' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+-                <BookOpen className="h-4 w-4 text-slate-500" />
+-                {!sidebarCollapsed && 'Trading Journal'}
+-              </span>
++              <BookOpen className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Journal</span>
+               {trades.length > 0 && (
+-                sidebarCollapsed ? (
+-                  <span className="absolute -top-1 -right-1 text-[8px] bg-slate-200 text-slate-700 px-1 rounded-full font-mono font-bold">
+-                    {trades.length}
+-                  </span>
+-                ) : (
+-                  <span className="text-[10px] bg-slate-200/80 text-slate-600 px-1.5 py-0.5 rounded font-mono font-medium">
+-                    {trades.length}
+-                  </span>
+-                )
++                <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1 right-1'} flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-blue-500 text-white rounded-full font-bold shadow-sm`}>
++                  {trades.length}
++                </span>
+               )}
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('accounts'); setMobileMenuOpen(false); }}
+               title="Portfolio Accounts"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+-              } ${
+-                activeTab === 'accounts' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'accounts' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+-                <Layers className="h-4 w-4 text-slate-500" />
+-                {!sidebarCollapsed && 'Accounts'}
+-              </span>
++              <Layers className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Accounts</span>
+               {accounts.length > 0 && (
+-                sidebarCollapsed ? (
+-                  <span className="absolute -top-1 -right-1 text-[8px] bg-slate-200 text-slate-700 px-1 rounded-full font-mono font-bold">
+-                    {accounts.length}
+-                  </span>
+-                ) : (
+-                  <span className="text-[10px] bg-slate-200/80 text-slate-600 px-1.5 py-0.5 rounded font-mono font-medium">
+-                    {accounts.length}
+-                  </span>
+-                )
++                <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1 right-1'} flex h-3.5 w-3.5 items-center justify-center text-[7px] bg-emerald-500 text-white rounded-full font-bold shadow-sm`}>
++                  {accounts.length}
++                </span>
+               )}
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
+               title="Analytics"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+-              } ${
+-                activeTab === 'analytics' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'analytics' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <TrendingUp className="h-4 w-4 text-slate-500" />
+-              {!sidebarCollapsed && 'Analytics'}
++              <TrendingUp className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Analytics</span>
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('calendar'); setMobileMenuOpen(false); }}
+               title="Calendar"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+-              } ${
+-                activeTab === 'calendar' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'calendar' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <Calendar className="h-4 w-4 text-slate-500" />
+-              {!sidebarCollapsed && 'Calendar'}
++              <Calendar className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Calendar</span>
+             </button>
+ 
+             <button
+               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
+-              title="FX News & Economic Calendar"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+-              } ${
+-                activeTab === 'fxnews' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              title="FX News"
++              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'fxnews' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+-                <Newspaper className={`h-4 w-4 ${activeTab === 'fxnews' ? 'text-blue-600' : 'text-blue-500'}`} />
+-                {!sidebarCollapsed && 'FX News'}
+-              </span>
+-              {!sidebarCollapsed && (
+-                <span className="text-[8px] bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+-                  NEW
+-                </span>
+-              )}
+-              {sidebarCollapsed && (
+-                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-blue-500 rounded-full" />
+-              )}
++              <Newspaper className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'fxnews' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>FX News</span>
++              <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1.5 right-1.5'} h-1.5 w-1.5 bg-blue-500 rounded-full`} />
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('mt5'); setMobileMenuOpen(false); }}
+               title="MT5 Sync"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+-              } ${
+-                activeTab === 'mt5' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'mt5' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <Terminal className="h-4 w-4 text-slate-500" />
+-              {!sidebarCollapsed && 'MT5 Sync'}
++              <Terminal className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>MT5 Sync</span>
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('tools'); setMobileMenuOpen(false); }}
+               title="Tools"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+-              } ${
+-                activeTab === 'tools' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
++              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'tools' 
++                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+               }`}
+             >
+-              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+-                <Wrench className={`h-4 w-4 ${activeTab === 'tools' ? 'text-emerald-600' : 'text-emerald-500'}`} />
+-                {!sidebarCollapsed && 'Tools'}
+-              </span>
+-              {!sidebarCollapsed && (
+-                <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+-                  NEW
+-                </span>
+-              )}
+-              {sidebarCollapsed && (
+-                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-emerald-500 rounded-full" />
+-              )}
++              <Wrench className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Tools</span>
++              <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1.5 right-1.5'} h-1.5 w-1.5 bg-emerald-500 rounded-full`} />
+             </button>
+ 
+             <button
+               onClick={() => { setActiveTab('insights'); setMobileMenuOpen(false); }}
+               title="AI Mentor"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center relative' : 'w-full text-left py-1.5 px-2.5 justify-between'
+-              } ${
+-                activeTab === 'insights' ? 'bg-[#efefee] text-[#4f46e5]' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-[#4f46e5]'
++              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
++                activeTab === 'insights' 
++                  ? 'bg-slate-200 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 dark:shadow-[inset_0_1px_1px_rgba(99,102,241,0.2),0_0_20px_rgba(99,102,241,0.1)] dark:border dark:border-indigo-500/20 shadow-sm transform dark:scale-105' 
++                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-indigo-600 dark:hover:text-indigo-400'
+               }`}
+             >
+-              <span className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+-                <Brain className="h-4 w-4 text-indigo-500" />
+-                {!sidebarCollapsed && 'AI Mentor'}
+-              </span>
+-              {!sidebarCollapsed && (
+-                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider text-[8px]">
+-                  AI
+-                </span>
+-              )}
+-              {sidebarCollapsed && (
+-                <span className="absolute top-0 right-0 h-1.5 w-1.5 bg-indigo-600 rounded-full animate-ping" />
+-              )}
++              <Brain className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'insights' ? 'text-indigo-600 dark:text-indigo-400' : 'text-indigo-500'}`} />
++              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>AI Mentor</span>
++              <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1 right-1'} h-1 w-1 bg-indigo-500 rounded-full animate-ping`} />
+             </button>
+ 
+-            <button
+-              onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
+-              title="Settings"
+-              className={`text-xs font-semibold transition flex items-center rounded-lg ${
+-                sidebarCollapsed ? 'p-2.5 justify-center' : 'w-full text-left py-1.5 px-2.5 gap-2.5'
+-              } ${
+-                activeTab === 'settings' ? 'bg-[#efefee] text-slate-900' : 'text-slate-600 hover:bg-[#efefee]/60 hover:text-slate-900'
+-              }`}
+-            >
+-              <Shield className="h-4 w-4 text-slate-500" />
+-              {!sidebarCollapsed && 'Settings'}
+-            </button>
+           </nav>
+         </div>
+-
+-        {/* User profile strip and signout */}
+-        <div className="border-t border-slate-200/60 pt-4 mt-auto">
+-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center p-0' : 'gap-2.5 p-1'}`}>
+-            <div className="h-8 w-8 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-xs uppercase" title={`${user.name} (${user.email})`}>
+-              {user.name.substring(0,2)}
+-            </div>
+-            {!sidebarCollapsed && (
+-              <div className="overflow-hidden flex-1">
+-                <span className="font-bold text-xs text-slate-800 block truncate">{user.name}</span>
+-                <span className="text-[10px] text-slate-400 block truncate">{user.email}</span>
+-              </div>
+-            )}
+-          </div>
+-          {!sidebarCollapsed && (
+-            <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+-              <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+-                user.isPro ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+-              }`}>
+-                {user.isPro ? <Star className="h-2 w-2 fill-blue-700" /> : null}
+-                {user.isPro ? 'Pro Member' : 'Free Account'}
+-              </span>
+-              {!user.isPro && (
+-                <button 
+-                  onClick={handleUpgradeToPro} 
+-                  className="text-[9px] text-blue-600 hover:text-blue-700 font-bold underline"
+-                >
+-                  Upgrade
+-                </button>
+-              )}
+-            </div>
+-          )}
+-          <button
+-            onClick={handleLogout}
+-            title="Sign Out"
+-            className={`transition flex items-center text-slate-500 hover:text-rose-600 ${
+-              sidebarCollapsed ? 'justify-center p-2.5 mt-2 bg-slate-50 hover:bg-rose-50 rounded-lg mx-auto' : 'w-full text-left mt-3 py-1.5 px-2 hover:bg-rose-50 rounded-lg text-xs font-semibold gap-2'
+-            }`}
+-          >
+-            <LogOut className="h-4 w-4" />
+-            {!sidebarCollapsed && 'Sign Out'}
+-          </button>
+-        </div>
+       </aside>
+ 
+       {/* Main Content Area */}
+       <main 
+-        className="flex-1 overflow-y-auto md:h-full bg-[#FBFBFA] p-6 md:p-12 space-y-8"
++        className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6 pb-24 md:pb-6 md:p-12 space-y-8"
+         onScroll={handleMainScroll}
+       >
+         
++
+         {/* Dynamic Plain Title bar */}
+-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+-          <div className="flex items-center gap-3">
+-            <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-slate-600 p-1 hover:bg-slate-50 rounded">
+-              Ôÿ░
+-            </button>
++        <div className="flex items-start justify-between gap-4 w-full">
++          <div className="flex-1 min-w-0">
+             <div>
+-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 font-display">
+-                {activeTab === 'dashboard' ? 'Dashboard' :
++              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-display truncate">
++                {activeTab === 'dashboard' ? `Hello, ${user?.name || 'Trader'}` :
+                  activeTab === 'journal' ? 'Trading Journal' :
+-                 activeTab === 'accounts' ? 'Portfolio Accounts (Updated)' :
++                 activeTab === 'accounts' ? 'Portfolio Accounts' :
+                  activeTab === 'analytics' ? 'Performance Analytics' :
+                  activeTab === 'calendar' ? 'Trading Calendar' :
+                  activeTab === 'fxnews' ? 'FX News' :
+@@ -3389,7 +3379,7 @@ export default function App() {
+                  activeTab === 'tools' ? 'Tools' :
+                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
+               </h1>
+-              <p className="text-xs text-slate-400 mt-1">
++              <p className="text-xs text-slate-400 mt-1 line-clamp-2 sm:line-clamp-1">
+                 {activeTab === 'dashboard' ? 'Welcome back! Here\'s an overview of your trading performance.' :
+                  activeTab === 'journal' ? 'Inline workspace database to log, filter, and audit trading setups.' :
+                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
+@@ -3404,64 +3394,43 @@ export default function App() {
+             </div>
+           </div>
+ 
+-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+-            <button
+-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+-              className="p-2 border border-slate-200/80 rounded-lg hover:bg-slate-50 transition text-slate-500 dark:border-white/10 dark:hover:bg-slate-900/40 flex items-center justify-center shadow-xs"
+-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+-            >
+-              {theme === 'dark' ? (
+-                <Sun className="h-4 w-4 text-amber-400" />
+-              ) : (
+-                <Moon className="h-4 w-4 text-indigo-600" />
+-              )}
+-            </button>
+-            {isPortfolioGuardOn && (
+-              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-2xs">
+-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+-                <span>Risk Guard Active</span>
+-              </span>
+-            )}
+-            <div className="relative">
+-              {/* Original Button */}
+-              <button
+-                onClick={() => handleOpenTradeModal()}
+-                disabled={accounts.length === 0}
+-                data-tour="add-trade"
+-                className={`group relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg py-2 px-5 transition-all duration-300 flex items-center gap-1.5 disabled:opacity-50 shadow-md hover:shadow-lg shadow-indigo-500/30 border border-white/10 ${
+-                  isScrolled ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
+-                }`}
+-              >
+-                <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
+-                <Plus className="h-4 w-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+-                <span className="relative z-10">Add New Trade</span>
+-              </button>
++          <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-0.5">
++
++            <div className="flex flex-col items-end gap-2">
++              <div className="relative flex items-center justify-end w-full">
++                {/* Original Button */}
++                <button
++                  onClick={() => handleOpenTradeModal()}
++                  disabled={accounts.length === 0}
++                  data-tour="add-trade"
++                  className={`group relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg py-2 px-5 transition-all duration-300 flex items-center gap-1.5 disabled:opacity-50 shadow-md hover:shadow-lg shadow-indigo-500/30 border border-white/10 ${
++                    (isScrolled && activeTab !== 'journal') ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
++                  }`}
++                >
++                  <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
++                  <Plus className="h-4 w-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
++                  <span className="relative z-10">Add New Trade</span>
++                </button>
++  
++                {/* Floating Button (Appears on Scroll) */}
++                <button
++                  onClick={() => handleOpenTradeModal()}
++                  disabled={accounts.length === 0}
++                  className={`group hidden md:flex fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] items-center gap-2 border border-white/20 overflow-hidden ${
++                    (isScrolled && activeTab !== 'journal')
++                      ? 'bottom-8 right-8 scale-100 translate-y-0 opacity-100 hover:scale-105' 
++                      : 'bottom-0 right-8 scale-50 translate-y-16 opacity-0 pointer-events-none'
++                  }`}
++                >
++                  <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
++                  <Plus className="h-5 w-5 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
++                  <span className="text-sm shadow-sm relative z-10">Add New Trade</span>
++                </button>
++              </div>
++
+ 
+-              {/* Floating Button (Appears on Scroll) */}
+-              <button
+-                onClick={() => handleOpenTradeModal()}
+-                disabled={accounts.length === 0}
+-                className={`group fixed z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-full py-3.5 px-6 shadow-2xl shadow-indigo-500/40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center gap-2 border border-white/20 overflow-hidden ${
+-                  isScrolled 
+-                    ? 'bottom-8 right-8 scale-100 translate-y-0 opacity-100 hover:scale-105' 
+-                    : 'bottom-0 right-8 scale-50 translate-y-16 opacity-0 pointer-events-none'
+-                }`}
+-              >
+-                <div className="absolute inset-0 bg-white/20 -translate-x-[150%] skew-x-[-25deg] group-hover:animate-[shine_1.5s_ease-in-out]"></div>
+-                <Plus className="h-5 w-5 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+-                <span className="text-sm shadow-sm relative z-10">Add New Trade</span>
+-              </button>
+             </div>
+-            {activeTab === 'journal' && (
+-              <button
+-                onClick={() => { setShowPasteModal(true); setPasteRawText(''); setParsedTrades([]); }}
+-                disabled={accounts.length === 0}
+-                className="border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg py-2 px-4 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+-              >
+-                <Terminal className="h-4 w-4" />
+-                Paste from MT5
+-              </button>
+-            )}
++
+           </div>
+         </div>
+ 
+@@ -3976,6 +3945,30 @@ export default function App() {
+                     <option value="Revenge">Revenge</option>
+                   </select>
+ 
++                  {(() => {
++                    const tradesWithExit = filteredTrades.filter(t => t.exitTime);
++                    if (tradesWithExit.length === 0) return null;
++                    const totalDuration = tradesWithExit.reduce((acc, t) => {
++                      return acc + (new Date(t.exitTime!).getTime() - new Date(t.date).getTime());
++                    }, 0);
++                    const avgDurationMs = totalDuration / tradesWithExit.length;
++                    const days = Math.floor(avgDurationMs / (1000 * 60 * 60 * 24));
++                    const hours = Math.floor((avgDurationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
++                    const minutes = Math.floor((avgDurationMs % (1000 * 60 * 60)) / (1000 * 60));
++                    
++                    let formatAvg = '';
++                    if (days > 0) formatAvg += `${days}d `;
++                    if (hours > 0) formatAvg += `${hours}h `;
++                    formatAvg += `${minutes}m`;
++
++                    return (
++                      <div className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-400 rounded-lg text-xs font-semibold whitespace-nowrap">
++                        <Clock className="h-3.5 w-3.5" />
++                        Avg Hold: {formatAvg}
++                      </div>
++                    );
++                  })()}
++
+                   {(journalFilterSymbol || journalFilterEmotion || searchQuery) && (
+                     <button
+                       onClick={() => { setJournalFilterSymbol(''); setJournalFilterEmotion(''); setSearchQuery(''); }}
+@@ -4006,82 +3999,124 @@ export default function App() {
+                 </div>
+               </div>
+ 
+-              {/* Big log Table with Scrollable Box container */}
+-              <div className="max-h-[500px] overflow-y-auto overflow-x-auto border border-slate-100 rounded-xl relative shadow-inner">
+-                <table className="w-full text-left border-collapse text-xs">
+-                  <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-100">
+-                    <tr className="text-slate-500 uppercase font-bold text-[10px]">
+-                      <th className="py-3 pl-4">Execution Date</th>
+-                      <th className="py-3">Symbol</th>
+-                      <th className="py-3">Type</th>
+-                      <th className="py-3">Lot Size</th>
+-                      <th className="py-3">Entry & Exit Price</th>
+-                      <th className="py-3">Emotion State</th>
+-                      <th className="py-3">Net Profit</th>
+-                      <th className="py-3 text-right pr-4">Action</th>
++              {/* Journal View Content */}
++              {(() => {
++                const tradesPerPage = 7;
++                const totalPages = Math.max(Math.ceil(filteredTrades.length / tradesPerPage), 1);
++                const validPage = Math.min(Math.max(journalPage, 1), totalPages);
++                const startIndex = (validPage - 1) * tradesPerPage;
++                const paginatedTrades = filteredTrades.slice(startIndex, startIndex + tradesPerPage);
++                
++                return (
++                  <div className="space-y-4">
++                    {/* Big log Table (Desktop) */}
++                    <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-[#1f2937] rounded-xl relative shadow-xl dark:shadow-2xl bg-white dark:bg-[#0a0d14]">
++                <table className="w-full text-center border-collapse text-xs">
++                  <thead className="sticky top-0 bg-slate-50 dark:bg-[#0a0d14] z-10 border-b border-slate-200 dark:border-[#1f2937]">
++                    <tr className="text-slate-900 dark:text-white font-bold text-[11.5px] tracking-wide">
++                      <th className="py-4 px-4 font-bold text-center">Symbol</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Type</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Entry</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Exit</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Entry Time</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Exit Time</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Volume</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Net Profit</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Emotion</th>
++                      <th className="py-4 px-4 font-bold border-l border-slate-200 dark:border-[#1f2937] text-center">Action</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+-                    {filteredTrades.map((t) => (
+-                      <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
+-                        <td className="py-3 pl-4 text-slate-500 whitespace-nowrap">
+-                          {new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+-                          {t.isMt5Sync && (
+-                            <span className="ml-1.5 inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 text-[9px] font-extrabold px-1 rounded uppercase tracking-wider">
+-                              <Radio className="h-2 w-2 animate-pulse" /> Sync
++                    {paginatedTrades.map((t) => {
++                      const entryDate = new Date(t.date);
++                      const exitDate = t.exitTime ? new Date(t.exitTime) : null;
++                      return (
++                        <tr key={t.id} className="border-b border-slate-100 dark:border-[#1f2937] hover:bg-slate-50 dark:hover:bg-white/[0.02] transition">
++                          <td className="py-4 px-4 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap text-center">
++                            {t.symbol}
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
++                            <span className={`inline-flex items-center justify-center px-4 py-1.5 rounded-full text-[11px] font-bold ${
++                              t.type === 'Buy' || t.type === 'buy' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
++                            }`}>
++                              {t.type}
+                             </span>
+-                          )}
+-                        </td>
+-                        <td className="py-3 font-bold text-slate-900">{t.symbol}</td>
+-                        <td className="py-3">
+-                          <span className={`font-semibold px-2 py-0.5 rounded ${
+-                            t.type === 'Buy' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+-                          }`}>
+-                            {t.type}
+-                          </span>
+-                        </td>
+-                        <td className="py-3 font-mono font-medium text-slate-600">{t.lotSize}</td>
+-                        <td className="py-3 font-mono text-slate-500 whitespace-nowrap">
+-                          {t.entryPrice} ÔåÆ {t.exitPrice}
+-                        </td>
+-                        <td className="py-3">
+-                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+-                            t.emotion === 'Calm' ? 'bg-slate-100 text-slate-700' :
+-                            t.emotion === 'Anxious' || t.emotion === 'Revenge' ? 'bg-rose-50 text-rose-700' :
+-                            t.emotion === 'Excited' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+-                          }`}>
+-                            {t.emotion || 'Calm'}
+-                          </span>
+-                        </td>
+-                        <td className="py-3">
+-                          <span className={`font-extrabold ${t.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+-                            {t.profit >= 0 ? '+' : ''}{formatValue(t.profit)}
+-                          </span>
+-                        </td>
+-                        <td className="py-3 text-right pr-4">
+-                          <div className="flex items-center justify-end gap-1">
+-                            <button
+-                              onClick={() => handleOpenTradeModal(t)}
+-                              className="p-1 hover:bg-slate-100 rounded text-slate-500"
+-                              title="Edit position details"
+-                            >
+-                              <Edit3 className="h-3.5 w-3.5" />
+-                            </button>
+-                            <button
+-                              onClick={() => handleDeleteTrade(t.id)}
+-                              className="p-1 hover:bg-rose-50 rounded text-rose-600"
+-                              title="Delete position"
+-                            >
+-                              <Trash2 className="h-3.5 w-3.5" />
+-                            </button>
+-                          </div>
+-                        </td>
+-                      </tr>
+-                    ))}
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] font-medium text-slate-700 dark:text-slate-300 text-center">
++                            {t.entryPrice}
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] font-medium text-slate-700 dark:text-slate-300 text-center">
++                            {t.exitPrice}
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-slate-700 dark:text-slate-300 text-center">
++                            <div className="flex flex-col items-center justify-center gap-0.5">
++                              <span className="font-medium text-[11.5px]">{entryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
++                              <span className="text-[10px] text-slate-500 dark:text-slate-400">{entryDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
++                            </div>
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-slate-700 dark:text-slate-300 text-center">
++                            {exitDate ? (
++                              <div className="flex flex-col items-center justify-center gap-0.5">
++                                <span className="font-medium text-[11.5px]">{exitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
++                                <span className="text-[10px] text-slate-500 dark:text-slate-400">{exitDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
++                              </div>
++                            ) : (
++                              <span className="font-medium text-slate-400 dark:text-slate-500">-</span>
++                            )}
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] font-medium text-slate-700 dark:text-slate-300 text-center">
++                            {t.lotSize}
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
++                            <span className={`font-medium ${t.profit >= 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'}`}>
++                              {t.profit >= 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(t.profit)}
++                            </span>
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
++                            <div className="flex items-center justify-center gap-2">
++                              {t.emotion ? (
++                                <span className="text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full">
++                                  {t.emotion}
++                                </span>
++                              ) : (
++                                <span className="text-slate-400 dark:text-slate-600">-</span>
++                              )}
++                              {t.notes && (
++                                <button 
++                                  onClick={(e) => { e.stopPropagation(); setSelectedNote(t.notes || ''); }}
++                                  className="text-slate-400 hover:text-blue-500 transition-colors ml-1"
++                                  title="Read Note"
++                                >
++                                  <MessageSquare className="h-3.5 w-3.5" />
++                                </button>
++                              )}
++                            </div>
++                          </td>
++                          <td className="py-4 px-4 border-l border-slate-100 dark:border-[#1f2937] text-center">
++                            <div className="flex items-center justify-center gap-3">
++                              <button
++                                onClick={() => handleOpenTradeModal(t)}
++                                className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition"
++                                title="Edit position details"
++                              >
++                                <Edit3 className="h-4 w-4" />
++                              </button>
++                              <button
++                                onClick={() => handleDeleteTrade(t.id)}
++                                className="text-rose-500/80 hover:text-rose-600 dark:hover:text-rose-500 transition"
++                                title="Delete position"
++                              >
++                                <Trash2 className="h-4 w-4" />
++                              </button>
++                            </div>
++                          </td>
++                        </tr>
++                      );
++                    })}
+ 
+-                    {filteredTrades.length === 0 && (
++                    {paginatedTrades.length === 0 && (
+                       <tr>
+-                        <td colSpan={9} className="text-center py-10 text-slate-400">
++                        <td colSpan={10} className="text-center py-10 text-slate-500">
+                           No matching recorded trades. Clear filters or add your first position.
+                         </td>
+                       </tr>
+@@ -4089,6 +4124,77 @@ export default function App() {
+                   </tbody>
+                 </table>
+               </div>
++
++              {/* Mobile Trades List (Reference Image Style) */}
++              <div className="md:hidden flex flex-col space-y-0 mt-2 border-t border-slate-100 dark:border-slate-800 -mx-6 px-6">
++                {paginatedTrades.map(t => (
++                  <div 
++                    key={t.id} 
++                    onClick={() => handleOpenTradeModal(t)} 
++                    className="flex flex-col py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 active:bg-slate-50 dark:active:bg-slate-800/50 cursor-pointer transition-colors"
++                  >
++                    <div className="flex items-center justify-between mb-1.5">
++                      <span className="font-extrabold text-[14px] text-slate-800 dark:text-slate-200 tracking-wide uppercase">{t.symbol}</span>
++                      <span className={`font-bold text-[13px] ${t.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
++                        {t.profit >= 0 ? '+' : ''}{formatValue(t.profit)}
++                      </span>
++                    </div>
++                    <div className="flex items-center gap-1.5 mb-3">
++                      <span className={`font-bold text-[11px] ${t.type === 'Buy' || t.type === 'buy' ? 'text-blue-500 dark:text-blue-400' : 'text-rose-500 dark:text-rose-400'} uppercase tracking-wide`}>{t.type}</span>
++                      <span className="text-[12px] text-slate-500 dark:text-slate-400">{t.lotSize} lots</span>
++                      {t.emotion && <span className="ml-2 text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full">{t.emotion}</span>}
++                      {t.notes && <button onClick={(e) => { e.stopPropagation(); setSelectedNote(t.notes || ''); }} className="ml-1 text-slate-400 hover:text-blue-500 transition-colors" title="Read Note"><MessageSquare className="h-3.5 w-3.5" /></button>}
++                    </div>
++                    <div className="flex items-center justify-between">
++                      <div className="flex items-center text-[12px] text-slate-600 dark:text-slate-300 font-mono">
++                        <span>{t.entryPrice}</span>
++                        <span className="mx-2 text-slate-400">&rarr;</span>
++                        <span>{t.exitPrice}</span>
++                      </div>
++                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
++                        {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
++                        <ChevronRight className="h-3.5 w-3.5 opacity-60" />
++                      </div>
++                    </div>
++                  </div>
++                ))}
++                {paginatedTrades.length === 0 && (
++                  <div className="text-center py-10 text-slate-400 text-sm">
++                    No matching recorded trades. Clear filters or add your first position.
++                  </div>
++                )}
++              </div>
++
++              {/* Pagination Controls */}
++              {filteredTrades.length > 0 && (
++                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2 pt-4">
++                  <div className="text-xs text-slate-500 font-medium">
++                    Showing <span className="text-slate-900 dark:text-white font-bold">{startIndex + 1}</span> to <span className="text-slate-900 dark:text-white font-bold">{Math.min(startIndex + tradesPerPage, filteredTrades.length)}</span> of <span className="text-slate-900 dark:text-white font-bold">{filteredTrades.length}</span> trades
++                  </div>
++                  <div className="flex items-center gap-3">
++                    <button
++                      onClick={() => setJournalPage(p => Math.max(1, p - 1))}
++                      disabled={validPage === 1}
++                      className="px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition"
++                    >
++                      Previous
++                    </button>
++                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
++                      Page {validPage} of {totalPages}
++                    </span>
++                    <button
++                      onClick={() => setJournalPage(p => Math.min(totalPages, p + 1))}
++                      disabled={validPage === totalPages}
++                      className="px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition"
++                    >
++                      Next
++                    </button>
++                  </div>
++                </div>
++              )}
++            </div>
++          );
++        })()}
+             </div>
+           </div>
+         )}
+@@ -4105,56 +4211,87 @@ export default function App() {
+ 
+         {/* 4. PORTFOLIO ACCOUNTS VIEW */}
+         {activeTab === 'accounts' && (
+-          <div className="space-y-6">
+-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+-              
+-              {/* Account cards */}
+-              {accounts.map((acc) => {
++          <div className="space-y-5 max-w-7xl">
++
++            {/* Universal View: Grid */}
++            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
++              {accounts.length === 0 && (
++                <div className="col-span-full py-16 text-center text-slate-500 text-sm border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
++                  No accounts connected yet.
++                </div>
++              )}
++              {accounts.map((acc, idx) => {
+                 const isActive = acc.id === selectedAccountId;
+-                const accountProfit = acc.currentBalance - acc.startingBalance;
++                const plReturn = acc.currentBalance - acc.startingBalance;
++                
++                const cur = acc.currency || 'USD';
++                const formatCur = (val: number) => {
++                  try {
++                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(val);
++                  } catch {
++                    return `${cur} ${val.toFixed(2)}`;
++                  }
++                };
++
++                const startingCapitalStr = formatCur(acc.startingBalance);
++                const currentBalanceStr = formatCur(acc.currentBalance);
++                
++                // Format P/L Return with + or - sign
++                const formattedPlReturn = formatCur(Math.abs(plReturn));
++                const plReturnStr = plReturn >= 0 ? `+${formattedPlReturn}` : `-${formattedPlReturn}`;
++
+                 return (
+-                  <div 
+-                    key={acc.id} 
+-                    className={`bg-white border rounded-xl p-6 relative transition duration-200 flex flex-col justify-between space-y-4 ${
+-                      isActive ? 'border-slate-900 ring-1 ring-slate-900 shadow-xs' : 'border-slate-100 hover:border-slate-200'
+-                    }`}
++                  <div
++                    key={acc.id}
++                    className={`rounded-2xl border flex flex-col overflow-hidden transition-all duration-300 ${
++                      theme === 'dark' 
++                        ? 'bg-[#0f1117] border-white/5 shadow-xl' 
++                        : 'bg-white border-slate-200 shadow-sm'
++                    } ${isActive ? (theme === 'dark' ? 'ring-1 ring-blue-500/50 shadow-blue-500/10' : 'ring-1 ring-blue-500 shadow-md') : 'hover:shadow-md'}`}
+                   >
+-                    <div className="space-y-2">
+-                      <div className="flex justify-between items-start">
+-                        <div>
+-                          <h4 className="font-extrabold text-slate-900 text-sm">{acc.name}</h4>
+-                          <span className="text-[10px] text-slate-400 block font-semibold">{acc.broker} ÔÇó {acc.platform}{acc.institutionType ? ` ÔÇó ${acc.institutionType}` : ''}</span>
+-                        </div>
+-                        <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+-                          acc.accountType === 'Live' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
++                    {/* Header */}
++                    <div className="p-5 pb-4 border-b border-slate-100 dark:border-white/5">
++                      <div className="flex items-center justify-between mb-1.5">
++                        <span className={`text-[16px] font-extrabold truncate ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
++                          {acc.name}
++                        </span>
++                        <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
++                          acc.accountType === 'Live' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-500/10 text-slate-500'
+                         }`}>
+                           {acc.accountType}
+                         </span>
+                       </div>
++                      <p className={`text-[11px] font-medium truncate ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
++                        {acc.broker || 'B'} ÔÇó {acc.platform || 'MT5'} {acc.institutionType ? `ÔÇó ${acc.institutionType}` : ''}
++                      </p>
++                    </div>
+ 
+-                      <div className="pt-3 border-t border-slate-50 space-y-1">
+-                        <div className="flex justify-between text-xs">
+-                          <span className="text-slate-400">Starting Capital</span>
+-                          <span className="font-mono text-slate-700 font-bold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency }).format(acc.startingBalance)}</span>
+-                        </div>
+-                        <div className="flex justify-between text-xs">
+-                          <span className="text-slate-400">Current Balance</span>
+-                          <span className="font-mono text-slate-900 font-extrabold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency }).format(acc.currentBalance)}</span>
+-                        </div>
+-                        <div className="flex justify-between text-xs">
+-                          <span className="text-slate-400">P/L Return</span>
+-                          <span className={`font-mono font-bold ${accountProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+-                            {accountProfit >= 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: acc.currency }).format(accountProfit)}
+-                          </span>
+-                        </div>
++                    {/* Stats */}
++                    <div className="px-5 py-5 space-y-3 flex-1 text-[13px]">
++                      <div className="flex items-center justify-between">
++                        <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Starting Capital</span>
++                        <span className={`font-mono font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{startingCapitalStr}</span>
++                      </div>
++                      <div className="flex items-center justify-between">
++                        <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Current Balance</span>
++                        <span className={`font-mono font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{currentBalanceStr}</span>
++                      </div>
++                      <div className="flex items-center justify-between">
++                        <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>P/L Return</span>
++                        <span className={`font-mono font-bold ${plReturn >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{plReturnStr}</span>
+                       </div>
+                     </div>
+ 
+-                    <div className="flex gap-2 mt-4 pt-3 border-t border-slate-50">
++                    {/* Actions */}
++                    <div className="px-5 pb-5 flex items-center gap-3">
+                       {isActive ? (
+-                        <span className="flex-grow text-center py-1.5 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg select-none inline-flex items-center justify-center gap-1">
+-                          <Check className="h-3.5 w-3.5 text-emerald-500" /> Active Portfolio
+-                        </span>
++                        <button
++                          className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 transition ${
++                            theme === 'dark' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'
++                          }`}
++                        >
++                          <Check className="h-4 w-4" /> Active Portfolio
++                        </button>
+                       ) : (
+                         <button
+                           onClick={() => {
+@@ -4162,20 +4299,23 @@ export default function App() {
+                             persistSelectedAccount(acc.id);
+                             fetchTradesAndParams(acc.id);
+                           }}
+-                          className="flex-grow text-center py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition"
++                          className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-center transition bg-blue-600 hover:bg-blue-700 text-white`}
+                         >
+                           Activate Portfolio
+                         </button>
+                       )}
+-                       <button
+-                        onClick={() => {
++                      <button
++                        onClick={(e) => {
++                          e.stopPropagation();
+                           setEditingAccount(acc);
+                           setEditAccName(acc.name);
+                           setEditAccStartingBalance(String(acc.startingBalance));
+                           setEditAccCurrency(acc.currency || 'USD');
+                           setShowEditAccountModal(true);
+                         }}
+-                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center justify-center"
++                        className={`w-[42px] h-[42px] shrink-0 rounded-xl flex items-center justify-center border transition ${
++                          theme === 'dark' ? 'border-white/10 hover:bg-white/5 text-slate-400' : 'border-slate-200 hover:bg-slate-50 text-slate-500'
++                        }`}
+                         title="Edit Account Name, Currency and Starting Capital"
+                       >
+                         <Edit3 className="h-4 w-4" />
+@@ -4184,20 +4324,24 @@ export default function App() {
+                   </div>
+                 );
+               })}
+-
+-              {/* Dotted Create Card */}
+-              <button
+-                onClick={() => { 
+-                  setShowAccountModal(true); 
+-                  setAccountCreationMethod('select'); 
+-                }}
+-                data-tour="create-portfolio"
+-                className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition h-56 text-xs font-bold bg-white"
+-              >
+-                <Plus className="h-6 w-6 text-slate-400" />
+-                Connect New Portfolio Account
+-              </button>
+             </div>
++
++
++
++            {/* Add Account Button (Visible on both desktop & mobile) */}
++            <button
++              onClick={() => { setShowAccountModal(true); setAccountCreationMethod('select'); }}
++              data-tour="create-portfolio"
++              className={`w-full border-2 border-dashed rounded-2xl py-5 flex items-center justify-center gap-2.5 transition text-sm font-semibold ${
++                theme === 'dark'
++                  ? 'border-white/10 hover:border-white/20 text-slate-400 hover:text-slate-200 bg-transparent'
++                  : 'border-slate-300 hover:border-slate-400 text-slate-500 hover:text-slate-700 bg-transparent'
++              }`}
++            >
++              <Plus className="h-5 w-5" />
++              Connect New Portfolio Account
++            </button>
++
+           </div>
+         )}
+ 
+@@ -4788,95 +4932,149 @@ export default function App() {
+ 
+         {/* 6. CONSOLIDATED SETTINGS VIEW */}
+         {activeTab === 'settings' && (
+-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
++          <div className="flex flex-col space-y-8">
++            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+             
+             {/* Settings Inner Tabs Navigation */}
+-            <aside className="lg:col-span-1 space-y-1">
+-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block px-2.5 mb-2">Configure Journal</span>
++            {/* Settings Inner Tabs Navigation */}
++            <aside className="lg:col-span-1">
++              <span className="hidden lg:block text-[10px] text-slate-400 font-bold uppercase tracking-wider px-2.5 mb-2">Configure Journal</span>
+               
+-              <button
+-                onClick={() => setSettingsTab('achievements')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'achievements' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <Trophy className="h-4 w-4" />
+-                Achievements
+-              </button>
++              {/* Mobile Dropdown Navigation */}
++              <div className="lg:hidden relative mb-4">
++                <button
++                  onClick={() => setIsSettingsDropdownOpen(!isSettingsDropdownOpen)}
++                  className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm font-bold text-slate-800 flex justify-between items-center shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
++                >
++                  <span className="flex items-center gap-2">
++                    {settingsTab === 'achievements' && <><Trophy className="h-4 w-4" /> Achievements</>}
++                    {settingsTab === 'general' && <><User className="h-4 w-4" /> General Settings</>}
++                    {settingsTab === 'risk' && <><Shield className="h-4 w-4" /> Configure Guard Limits</>}
++                    {settingsTab === 'notifications' && <><Bell className="h-4 w-4" /> Notifications</>}
++                    {settingsTab === 'subscription' && <><CreditCard className="h-4 w-4" /> Subscription</>}
++                    {settingsTab === 'about' && <><Info className="h-4 w-4" /> About</>}
++                    {settingsTab === 'help' && <><HelpCircle className="h-4 w-4" /> Help</>}
++                    {settingsTab === 'theme' && (theme === 'dark' ? <><Moon className="h-4 w-4 text-indigo-400" /> Theme Mode</> : <><Sun className="h-4 w-4 text-amber-500" /> Theme Mode</>)}
++                  </span>
++                  <span className={`transform transition-transform ${isSettingsDropdownOpen ? 'rotate-180' : ''}`}>Ôîä</span>
++                </button>
++                
++                {isSettingsDropdownOpen && (
++                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 overflow-hidden flex flex-col animate-slide-down">
++                    {[
++                      { id: 'achievements', label: 'Achievements', icon: Trophy },
++                      { id: 'general', label: 'General Settings', icon: User },
++                      { id: 'risk', label: 'Configure Guard Limits', icon: Shield },
++                      { id: 'notifications', label: 'Notifications', icon: Bell },
++                      { id: 'subscription', label: 'Subscription', icon: CreditCard },
++                      { id: 'about', label: 'About', icon: Info },
++                      { id: 'help', label: 'Help', icon: HelpCircle },
++                      { id: 'theme', label: 'Theme Mode', icon: theme === 'dark' ? Moon : Sun }
++                    ].map(tab => (
++                      <button
++                        key={tab.id}
++                        onClick={() => {
++                          setSettingsTab(tab.id as any);
++                          setIsSettingsDropdownOpen(false);
++                        }}
++                        className={`w-full text-left py-3 px-4 text-sm font-semibold transition flex items-center gap-3 ${
++                          settingsTab === tab.id ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'
++                        }`}
++                      >
++                        <tab.icon className={`h-4 w-4 ${tab.id === 'theme' ? (theme === 'dark' ? 'text-indigo-400' : 'text-amber-500') : ''}`} />
++                        {tab.label}
++                      </button>
++                    ))}
++                  </div>
++                )}
++              </div>
+ 
+-              <button
+-                onClick={() => setSettingsTab('general')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'general' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <User className="h-4 w-4" />
+-                General Settings
+-              </button>
++              {/* Desktop Sidebar Navigation */}
++              <div className="hidden lg:flex flex-col space-y-1">
++                <button
++                  onClick={() => setSettingsTab('achievements')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'achievements' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <Trophy className="h-4 w-4" />
++                  Achievements
++                </button>
+ 
+-              <button
+-                onClick={() => setSettingsTab('risk')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'risk' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <Shield className="h-4 w-4" />
+-                Configure Guard Limits
+-              </button>
++                <button
++                  onClick={() => setSettingsTab('general')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'general' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <User className="h-4 w-4" />
++                  General Settings
++                </button>
+ 
+-              <button
+-                onClick={() => setSettingsTab('notifications')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'notifications' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <Bell className="h-4 w-4" />
+-                Notifications
+-              </button>
++                <button
++                  onClick={() => setSettingsTab('risk')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'risk' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <Shield className="h-4 w-4" />
++                  Configure Guard Limits
++                </button>
+ 
+-              <button
+-                onClick={() => setSettingsTab('subscription')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'subscription' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <CreditCard className="h-4 w-4" />
+-                Subscription
+-              </button>
++                <button
++                  onClick={() => setSettingsTab('notifications')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'notifications' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <Bell className="h-4 w-4" />
++                  Notifications
++                </button>
+ 
+-              <button
+-                onClick={() => setSettingsTab('about')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'about' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <Info className="h-4 w-4" />
+-                About
+-              </button>
++                <button
++                  onClick={() => setSettingsTab('subscription')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'subscription' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <CreditCard className="h-4 w-4" />
++                  Subscription
++                </button>
+ 
+-              <button
+-                onClick={() => setSettingsTab('help')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'help' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                <HelpCircle className="h-4 w-4" />
+-                Help
+-              </button>
++                <button
++                  onClick={() => setSettingsTab('about')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'about' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <Info className="h-4 w-4" />
++                  About
++                </button>
+ 
+-              <button
+-                onClick={() => setSettingsTab('theme')}
+-                className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
+-                  settingsTab === 'theme' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+-                }`}
+-              >
+-                {theme === 'dark' ? (
+-                  <Moon className="h-4 w-4 text-indigo-400" />
+-                ) : (
+-                  <Sun className="h-4 w-4 text-amber-500" />
+-                )}
+-                Theme Mode
+-              </button>
++                <button
++                  onClick={() => setSettingsTab('help')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'help' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  <HelpCircle className="h-4 w-4" />
++                  Help
++                </button>
++
++                <button
++                  onClick={() => setSettingsTab('theme')}
++                  className={`w-full text-left py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center gap-2.5 ${
++                    settingsTab === 'theme' ? 'bg-[#efefee] text-slate-900' : 'text-slate-500 hover:bg-slate-50'
++                  }`}
++                >
++                  {theme === 'dark' ? (
++                    <Moon className="h-4 w-4 text-indigo-400" />
++                  ) : (
++                    <Sun className="h-4 w-4 text-amber-500" />
++                  )}
++                  Theme Mode
++                </button>
++              </div>
+             </aside>
+ 
+             {/* Settings Right Hand Content Panel */}
+@@ -5727,6 +5925,10 @@ export default function App() {
+               )}
+ 
+             </div>
++            </div>
++            <div className="mt-8 border-t border-slate-200 dark:border-slate-800 pt-8">
++              <LegalFooter />
++            </div>
+           </div>
+         )}
+ 
+@@ -5758,10 +5960,67 @@ export default function App() {
+           <TradingTools />
+         )}
+ 
+-        {/* Site footer with legal links */}
+-        <LegalFooter />
++
+ 
+       </main>
++      </div>
++
++      {/* Mobile Bottom Navigation (Premium Instagram-Style Pill) */}
++      <div className={`md:hidden fixed z-[60] transition-all duration-500 ease-in-out ${
++        (showTradeModal || showAccountModal || showEditAccountModal || showTicketModal || showExportModal || showPasteModal || showSignOutModal || deleteConfirmTradeId !== null || showGuidedTour || showMT5Tour || isSettingsDropdownOpen) ? 'translate-y-24 opacity-0 pointer-events-none scale-75' : isScrolled ? 'bottom-3 left-6 right-6 scale-[0.98]' : 'bottom-6 left-4 right-4 scale-100'
++      } bg-white/70 dark:bg-[#09090b]/60 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-black/5`}>
++        <nav 
++          className={`flex items-center justify-between overflow-x-auto no-scrollbar transition-all duration-500 ease-in-out px-2 ${isScrolled ? 'py-1.5 gap-1' : 'py-2.5 gap-1.5'}`}
++          style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)' }}
++        >
++          {[
++            { id: 'dashboard', icon: BarChart3 },
++            { id: 'journal', icon: BookOpen, badgeNumber: filteredTrades.length > 0 ? filteredTrades.length : undefined },
++            { id: 'accounts', icon: Layers, badgeNumber: accounts.length > 0 ? accounts.length : undefined },
++            { id: 'analytics', icon: Activity },
++            { id: 'calendar', icon: Calendar },
++            { id: 'fxnews', icon: Globe, notify: true },
++            { id: 'mt5', icon: RefreshCw },
++            { id: 'tools', icon: Wrench, notify: true },
++            { id: 'insights', icon: Brain, notify: true }
++          ].map(item => (
++            <button
++              key={item.id}
++              onClick={() => {
++                setActiveTab(item.id as any);
++                setIsScrolled(false);
++              }}
++              className={`flex-shrink-0 flex items-center justify-center rounded-full transition-all duration-500 ease-out ${
++                activeTab === item.id 
++                  ? (isScrolled ? 'w-[68px] h-[44px] bg-slate-200 text-slate-900 dark:bg-white/20 dark:text-white' : 'w-[72px] h-[48px] bg-slate-200 text-slate-900 dark:bg-white/20 dark:text-white shadow-inner')
++                  : (isScrolled ? 'w-[44px] h-[44px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5' : 'w-[48px] h-[48px] text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5')
++              }`}
++            >
++              <div className="relative flex items-center justify-center">
++                <item.icon className={`transition-all duration-500 ease-out ${
++                  isScrolled ? 'h-5 w-5' : 'h-6 w-6'
++                } ${activeTab === item.id ? 'scale-110 drop-shadow-sm' : 'scale-100'}`} strokeWidth={activeTab === item.id ? 2.5 : 2} />
++                
++                {item.badgeNumber !== undefined && (
++                  <span className={`absolute -top-1.5 -right-2 bg-blue-500 text-white text-[9px] font-bold px-1 py-0.5 rounded-full border border-white dark:border-[#09090b] shadow-sm flex items-center justify-center min-w-[16px]`}>
++                    {item.badgeNumber > 99 ? '99+' : item.badgeNumber}
++                  </span>
++                )}
++
++                {item.notify && item.badgeNumber === undefined && (
++                  <span className={`absolute bg-rose-500 rounded-full transition-all duration-500 ${
++                    activeTab === item.id 
++                      ? 'border-slate-200 dark:border-[#2f333a]' 
++                      : 'border-white dark:border-[#09090b]'
++                  } ${
++                    isScrolled ? '-bottom-1.5 -right-1.5 w-2 h-2 border-[1.5px]' : '-bottom-1.5 -right-1.5 w-2.5 h-2.5 border-2'
++                  }`} />
++                )}
++              </div>
++            </button>
++          ))}
++        </nav>
++      </div>
+ 
+       {/* ==========================================
+           SYSTEM MODALS (CREATE ACCOUNT, ADD TRADE, ETC.)
+@@ -6119,6 +6378,39 @@ export default function App() {
+         </div>
+       )}
+ 
++      {/* Trade Note Minimalist Modal */}
++      {selectedNote !== null && (
++        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60] overflow-y-auto" onClick={() => setSelectedNote(null)}>
++          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 max-w-sm w-full relative overflow-hidden transform transition-all" onClick={e => e.stopPropagation()}>
++            <div className="p-5">
++              <div className="flex items-center gap-3 mb-4">
++                <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-500">
++                  <MessageSquare className="h-4 w-4" />
++                </div>
++                <h3 className="font-bold text-slate-900 dark:text-white text-[15px]">Trade Note</h3>
++                <button
++                  onClick={() => setSelectedNote(null)}
++                  className="ml-auto text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
++                >
++                  <X className="h-4 w-4" />
++                </button>
++              </div>
++              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 text-[13px] text-slate-600 dark:text-slate-300 leading-relaxed max-h-[60vh] overflow-y-auto whitespace-pre-wrap">
++                {selectedNote}
++              </div>
++              <div className="mt-5 flex justify-end">
++                <button
++                  onClick={() => setSelectedNote(null)}
++                  className="px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[13px] font-bold rounded-xl hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-sm"
++                >
++                  Close
++                </button>
++              </div>
++            </div>
++          </div>
++        </div>
++      )}
++
+       {/* B. Add / Edit Trade Modal */}
+       {showTradeModal && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+@@ -6140,30 +6432,57 @@ export default function App() {
+             <form onSubmit={handleSaveTrade} className="p-5 space-y-5">
+               
+               {/* Date & Time */}
+-              <div>
+-                <label className="text-xs font-bold text-slate-700 block mb-1.5">Trade Date &amp; Time</label>
+-                <div className="relative">
+-                  <input
+-                    id="tradeDateInput"
+-                    type="datetime-local"
+-                    value={tradeDate}
+-                    onChange={(e) => setTradeDate(e.target.value)}
+-                    className="bg-white border border-slate-200 text-sm rounded-xl p-3 pr-10 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all [&::-webkit-calendar-picker-indicator]:hidden"
+-                  />
+-                  <button
+-                    type="button"
+-                    onClick={() => {
+-                      const input = document.getElementById('tradeDateInput') as HTMLInputElement;
+-                      if (input) {
+-                        input.focus();
+-                        try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
+-                      }
+-                    }}
+-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10"
+-                    title="Open date & time picker"
+-                  >
+-                    <Calendar className="h-4 w-4" />
+-                  </button>
++              <div className="grid grid-cols-2 gap-4">
++                <div>
++                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Entry Time</label>
++                  <div className="relative">
++                    <input
++                      id="tradeDateInput"
++                      type="datetime-local"
++                      value={tradeDate}
++                      onChange={(e) => setTradeDate(e.target.value)}
++                      className="bg-white border border-slate-200 text-sm rounded-xl p-3 pr-10 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all [&::-webkit-calendar-picker-indicator]:hidden"
++                    />
++                    <button
++                      type="button"
++                      onClick={() => {
++                        const input = document.getElementById('tradeDateInput') as HTMLInputElement;
++                        if (input) {
++                          input.focus();
++                          try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
++                        }
++                      }}
++                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10"
++                    >
++                      <Calendar className="h-4 w-4" />
++                    </button>
++                  </div>
++                </div>
++
++                <div>
++                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Exit Time (Optional)</label>
++                  <div className="relative">
++                    <input
++                      id="tradeExitTimeInput"
++                      type="datetime-local"
++                      value={tradeExitTime}
++                      onChange={(e) => setTradeExitTime(e.target.value)}
++                      className="bg-white border border-slate-200 text-sm rounded-xl p-3 pr-10 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all [&::-webkit-calendar-picker-indicator]:hidden"
++                    />
++                    <button
++                      type="button"
++                      onClick={() => {
++                        const input = document.getElementById('tradeExitTimeInput') as HTMLInputElement;
++                        if (input) {
++                          input.focus();
++                          try { if ('showPicker' in input) (input as any).showPicker(); } catch (_) {}
++                        }
++                      }}
++                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors z-10"
++                    >
++                      <Calendar className="h-4 w-4" />
++                    </button>
++                  </div>
+                 </div>
+               </div>
+ 
