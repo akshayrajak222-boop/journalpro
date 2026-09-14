@@ -674,52 +674,54 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
         </div>
       )}
       {/* Method Selection Cards */}
-      <div className="space-y-4 mb-8">
-        <h3 className="text-center font-black text-slate-900 dark:text-white text-base tracking-tight">
-          Choose Your MT5 Connection Method
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
-          {/* Card 1: Investor Password */}
-          <div
-            onClick={() => setActiveTab('investor')}
-            className={`cursor-pointer rounded-2xl border p-5 flex items-center gap-4 transition-all duration-200 ${
-              activeTab === 'investor'
-                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-600/20'
-                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50'
-            }`}
-          >
-            <div className="h-10 w-10 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
-              <Eye className="h-5 w-5" />
+      {!connected && (
+        <div className="space-y-4 mb-8">
+          <h3 className="text-center font-black text-slate-900 dark:text-white text-base tracking-tight">
+            Choose Your MT5 Connection Method
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            {/* Card 1: Investor Password */}
+            <div
+              onClick={() => setActiveTab('investor')}
+              className={`cursor-pointer rounded-2xl border p-5 flex items-center gap-4 transition-all duration-200 ${
+                activeTab === 'investor'
+                  ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-600/20'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50'
+              }`}
+            >
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+                <Eye className="h-5 w-5" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h4 className="font-black text-slate-900 dark:text-white text-sm">
+                  Investor Password
+                </h4>
+                <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500/10 shrink-0" />
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <h4 className="font-black text-slate-900 dark:text-white text-sm">
-                Investor Password
-              </h4>
-              <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500/10 shrink-0" />
-            </div>
-          </div>
 
-          {/* Card 2: MT5 EA */}
-          <div
-            onClick={() => setActiveTab('ea')}
-            className={`cursor-pointer rounded-2xl border p-5 flex items-center gap-4 transition-all duration-200 ${
-              activeTab === 'ea'
-                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-600/20'
-                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50'
-            }`}
-          >
-            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 flex items-center justify-center shrink-0">
-              <Bot className="h-5 w-5" />
+            {/* Card 2: MT5 EA */}
+            <div
+              onClick={() => setActiveTab('ea')}
+              className={`cursor-pointer rounded-2xl border p-5 flex items-center gap-4 transition-all duration-200 ${
+                activeTab === 'ea'
+                  ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-600/20'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50'
+              }`}
+            >
+              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 flex items-center justify-center shrink-0">
+                <Bot className="h-5 w-5" />
+              </div>
+              <h4 className="font-black text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
+                MT5 EA
+                <span className="font-bold text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/10">
+                  FREE
+                </span>
+              </h4>
             </div>
-            <h4 className="font-black text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-              MT5 EA
-              <span className="font-bold text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/10">
-                FREE
-              </span>
-            </h4>
           </div>
         </div>
-      </div>
+      )}
 
       {activeTab === 'ea' && (
         <>
