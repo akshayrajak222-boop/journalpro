@@ -1045,8 +1045,7 @@ async function runCloudConnect(db: any, job: any, account: any) {
       password,
       server,
       platform: 'mt5',
-      magic: 0,
-      quoteStreamingIntervalInSeconds: 0
+      magic: 0
     });
     if (ma.state !== 'DEPLOYED') {
       try { await ma.deploy(); } catch { /* may already be deploying */ }
@@ -1117,8 +1116,7 @@ async function runCloudSyncNow(db: any, job: any, account: any) {
       password,
       server,
       platform: 'mt5',
-      magic: 0,
-      quoteStreamingIntervalInSeconds: 0
+      magic: 0
     });
     if (ma.state !== 'DEPLOYED') {
       try { await ma.deploy(); } catch { /* may already be deploying */ }
