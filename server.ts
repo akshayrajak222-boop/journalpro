@@ -5005,6 +5005,133 @@ RESTRICTIONS:
     };
   }
 
+
+const YAHOO_SYMBOL_MAP: Record<string, string> = {
+  // Metals
+  XAUUSD: 'GC=F', GOLD: 'GC=F',
+  XAGUSD: 'SI=F', SILVER: 'SI=F',
+  XPTUSD: 'PL=F', XPDUSD: 'PA=F',
+  // Forex pairs
+  EURUSD: 'EURUSD=X', GBPUSD: 'GBPUSD=X', USDJPY: 'USDJPY=X',
+  USDCHF: 'USDCHF=X', USDCAD: 'USDCAD=X', AUDUSD: 'AUDUSD=X',
+  NZDUSD: 'NZDUSD=X', EURGBP: 'EURGBP=X', EURJPY: 'EURJPY=X',
+  EURAUD: 'EURAUD=X', EURCAD: 'EURCAD=X', EURCHF: 'EURCHF=X',
+  EURNZD: 'EURNZD=X', GBPJPY: 'GBPJPY=X', GBPAUD: 'GBPAUD=X',
+  GBPCAD: 'GBPCAD=X', GBPCHF: 'GBPCHF=X', GBPNZD: 'GBPNZD=X',
+  AUDJPY: 'AUDJPY=X', AUDCAD: 'AUDCAD=X', AUDCHF: 'AUDCHF=X',
+  AUDNZD: 'AUDNZD=X', NZDJPY: 'NZDJPY=X', NZDCAD: 'NZDCAD=X',
+  NZDCHF: 'NZDCHF=X', CADJPY: 'CADJPY=X', CADCHF: 'CADCHF=X',
+  CHFJPY: 'CHFJPY=X',
+  // Crypto
+  BTCUSD: 'BTC-USD', ETHUSD: 'ETH-USD', LTCUSD: 'LTC-USD', XRPUSD: 'XRP-USD',
+  // Indices
+  US30: '^DJI', US500: '^GSPC', NAS100: '^NDX',
+  UK100: '^FTSE', GER40: '^GDAXI', JPN225: '^N225',
+  // Oil
+  USOIL: 'CL=F', UKOIL: 'BZ=F',
+};
+
+// Interval/range mapping: timeframe param → { interval, range } for Yahoo Finance v8 API
+const YAHOO_INTERVAL_MAP: Record<string, { interval: string; range: string }> = {
+  '1m':  { interval: '1m',  range: '7d'  },
+  '5m':  { interval: '5m',  range: '60d' },
+  '15m': { interval: '15m', range: '60d' },
+  '30m': { interval: '30m', range: '60d' },
+  '1h':  { interval: '60m', range: '730d' },
+  '4h':  { interval: '60m', range: '730d' }, // Yahoo doesn't have 4h, we use 1h and resample client-side
+  '1d':  { interval: '1d',  range: '20y' },
+  '1mo': { interval: '1mo', range: 'max' },
+};
+
+
+app.get('/api/chart/ohlc', async (req, res) => {
+  try {
+    const rawSymbol = ((req.query.symbol as string) || 'XAUUSD').toUpperCase().trim();
+    const timeframe = ((req.query.timeframe as string) || '1d').toLowerCase().trim();
+
+    // Translate to Yahoo Finance ticker
+    const yahooSymbol = YAHOO_SYMBOL_MAP[rawSymbol] || (rawSymbol.endsWith('=X') ? rawSymbol : `${rawSymbol}=X`);
+    const mapping = YAHOO_INTERVAL_MAP[timeframe] || YAHOO_INTERVAL_MAP['1d'];
+
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=${mapping.interval}&range=${mapping.range}&includePrePost=false`;
+
+    const yahooRes = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; FXJournalPro/1.0)',
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!yahooRes.ok) {
+      console.warn(`[chart/ohlc] Yahoo Finance returned ${yahooRes.status} for ${yahooSymbol}`);
+      return res.json({ candles: [], symbol: rawSymbol, timeframe, error: 'No data available for this symbol.' });
+    }
+
+    const data: any = await yahooRes.json();
+    const result = data?.chart?.result?.[0];
+
+    if (!result) {
+      return res.json({ candles: [], symbol: rawSymbol, timeframe, error: 'No chart data from provider.' });
+    }
+
+    const timestamps: number[] = result.timestamp || [];
+    const quotes = result.indicators?.quote?.[0] || {};
+    const opens: (number | null)[] = quotes.open || [];
+    const highs: (number | null)[] = quotes.high || [];
+    const lows: (number | null)[] = quotes.low || [];
+    const closes: (number | null)[] = quotes.close || [];
+
+    // For 4h timeframe, we receive 1h candles from Yahoo — aggregate every 4 into one
+    let candles: { time: number; open: number; high: number; low: number; close: number }[] = [];
+
+    if (timeframe === '4h') {
+      // Aggregate 1h bars → 4h bars
+      let i = 0;
+      while (i < timestamps.length) {
+        const group = [];
+        for (let j = 0; j < 4 && i + j < timestamps.length; j++) {
+          const idx = i + j;
+          if (opens[idx] != null && highs[idx] != null && lows[idx] != null && closes[idx] != null) {
+            group.push({ t: timestamps[idx], o: opens[idx]!, h: highs[idx]!, l: lows[idx]!, c: closes[idx]! });
+          }
+        }
+        if (group.length > 0) {
+          candles.push({
+            time: group[0].t,
+            open: group[0].o,
+            high: Math.max(...group.map(g => g.h)),
+            low: Math.min(...group.map(g => g.l)),
+            close: group[group.length - 1].c,
+          });
+        }
+        i += 4;
+      }
+    } else {
+      candles = timestamps
+        .map((t, i) => ({
+          time: t,
+          open: opens[i] ?? 0,
+          high: highs[i] ?? 0,
+          low: lows[i] ?? 0,
+          close: closes[i] ?? 0,
+        }))
+        .filter(c => c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0);
+    }
+
+    // Deduplicate by timestamp and sort ascending
+    const seen = new Set<number>();
+    candles = candles
+      .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; })
+      .sort((a, b) => a.time - b.time);
+
+    res.json({ candles, symbol: rawSymbol, timeframe });
+  } catch (err: any) {
+    console.error('[chart/ohlc] Error:', err?.message || err);
+    res.json({ candles: [], symbol: req.query.symbol || '', timeframe: req.query.timeframe || '1d', error: 'Chart data temporarily unavailable.' });
+  }
+});
+
   app.get('/api/fx-news', async (req, res) => {
     const apiKey = process.env.ALPHA_VANTAGE_API_KEY?.trim();
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || '25'), 10) || 25, 1), 50);

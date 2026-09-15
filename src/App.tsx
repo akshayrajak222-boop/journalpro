@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
+  LineChart, BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
   DollarSign, Plus, CheckCircle2, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
@@ -26,6 +26,7 @@ import {
 import { supabase } from './supabaseClient';
 
 import TradingCalendar from './components/TradingCalendar';
+import TradingViewChart from './components/TradingViewChart';
 import FXNews from './components/FXNews';
 import MT5Automation from './components/MT5Automation';
 import AIInsights from './components/AIInsights';
@@ -239,6 +240,7 @@ export default function App() {
   
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [selectedChartTradeId, setSelectedChartTradeId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -3300,6 +3302,20 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => { setActiveTab('chart'); setMobileMenuOpen(false); }}
+              title="Live Chart"
+              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
+                activeTab === 'chart' 
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800/80 dark:text-white dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-slate-700/50 shadow-sm transform dark:scale-105' 
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <LineChart className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Live Chart</span>
+            </button>
+
+
+            <button
               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
               title="FX News"
               className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
@@ -3375,6 +3391,7 @@ export default function App() {
                  activeTab === 'accounts' ? 'Portfolio Accounts' :
                  activeTab === 'analytics' ? 'Performance Analytics' :
                  activeTab === 'calendar' ? 'Trading Calendar' :
+                 activeTab === 'chart' ? 'Live Chart' :
                  activeTab === 'fxnews' ? 'FX News' :
                  activeTab === 'settings' ? 'Settings' :
                  activeTab === 'mt5' ? 'MT5 Sync' :
@@ -3387,6 +3404,7 @@ export default function App() {
                  activeTab === 'accounts' ? 'Manage your MetaTrader or custom brokerage accounts on-the-fly.' :
                  activeTab === 'analytics' ? 'Explore your strategic edge, session concentrations, and profit distribution.' :
                  activeTab === 'calendar' ? 'Visualize daily profit allocations and execution frequencies.' :
+                 activeTab === 'chart' ? 'View and analyze your trades directly on a live interactive chart.' :
                  activeTab === 'settings' ? 'Configure portfolio guard, import tools, and co-pilot preferences.' :
                  activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
                  activeTab === 'tools' ? 'Precision calculators to plan your trades with confidence.' :
@@ -4201,7 +4219,40 @@ export default function App() {
           </div>
         )}
 
-        {/* 3. CALENDAR VIEW */}
+                {/* 2b. STANDALONE LIVE CHART VIEW */}
+        {activeTab === 'chart' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900 dark:text-white text-base">Live Chart</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {trades.filter(t => t.type !== 'Deposit' && t.type !== 'Withdrawal').length} trade markers · Click a journal trade to highlight it on the chart
+                </p>
+              </div>
+              {selectedChartTradeId && (
+                <button
+                  onClick={() => setSelectedChartTradeId(null)}
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-semibold flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <X className="h-3 w-3" /> Clear selection
+                </button>
+              )}
+            </div>
+
+            {/* The chart fills the remaining viewport height */}
+            <div style={{ height: 'calc(100vh - 220px)', minHeight: '480px' }}>
+              <TradingViewChart
+                trades={trades}
+                theme={theme}
+                selectedTradeId={selectedChartTradeId}
+                onTradeMarkerClick={(id) => setSelectedChartTradeId(id)}
+                initialSymbol={selectedChartTradeId ? (trades.find(t => t.id === selectedChartTradeId)?.symbol || 'XAUUSD') : 'XAUUSD'}
+              />
+            </div>
+          </div>
+        )}
+
+{/* 3. CALENDAR VIEW */}
         {activeTab === 'calendar' && (
           <TradingCalendar trades={trades} currency={activeAccount?.currency || 'USD'} />
         )}
@@ -5981,6 +6032,7 @@ export default function App() {
             { id: 'accounts', icon: Layers, badgeNumber: accounts.length > 0 ? accounts.length : undefined },
             { id: 'analytics', icon: Activity },
             { id: 'calendar', icon: Calendar },
+            { id: 'chart', icon: LineChart },
             { id: 'fxnews', icon: Globe, notify: true },
             { id: 'mt5', icon: RefreshCw },
             { id: 'tools', icon: Wrench, notify: true },
