@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  LineChart, BarChart3, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
+  LineChart, BarChart3, NotebookPen, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
   DollarSign, Plus, CheckCircle2, ArrowRight,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
@@ -20,7 +20,8 @@ import {
   Trade, 
   RiskSettings, 
   SupportTicket, 
-  Announcement 
+  Announcement,
+  Note
 } from './types';
 
 import { supabase } from './supabaseClient';
@@ -39,6 +40,8 @@ import NextEventCard from './components/NextEventCard';
 import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
 import AchievementsTab from './components/AchievementsTab';
+import { NotebookTab } from './components/NotebookTab';
+
 
 
 // ─── Symbol Contract Specifications ─────────────────────────────────────────
@@ -240,6 +243,8 @@ export default function App() {
   
   // Navigation
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [selectedChartTradeId, setSelectedChartTradeId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
@@ -839,6 +844,11 @@ export default function App() {
       const annData = await annRes.json();
       setAnnouncements(Array.isArray(annData.announcements) ? annData.announcements : []);
 
+      // Notes
+      const notesRes = await authFetch('/api/notes');
+      const notesData = await notesRes.json();
+      setNotes(Array.isArray(notesData.notes) ? notesData.notes : []);
+
     } catch (e) {
       console.error('Error fetching dashboard tables:', e);
     } finally {
@@ -879,6 +889,44 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleCreateNote = async (note: Note) => {
+    // Optimistic update to prevent NotebookTab from crashing when it sets activeNoteId synchronously
+    setNotes(prev => [note, ...prev]);
+    try {
+      const res = await authFetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(note)
+      });
+      if (!res.ok) {
+        console.error('Failed to save note to server');
+      }
+    } catch (e) { console.error('Failed to create note', e); }
+  };
+
+  const handleUpdateNote = async (id: string, updates: Partial<Note>) => {
+    // Optimistic update
+    setNotes(notes.map(n => n.id === id ? { ...n, ...updates } : n));
+    try {
+      await authFetch(`/api/notes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+    } catch (e) { console.error('Failed to update note', e); }
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    // Optimistic update
+    setNotes(notes.filter(n => n.id !== id));
+    if (activeNoteId === id) setActiveNoteId(null);
+    try {
+      await authFetch(`/api/notes/${id}`, {
+        method: 'DELETE'
+      });
+    } catch (e) { console.error('Failed to delete note', e); }
   };
 
   const handleAccountChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -2270,11 +2318,68 @@ export default function App() {
   })).sort((a,b) => b.profit - a.profit);
 
   // 3. Pie Chart: Sessions
-  // Map trades to trading sessions (simulated based on timestamp hour, or mock)
+  // Map trades to trading sessions based on UTC entry hour
+  const getSession = (dateInput: string) => {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return 'Outside of Sessions';
+    const hour = d.getUTCHours();
+    if (hour >= 8 && hour < 13) return 'London';
+    if (hour >= 13 && hour < 22) return 'New York';
+    if (hour >= 22 || hour < 8) return 'Asia';
+    return 'Outside of Sessions';
+  };
+
+  const sessionStats = {
+    'London': { name: 'London', net: 0, wins: 0, total: 0, profit: 0, loss: 0 },
+    'New York': { name: 'New York', net: 0, wins: 0, total: 0, profit: 0, loss: 0 },
+    'Asia': { name: 'Asia', net: 0, wins: 0, total: 0, profit: 0, loss: 0 },
+    'Outside of Sessions': { name: 'Outside of Sessions', net: 0, wins: 0, total: 0, profit: 0, loss: 0 },
+  };
+
+  tradingTrades.forEach(t => {
+    const sess = getSession(t.date);
+    const stat = sessionStats[sess as keyof typeof sessionStats];
+    if (stat) {
+      stat.total += 1;
+      stat.net += t.profit;
+      if (t.profit > 0) {
+        stat.wins += 1;
+        stat.profit += t.profit;
+      } else {
+        stat.loss += t.profit;
+      }
+    }
+  });
+
+  const sessionSummaryData = Object.values(sessionStats).map(s => ({
+    ...s,
+    winRate: s.total > 0 ? (s.wins / s.total) * 100 : 0
+  }));
+
+  // Pair Summary Data
+  const pairStats: Record<string, { name: string; net: number; wins: number; total: number; profit: number; loss: number }> = {};
+  tradingTrades.forEach(t => {
+    const p = t.symbol || 'Unknown';
+    if (!pairStats[p]) pairStats[p] = { name: p, net: 0, wins: 0, total: 0, profit: 0, loss: 0 };
+    pairStats[p].total += 1;
+    pairStats[p].net += t.profit;
+    if (t.profit > 0) {
+      pairStats[p].wins += 1;
+      pairStats[p].profit += t.profit;
+    } else {
+      pairStats[p].loss += t.profit;
+    }
+  });
+  const pairSummaryData = Object.values(pairStats).map(s => ({
+    ...s,
+    winRate: s.total > 0 ? (s.wins / s.total) * 100 : 0
+  })).sort((a, b) => b.total - a.total);
+
   const sessionData = [
-    { name: 'London Session', value: tradingTrades.filter((_, idx) => idx % 3 === 0).length, color: '#2563eb' },
-    { name: 'New York Session', value: tradingTrades.filter((_, idx) => idx % 3 === 1).length, color: '#10b981' },
-    { name: 'Asian Session', value: tradingTrades.filter((_, idx) => idx % 3 === 2).length, color: '#f59e0b' }
+    { name: 'London Session', value: sessionStats['London'].total, color: '#2563eb' },
+    { name: 'New York Session', value: sessionStats['New York'].total, color: '#10b981' },
+    { name: 'Asian Session', value: sessionStats['Asia'].total, color: '#f59e0b' },
+    { name: 'Outside of Sessions', value: sessionStats['Outside of Sessions'].total, color: '#64748b' }
   ].filter(d => d.value > 0);
 
   // 4. Best & Worst Trades
@@ -2301,6 +2406,88 @@ export default function App() {
     .sort((a, b) => b.net - a.net);
   const bestDay = sortedDaysByNet.length > 0 ? sortedDaysByNet[0] : null;
   const worstDay = sortedDaysByNet.length > 0 ? sortedDaysByNet[sortedDaysByNet.length - 1] : null;
+
+  // Win & Loss Performance Data
+  let winCount = 0;
+  let lossCount = 0;
+  let winTotalPnl = 0;
+  let lossTotalPnl = 0;
+  let winTotalVol = 0;
+  let lossTotalVol = 0;
+  let winCommissions = 0;
+  let lossCommissions = 0;
+
+  const winDaysSet = new Set<string>();
+  const lossDaysSet = new Set<string>();
+
+  // Ensure trades are sorted chronologically for streak calculation
+  const chronologicalTrades = [...tradingTrades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // We'll aggregate by day
+  const winDayMap: Record<string, number> = {};
+  const lossDayMap: Record<string, number> = {};
+
+  chronologicalTrades.forEach(t => {
+    const dKey = getLocalDayKey(t.date);
+    if (!dKey) return;
+    
+    if (t.profit > 0) {
+      winCount++;
+      winTotalPnl += t.profit;
+      winTotalVol += t.volume || 0;
+      winCommissions += t.commission || 0;
+      winDaysSet.add(dKey);
+      
+      winDayMap[dKey] = (winDayMap[dKey] || 0) + t.profit;
+    } else {
+      lossCount++;
+      lossTotalPnl += t.profit; // negative
+      lossTotalVol += t.volume || 0;
+      lossCommissions += t.commission || 0;
+      lossDaysSet.add(dKey);
+
+      lossDayMap[dKey] = (lossDayMap[dKey] || 0) + t.profit;
+    }
+  });
+
+  const winPerformanceData: { date: string, value: number, formattedDate: string }[] = [];
+  const lossPerformanceData: { date: string, value: number, formattedDate: string }[] = [];
+
+  Object.keys(winDayMap).sort().forEach(date => {
+    const dObj = new Date(`${date}T00:00:00`);
+    winPerformanceData.push({
+      date,
+      formattedDate: dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: winDayMap[date]
+    });
+  });
+
+  Object.keys(lossDayMap).sort().forEach(date => {
+    const dObj = new Date(`${date}T00:00:00`);
+    lossPerformanceData.push({
+      date,
+      formattedDate: dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: lossDayMap[date]
+    });
+  });
+
+  const winMetrics = {
+    totalPnl: winTotalPnl,
+    trades: winCount,
+    avgDailyVol: winDaysSet.size > 0 ? (winTotalVol / winDaysSet.size) : 0,
+    avgTrade: winCount > 0 ? (winTotalPnl / winCount) : 0,
+    commissions: winCommissions,
+    maxStreak: maxWinStreak
+  };
+
+  const lossMetrics = {
+    totalPnl: lossTotalPnl,
+    trades: lossCount,
+    avgDailyVol: lossDaysSet.size > 0 ? (lossTotalVol / lossDaysSet.size) : 0,
+    avgTrade: lossCount > 0 ? (lossTotalPnl / lossCount) : 0,
+    commissions: lossCommissions,
+    maxStreak: maxLossStreak
+  };
 
   // 5. Monthly P&L Chart Data
   const monthlyMap: { [key: string]: number } = {};
@@ -3314,6 +3501,26 @@ export default function App() {
               <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Live Chart</span>
             </button>
 
+            <button
+              onClick={() => { setActiveTab('notebook'); setMobileMenuOpen(false); }}
+              title="Notebook"
+              className={`flex ${desktopSidebarOpen ? 'flex-row items-center justify-between px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-[92%] mx-auto ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
+                activeTab === 'notebook' 
+                  ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/10 dark:text-amber-500 dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_20px_rgba(255,255,255,0.02)] dark:border dark:border-amber-500/20 shadow-sm transform dark:scale-105' 
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <div className={`flex ${desktopSidebarOpen ? 'flex-row items-center gap-4' : 'flex-col items-center gap-1'}`}>
+                <NotebookPen className={desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} />
+                <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Notebook</span>
+              </div>
+              {desktopSidebarOpen && (
+                <span className="bg-amber-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  NEW
+                </span>
+              )}
+            </button>
+
 
             <button
               onClick={() => { setFxNewsInitialTab('news'); setActiveTab('fxnews'); setMobileMenuOpen(false); }}
@@ -3396,6 +3603,7 @@ export default function App() {
                  activeTab === 'settings' ? 'Settings' :
                  activeTab === 'mt5' ? 'MT5 Sync' :
                  activeTab === 'tools' ? 'Tools' :
+                 activeTab === 'notebook' ? 'Notebook' :
                  activeTab === 'insights' ? 'AI Mentor' : 'Admin Panel'}
               </h1>
               <p className="text-xs text-slate-400 mt-1 line-clamp-2 sm:line-clamp-1">
@@ -3409,6 +3617,7 @@ export default function App() {
                  activeTab === 'mt5' ? 'Connect a unique Expert Advisor to your portfolio account for automatic, real-time trade sync.' :
                  activeTab === 'tools' ? 'Precision calculators to plan your trades with confidence.' :
                  activeTab === 'fxnews' ? 'Stay updated with the latest market-moving forex news and economic events.' :
+                 activeTab === 'notebook' ? 'Jot down your feelings, plans, and daily reviews with our integrated rich-text templates.' :
                  activeTab === 'insights' ? 'Analyze your psychology and get actionable coaching.' : 'Administrative system configs.'}
               </p>
             </div>
@@ -4050,8 +4259,10 @@ export default function App() {
                     {paginatedTrades.map((t) => {
                       const entryDate = new Date(t.date);
                       const exitDate = t.exitTime ? new Date(t.exitTime) : null;
+                      const linkedNote = notes.find(n => n.linkedTradeId === t.id);
                       return (
-                        <tr key={t.id} className="border-b border-slate-100 dark:border-[#1f2937] hover:bg-slate-50 dark:hover:bg-white/[0.02] transition">
+                        <React.Fragment key={t.id}>
+                        <tr className="border-b border-slate-100 dark:border-[#1f2937] hover:bg-slate-50 dark:hover:bg-white/[0.02] transition">
                           <td className="py-4 px-4 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap text-center">
                             {t.symbol}
                           </td>
@@ -4131,6 +4342,30 @@ export default function App() {
                             </div>
                           </td>
                         </tr>
+                        {linkedNote && (
+                          <tr className="bg-slate-50/50 dark:bg-white/[0.01]">
+                            <td colSpan={10} className="p-4 border-b border-slate-100 dark:border-[#1f2937]">
+                              <div className="max-w-4xl mx-auto">
+                                <div 
+                                  onClick={() => { setActiveTab('notebook'); setActiveNoteId(linkedNote.id); }}
+                                  className="cursor-pointer bg-white dark:bg-[#1a1b20] border border-amber-200 dark:border-amber-500/20 rounded-lg p-4 shadow-sm hover:border-amber-500/50 transition-colors text-left"
+                                >
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <BookOpen className="w-4 h-4 text-amber-500" />
+                                      <h4 className="font-bold text-slate-900 dark:text-white text-sm">{linkedNote.title}</h4>
+                                    </div>
+                                    <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 font-bold px-2 py-0.5 rounded uppercase">Linked Note</span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
+                                    {linkedNote.content || 'Empty note...'}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                       );
                     })}
 
@@ -4147,7 +4382,9 @@ export default function App() {
 
               {/* Mobile Trades List (Reference Image Style) */}
               <div className="md:hidden flex flex-col space-y-0 mt-2 border-t border-slate-100 dark:border-slate-800 -mx-6 px-6">
-                {paginatedTrades.map(t => (
+                {paginatedTrades.map(t => {
+                  const linkedNote = notes.find(n => n.linkedTradeId === t.id);
+                  return (
                   <div 
                     key={t.id} 
                     onClick={() => handleOpenTradeModal(t)} 
@@ -4176,8 +4413,21 @@ export default function App() {
                         <ChevronRight className="h-3.5 w-3.5 opacity-60" />
                       </div>
                     </div>
+                    {linkedNote && (
+                      <div 
+                        onClick={(e) => { e.stopPropagation(); setActiveTab('notebook'); setActiveNoteId(linkedNote.id); }}
+                        className="mt-3 bg-slate-50 dark:bg-[#14151a] border border-amber-200 dark:border-amber-500/20 rounded-lg p-3"
+                      >
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-amber-500" />
+                          <span className="text-xs font-bold text-slate-800 dark:text-white line-clamp-1">{linkedNote.title}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{linkedNote.content || 'Empty note...'}</p>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
                 {paginatedTrades.length === 0 && (
                   <div className="text-center py-10 text-slate-400 text-sm">
                     No matching recorded trades. Clear filters or add your first position.
@@ -4250,6 +4500,19 @@ export default function App() {
               />
             </div>
           </div>
+        )}
+
+        {/* NOTEBOOK VIEW */}
+        {activeTab === 'notebook' && (
+          <NotebookTab 
+            notes={notes} 
+            handleCreateNote={handleCreateNote}
+            handleUpdateNote={handleUpdateNote}
+            handleDeleteNote={handleDeleteNote}
+            activeNoteId={activeNoteId} 
+            setActiveNoteId={setActiveNoteId} 
+            trades={trades} 
+          />
         )}
 
 {/* 3. CALENDAR VIEW */}
@@ -4876,6 +5139,304 @@ export default function App() {
                   ) : (
                     <div className="text-xs text-slate-400">No session metrics available.</div>
                   )}
+                </div>
+              </div>
+            </section>
+
+            {/* Summary Session Table */}
+            <section className="bg-white dark:bg-[#14151a] border border-slate-100 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl mt-6 mb-6 relative">
+              <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 dark:text-white text-lg">Summary Session</h3>
+                <div className="group relative flex items-center cursor-help">
+                  <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" />
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 bg-[#fef3c7] dark:bg-[#1a1b1e] text-amber-900 dark:text-amber-400 dark:border dark:border-amber-500/20 text-xs font-semibold p-3 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 leading-snug">
+                    Analyze your performance by session, including net profit, win rate, total profit/loss, and total trades, to help you identify which sessions bring the best results with your strategy.
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-[#fef3c7] dark:border-t-[#1a1b1e]"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-b-2xl overflow-hidden">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead>
+                    <tr className="text-slate-500 dark:text-slate-400 text-xs font-bold border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-[#0f1115]">
+                      <th className="px-6 py-4">Session ↕</th>
+                      <th className="px-6 py-4 text-center">Net P&L ↕</th>
+                      <th className="px-6 py-4 text-center">Win Rate ↕</th>
+                      <th className="px-6 py-4 text-center">Total Profit ↕</th>
+                      <th className="px-6 py-4 text-center">Total Loss ↕</th>
+                      <th className="px-6 py-4 text-center">Total Trades ↕</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {(() => {
+                      const bestSession = [...sessionSummaryData].sort((a,b) => b.net - a.net)[0];
+                      const worstSession = [...sessionSummaryData].sort((a,b) => a.net - b.net)[0];
+
+                      return sessionSummaryData.map((s) => {
+                        const isBest = s.net > 0 && s.name === bestSession?.name;
+                        const isWorst = s.net < 0 && s.name === worstSession?.name;
+                        const flag = s.name === 'London' ? '🇬🇧' : s.name === 'New York' ? '🇺🇸' : s.name === 'Asia' ? '🇯🇵' : '🌍';
+                        
+                        return (
+                          <tr key={s.name} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors text-slate-700 dark:text-slate-300">
+                            <td className="px-6 py-4 font-semibold flex items-center gap-3">
+                              <span className="text-xl bg-slate-100 dark:bg-white/5 w-8 h-8 rounded-full flex items-center justify-center border border-slate-200 dark:border-white/10">{flag}</span>
+                              <span className="text-slate-900 dark:text-white text-xs">{s.name}</span>
+                              {isBest && <span className="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/20">Best</span>}
+                              {isWorst && <span className="bg-rose-100 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-500/20">Worst</span>}
+                            </td>
+                            <td className={`px-6 py-4 text-center text-xs font-bold ${s.net > 0 ? 'text-emerald-400' : s.net < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {s.net > 0 ? '+' : ''}{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(s.net)}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center">
+                                <div className="w-20 h-1.5 bg-slate-200 dark:bg-white/5 rounded-full overflow-hidden relative">
+                                  {s.total > 0 && (
+                                    <>
+                                      <div className="absolute left-0 top-0 bottom-0 bg-rose-500" style={{ width: `${100 - s.winRate}%` }}></div>
+                                      <div className="absolute right-0 top-0 bottom-0 bg-emerald-500" style={{ width: `${s.winRate}%` }}></div>
+                                      <div className="absolute top-0 bottom-0 w-0.5 bg-white shadow" style={{ left: `${100 - s.winRate}%`, transform: 'translateX(-50%)' }}></div>
+                                    </>
+                                  )}
+                                  {s.total === 0 && <div className="absolute top-0 bottom-0 w-0.5 bg-slate-300 dark:bg-white/30 shadow left-1/2 -translate-x-1/2"></div>}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center text-xs font-semibold text-emerald-400">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(s.profit)}
+                            </td>
+                            <td className="px-6 py-4 text-center text-xs font-semibold text-rose-400">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(s.loss)}
+                            </td>
+                            <td className="px-6 py-4 text-center text-xs font-bold text-slate-900 dark:text-white">
+                              {s.total}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* Summary Pairs Table */}
+            <section className="bg-white dark:bg-[#14151a] border border-slate-100 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl mt-6 mb-6 relative">
+              <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 dark:text-white text-lg">Summary Pairs</h3>
+                <div className="group relative flex items-center cursor-help">
+                  <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" />
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 bg-[#fef3c7] dark:bg-[#1a1b1e] text-amber-900 dark:text-amber-400 dark:border dark:border-amber-500/20 text-xs font-semibold p-3 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 leading-snug">
+                    This is the review of your trading performance by Pair, including net profit, win percentage, total profit/loss, and total trades, to help you identify which pairs perform best with your strategy.
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-[#fef3c7] dark:border-t-[#1a1b1e]"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-b-2xl overflow-hidden">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead>
+                    <tr className="text-slate-500 dark:text-slate-400 text-xs font-bold border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-[#0f1115]">
+                      <th className="px-6 py-4">Pair ↕</th>
+                      <th className="px-6 py-4 text-center">Net P&L ↕</th>
+                      <th className="px-6 py-4 text-center">Winning % ↕</th>
+                      <th className="px-6 py-4 text-center">Total Profit ↕</th>
+                      <th className="px-6 py-4 text-center">Total Loss ↕</th>
+                      <th className="px-6 py-4 text-center">Total Trades ↕</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {(() => {
+                      const bestPair = [...pairSummaryData].sort((a,b) => b.net - a.net)[0];
+                      const worstPair = [...pairSummaryData].sort((a,b) => a.net - b.net)[0];
+
+                      return pairSummaryData.map((s) => {
+                        const isBest = s.net > 0 && s.name === bestPair?.name;
+                        const isWorst = s.net < 0 && s.name === worstPair?.name;
+                        
+                        const baseBal = activeAccount?.startingBalance || 1;
+                        const netPct = (s.net / baseBal) * 100;
+                        
+                        return (
+                          <tr key={s.name} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors text-slate-700 dark:text-slate-300">
+                            <td className="px-6 py-4 font-bold text-slate-900 dark:text-white text-xs flex items-center gap-3">
+                              {s.name}
+                              {isBest && <span className="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/20">Best</span>}
+                              {isWorst && <span className="bg-rose-100 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-500/20">Worst</span>}
+                            </td>
+                            <td className={`px-6 py-4 text-center text-xs font-bold ${netPct > 0 ? 'text-emerald-400' : netPct < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {netPct === 0 ? '0.00%' : (netPct > 0 ? '+' : '') + netPct.toFixed(2) + '%'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center">
+                                <div className="w-20 h-1.5 bg-slate-200 dark:bg-white/5 rounded-full overflow-hidden relative">
+                                  {s.total > 0 && (
+                                    <>
+                                      <div className="absolute left-0 top-0 bottom-0 bg-rose-500" style={{ width: `${100 - s.winRate}%` }}></div>
+                                      <div className="absolute right-0 top-0 bottom-0 bg-emerald-500" style={{ width: `${s.winRate}%` }}></div>
+                                      <div className="absolute top-0 bottom-0 w-0.5 bg-white shadow" style={{ left: `${100 - s.winRate}%`, transform: 'translateX(-50%)' }}></div>
+                                    </>
+                                  )}
+                                  {s.total === 0 && <div className="absolute top-0 bottom-0 w-0.5 bg-slate-300 dark:bg-white/30 shadow left-1/2 -translate-x-1/2"></div>}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center text-xs font-semibold text-emerald-400">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(s.profit)}
+                            </td>
+                            <td className="px-6 py-4 text-center text-xs font-semibold text-rose-400">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(s.loss)}
+                            </td>
+                            <td className="px-6 py-4 text-center text-xs font-bold text-slate-900 dark:text-white">
+                              {s.total}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* Win & Loss Performance Cards */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Win Performance */}
+              <div className="bg-white dark:bg-[#14151a] border border-slate-100 dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-lg">Win Performance</h3>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                      <span>Active days</span>
+                      <div className="w-6 h-3.5 bg-slate-200 dark:bg-white/10 rounded-full relative cursor-pointer"><div className="w-2.5 h-2.5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div></div>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                      <span>Volume</span>
+                      <div className="w-6 h-3.5 bg-slate-200 dark:bg-white/10 rounded-full relative cursor-pointer"><div className="w-2.5 h-2.5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div></div>
+                    </div>
+                    <span className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-1 rounded-full flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> Wins</span>
+                  </div>
+                </div>
+
+                <div className="h-48 mb-6 -ml-4">
+                  {winPerformanceData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={winPerformanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorWin" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="formattedDate" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
+                        <YAxis tickFormatter={(val) => `$${val}`} tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} dx={-10} width={45} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1e293b', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f8fafc', fontSize: '12px' }}
+                          itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
+                          formatter={(value: number) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(value), 'Win']}
+                        />
+                        <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorWin)" activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">No win data available</div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Total P&L</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(winMetrics.totalPnl)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Winning Trades</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{winMetrics.trades}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Avg Daily Volume</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{winMetrics.avgDailyVol.toFixed(2)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Avg. Winning Trade</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(winMetrics.avgTrade)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Total Commissions</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(winMetrics.commissions)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Max Consecutive Wins</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{winMetrics.maxStreak}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Loss Performance */}
+              <div className="bg-white dark:bg-[#14151a] border border-slate-100 dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-lg">Loss Performance</h3>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                      <span>Active days</span>
+                      <div className="w-6 h-3.5 bg-slate-200 dark:bg-white/10 rounded-full relative cursor-pointer"><div className="w-2.5 h-2.5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div></div>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                      <span>Volume</span>
+                      <div className="w-6 h-3.5 bg-slate-200 dark:bg-white/10 rounded-full relative cursor-pointer"><div className="w-2.5 h-2.5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div></div>
+                    </div>
+                    <span className="bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold px-2 py-1 rounded-full flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div> Losses</span>
+                  </div>
+                </div>
+
+                <div className="h-48 mb-6 -ml-4">
+                  {lossPerformanceData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={lossPerformanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="formattedDate" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
+                        <YAxis tickFormatter={(val) => `-$${Math.abs(val)}`} tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} dx={-10} width={45} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1e293b', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f8fafc', fontSize: '12px' }}
+                          itemStyle={{ color: '#f43f5e', fontWeight: 'bold' }}
+                          formatter={(value: number) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(value), 'Loss']}
+                        />
+                        <Area type="monotone" dataKey="value" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorLoss)" activeDot={{ r: 6, fill: '#f43f5e', stroke: '#fff', strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">No loss data available</div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Total P&L</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(lossMetrics.totalPnl)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Losing Trades</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{lossMetrics.trades}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Avg Daily Volume</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{lossMetrics.avgDailyVol.toFixed(2)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Avg. Losing Trade</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(lossMetrics.avgTrade)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Total Commissions</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: activeAccount?.currency || 'USD' }).format(lossMetrics.commissions)}</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-[#1a1b20] border border-slate-100 dark:border-white/5 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1">Max Consecutive Loss</p>
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{lossMetrics.maxStreak}</p>
+                  </div>
                 </div>
               </div>
             </section>

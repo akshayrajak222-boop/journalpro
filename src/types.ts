@@ -69,6 +69,18 @@ export interface Trade {
   eaPositionId?: number;
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  date: string; // ISO string
+  folder: string;
+  isFavorite: boolean;
+  isArchived: boolean;
+  isTrash: boolean;
+  linkedTradeId?: string;
+}
+
 export interface RiskSettings {
   id: string;
   accountId: string;

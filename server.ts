@@ -114,6 +114,7 @@ function loadDatabaseFromFile() {
         status: 'Active'
       }
     ] as TradingAccount[],
+    notes: [] as any[],
     trades: [
       {
         id: 't_1',
@@ -3411,6 +3412,118 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     await saveDatabase(db, authEmail);
 
     res.json({ message: 'Trade deleted successfully', updatedAccount: db.accounts[accIdx] });
+  });
+
+  // ==========================================
+  // NOTES ROUTES
+  // ==========================================
+
+  app.get('/api/notes', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    let notes = db.notes || [];
+
+    if (useSupabase) {
+      try {
+        const { data, error } = await supabase.from('notes').select('*').eq('user_id', currentUser.id);
+        if (!error && data) {
+          notes = data.map((n: any) => ({
+            id: n.id,
+            title: n.title,
+            content: n.content,
+            date: n.date,
+            folder: n.folder,
+            isFavorite: n.is_favorite,
+            isArchived: n.is_archived,
+            isTrash: n.is_trash,
+            linkedTradeId: n.linked_trade_id
+          }));
+        }
+      } catch (err) {}
+    }
+    res.json({ notes });
+  });
+
+  app.post('/api/notes', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    if (!db.notes) db.notes = [];
+    const newNote = req.body;
+    db.notes.push(newNote);
+
+    if (useSupabase) {
+      try {
+        await supabase.from('notes').insert({
+          id: newNote.id,
+          user_id: currentUser.id,
+          title: newNote.title,
+          content: newNote.content,
+          date: newNote.date,
+          folder: newNote.folder,
+          is_favorite: newNote.isFavorite,
+          is_archived: newNote.isArchived,
+          is_trash: newNote.isTrash,
+          linked_trade_id: newNote.linkedTradeId || null
+        });
+      } catch (err) {}
+    }
+    await saveDatabase(db, authEmail);
+    res.json({ note: newNote });
+  });
+
+  app.put('/api/notes/:id', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    if (!db.notes) db.notes = [];
+    const idx = db.notes.findIndex((n: any) => n.id === req.params.id);
+    if (idx !== -1) {
+      db.notes[idx] = { ...db.notes[idx], ...req.body };
+    }
+
+    if (useSupabase) {
+      const n = req.body;
+      const updateData: any = {};
+      if (n.title !== undefined) updateData.title = n.title;
+      if (n.content !== undefined) updateData.content = n.content;
+      if (n.folder !== undefined) updateData.folder = n.folder;
+      if (n.isFavorite !== undefined) updateData.is_favorite = n.isFavorite;
+      if (n.isArchived !== undefined) updateData.is_archived = n.isArchived;
+      if (n.isTrash !== undefined) updateData.is_trash = n.isTrash;
+      if (n.linkedTradeId !== undefined) updateData.linked_trade_id = n.linkedTradeId;
+
+      try {
+        await supabase.from('notes').update(updateData).eq('id', req.params.id).eq('user_id', currentUser.id);
+      } catch (err) {}
+    }
+    await saveDatabase(db, authEmail);
+    res.json({ message: 'Note updated' });
+  });
+
+  app.delete('/api/notes/:id', async (req, res) => {
+    let db = (req as any).userDb;
+    let currentUser = (req as any).currentUser;
+    const authEmail = currentUser?.email;
+    if (!currentUser || !db) return res.status(401).json({ error: 'Not authenticated' });
+
+    if (db.notes) {
+      db.notes = db.notes.filter((n: any) => n.id !== req.params.id);
+    }
+
+    if (useSupabase) {
+      try {
+        await supabase.from('notes').delete().eq('id', req.params.id).eq('user_id', currentUser.id);
+      } catch (err) {}
+    }
+    await saveDatabase(db, authEmail);
+    res.json({ message: 'Note deleted' });
   });
 
   // ==========================================
