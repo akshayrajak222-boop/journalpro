@@ -3690,6 +3690,34 @@ export default function App() {
         {/* 1. DASHBOARD VIEW */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
+            {/* Premium Announcement Card */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-4 md:p-6 shadow-lg border border-blue-500/30 text-white flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="absolute bottom-0 left-0 -mb-4 -ml-4 w-24 h-24 bg-white opacity-5 rounded-full blur-xl pointer-events-none"></div>
+              
+              <div className="flex items-center gap-4 relative z-10">
+                <div className="bg-white p-2.5 rounded-xl shadow-lg shrink-0 flex items-center justify-center">
+                  <svg viewBox="0 0 100 100" className="w-8 h-8">
+                    <path d="M 15 85 L 15 50 L 35 30 L 35 65 Z" fill="#7C3AED" />
+                    <path d="M 30 85 L 55 32 L 75 28 L 50 85 Z" fill="#7C3AED" />
+                    <path d="M 70 85 L 70 15 L 90 5 L 90 75 Z" fill="#7C3AED" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg mb-1">
+                    🚀 NEW VERSION COMING SOON
+                  </h3>
+                  <p className="text-blue-100 text-sm">
+                    A smarter, smoother, and more powerful FXJournalPro is on the way.
+                  </p>
+                </div>
+              </div>
+              <div className="relative z-10 shrink-0">
+                <span className="inline-block px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg text-sm font-semibold">
+                  Stay tuned for the update.
+                </span>
+              </div>
+            </div>
             {/* Dynamic Trader Rank & Drawdown Protection System */}
             <TraderRankCard 
               account={activeAccount || null} 
