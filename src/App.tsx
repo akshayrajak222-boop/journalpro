@@ -41,6 +41,7 @@ import LoginPage from './pages/LoginPage';
 import TradingTools from './components/TradingTools';
 import AchievementsTab from './components/AchievementsTab';
 import { NotebookTab } from './components/NotebookTab';
+import KnowYourTrades from './components/KnowYourTrades';
 
 
 
@@ -4665,6 +4666,7 @@ export default function App() {
         {activeTab === 'analytics' && (
           <div className="space-y-8">
             
+            <KnowYourTrades trades={trades} accounts={accounts} isPro={user?.isPro || false} />
             
             
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
