@@ -3258,7 +3258,13 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       const { data: existingTrades } = await supabase.from('trades').select('external_trade_id').eq('account_id', job.portfolio_account_id).not('external_trade_id', 'is', null);
       const existingIds = new Set((existingTrades || []).map((t: any) => t.external_trade_id));
       const newRows = trades.filter((t: any) => !existingIds.has(String(t.externalTradeId))).map((t: any) => ({ id: 'trade_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5), user_id: job.user_id, account_id: job.portfolio_account_id, date: t.entryTime, exit_time: t.exitTime, symbol: t.symbol, type: t.type, lot_size: t.lotSize, entry_price: t.entryPrice, exit_price: t.exitPrice, profit: t.netProfit, source: 'MT5', external_trade_id: String(t.externalTradeId), mt5_connection_id: job.mt5_connection_id }));
-      if (newRows.length > 0) await supabase.from('trades').insert(newRows);
+      if (newRows.length > 0) {
+        const { error: insertError } = await supabase.from('trades').insert(newRows);
+        if (insertError) {
+          console.error("Supabase trades insert error:", insertError);
+          return res.status(500).json({ error: "Database rejected trades: " + insertError.message });
+        }
+      }
       return res.json({ success: true, imported: newRows.length, skipped: trades.length - newRows.length });
     }
     for (const email of userDatabases.keys()) { const db = userDatabases.get(email); const job = (db.mt5SyncJobs || []).find((j: any) => j.id === jobId); if (job) { if (!db.trades) db.trades = []; let count = 0; trades.forEach((t: any) => { if (!db.trades.find((e: any) => e.externalTradeId === String(t.externalTradeId) && e.mt5ConnectionId === job.mt5ConnectionId)) { db.trades.push({ id: 'trade_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5), userId: job.userId, accountId: job.portfolioAccountId, date: t.entryTime, exitTime: t.exitTime, symbol: t.symbol, type: t.type, lotSize: t.lotSize, entryPrice: t.entryPrice, exitPrice: t.exitPrice, profit: t.netProfit, source: 'MT5', externalTradeId: String(t.externalTradeId), mt5ConnectionId: job.mt5ConnectionId }); count++; } }); await saveDatabase(db, email); return res.json({ success: true, imported: count, skipped: trades.length - count }); } }
