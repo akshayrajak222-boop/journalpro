@@ -743,7 +743,7 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
           </div>
         )}
 
-        {status?.syncMethod === 'CLOUD' && status.cloudConnected ? (
+        {status?.syncMethod === 'CLOUD' ? (
           <div className="space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-3">
@@ -777,6 +777,12 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+            {!status.cloudConnected && (!status.connectJobs || status.connectJobs.length === 0) && (
+              <div className="flex items-center justify-center py-4 space-x-3 text-slate-500">
+                <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+                <span className="text-xs font-semibold">Waiting for MT5 connection...</span>
               </div>
             )}
             <div className="flex items-center gap-2">

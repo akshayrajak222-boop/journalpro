@@ -1334,10 +1334,12 @@ export default function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  accountId: data.account.id,
-                  terminalLogin: newAccTerminalLogin,
-                  terminalServer: newAccTerminalServer,
-                  investorPassword: newAccTerminalPassword
+                  portfolioAccountId: data.account.id,
+                  mt5AccountNumber: newAccTerminalLogin,
+                  mt5Server: newAccTerminalServer,
+                  investorPassword: newAccTerminalPassword,
+                  brokerName: newAccBroker,
+                  accountType: newAccType
                 })
               });
               const connData = await connRes.json();
