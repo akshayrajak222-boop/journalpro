@@ -791,79 +791,10 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
             </div>
           </div>
         ) : (
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleCloudConnect(); }}
-            className="space-y-3"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5" htmlFor="cloudLogin">MT5 Login</label>
-                <input
-                  id="cloudLogin"
-                  type="text"
-                  value={cloudLogin}
-                  onChange={(e) => setCloudLogin(e.target.value)}
-                  required
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="e.g. 51012345"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-xs px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5" htmlFor="cloudServer">Broker Server</label>
-                <input
-                  id="cloudServer"
-                  type="text"
-                  value={cloudServer}
-                  onChange={(e) => setCloudServer(e.target.value)}
-                  required
-                  autoComplete="off"
-                  placeholder="e.g. ICMarkets-Demo"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-xs px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400" htmlFor="cloudPassword">Investor Password</label>
-                <button
-                  type="button"
-                  onClick={() => setShowInfoModal(true)}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition shrink-0"
-                  title="How to find Investor Password"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <input
-                id="cloudPassword"
-                type="password"
-                value={cloudPassword}
-                onChange={(e) => setCloudPassword(e.target.value)}
-                required
-                autoComplete="off"
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-xs px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/40"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={cloudBusy}
-              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-bold px-4 py-2.5 rounded-xl transition disabled:opacity-50"
-            >
-              {cloudBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-              {cloudBusy ? 'Connecting…' : 'Connect Cloud Sync'}
-            </button>
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-500" />
-              <span>
-                Your Investor Password is encrypted with AES-256-GCM the moment you submit, never logged, and is only used
-                to establish the read-only connection. <strong className="text-slate-600 dark:text-slate-300">Use your Investor
-                password (read-only) — never your main trading password.</strong>
-              </span>
-            </div>
-          </form>
+          <div className="flex flex-col items-center justify-center py-10 space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Waiting for MT5 connection...</p>
+          </div>
         )}
       </div>
 

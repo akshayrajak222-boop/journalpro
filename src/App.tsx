@@ -308,6 +308,9 @@ export default function App() {
   const [newAccInstitutionType, setNewAccInstitutionType] = useState<'Broker' | 'Prop Firm'>('Broker');
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
   const [newAccBalance, setNewAccBalance] = useState('10000');
+  const [newAccTerminalLogin, setNewAccTerminalLogin] = useState('');
+  const [newAccTerminalServer, setNewAccTerminalServer] = useState('');
+  const [newAccTerminalPassword, setNewAccTerminalPassword] = useState('');
   
   const [accountCreationMethod, setAccountCreationMethod] = useState<'select' | 'manual' | 'mt5'>('select');
   const [newAccBalanceMode, setNewAccBalanceMode] = useState<'auto' | 'manual'>('auto');
@@ -1291,8 +1294,8 @@ export default function App() {
       alert('Please fill in Starting Balance.');
       return;
     }
-    if (accountCreationMethod === 'mt5' && newAccBalanceMode === 'manual' && !newAccBalance) {
-      alert('Please fill in Starting Balance or switch to Auto Calculate.');
+    if (accountCreationMethod === 'mt5' && (!newAccTerminalLogin || !newAccTerminalServer || !newAccTerminalPassword)) {
+      alert('Please fill in MT5 Login, Server, and Password.');
       return;
     }
     setActionLoading(true);
@@ -1326,6 +1329,22 @@ export default function App() {
           persistSelectedAccount(data.account.id);
           await fetchAccountData(data.account.id);
           if (accountCreationMethod === 'mt5') {
+            try {
+              const connRes = await authFetch('/api/mt5/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  accountId: data.account.id,
+                  terminalLogin: newAccTerminalLogin,
+                  terminalServer: newAccTerminalServer,
+                  investorPassword: newAccTerminalPassword
+                })
+              });
+              const connData = await connRes.json();
+              if (!connRes.ok) alert(connData.error || 'Failed to initiate MT5 sync.');
+            } catch (err) {
+              console.error('Error connecting MT5:', err);
+            }
             setActiveTab('mt5');
           }
         } else {
@@ -6842,7 +6861,7 @@ export default function App() {
                   <h3 className="font-bold text-slate-900 text-base">{accountCreationMethod === 'mt5' ? 'Create MT5 Sync Account' : 'Register Manual Portfolio'}</h3>
                   <p className="text-[11px] text-slate-400">
                     {accountCreationMethod === 'mt5'
-                      ? "We'll generate a unique MT5 Expert Advisor for this account and walk you through connecting it after creation."
+                      ? "Enter your MT5 login, server, and password to sync your trades directly."
                       : 'Configure parameters for manual logs or automated Expert integrations.'}
                   </p>
                 </div>
@@ -6891,9 +6910,53 @@ export default function App() {
                       required
                       value={newAccBroker}
                       onChange={(e) => setNewAccBroker(e.target.value)}
-                      placeholder={newAccInstitutionType === 'Broker' ? 'IC Markets' : 'FTMO'}
+                      placeholder={newAccInstitutionType === 'Broker' ? 'e.g. IC Markets, Exness' : 'e.g. FTMO'}
                       className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">MT5 Server</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAccTerminalServer}
+                      onChange={(e) => setNewAccTerminalServer(e.target.value)}
+                      placeholder="e.g. ICMarketsSC-Live01"
+                      className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">MT5 Login ID (Account Number)</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAccTerminalLogin}
+                      onChange={(e) => setNewAccTerminalLogin(e.target.value)}
+                      placeholder="e.g. 51012345"
+                      className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                        Trading Password
+                      </label>
+                      <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold">
+                        <ShieldCheck className="h-3 w-3" /> Encrypted & Safe
+                      </span>
+                    </div>
+                    <input
+                      type="password"
+                      required
+                      value={newAccTerminalPassword}
+                      onChange={(e) => setNewAccTerminalPassword(e.target.value)}
+                      placeholder="Enter your MT5 password"
+                      className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="mt-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] text-slate-500 flex items-start gap-2">
+                      <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>You can enter your <strong>trading password</strong> or <strong>investor password</strong>. Stored passwords are encrypted in our system.</span>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -6939,41 +7002,7 @@ export default function App() {
                 </div>
               </div>
 
-              {accountCreationMethod === 'mt5' && (
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Initial Balance</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNewAccBalanceMode('auto')}
-                      className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'auto' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
-                    >
-                      <div className="font-bold">Auto Calculate</div>
-                      <div className="text-[10px] mt-0.5 opacity-80">Initial Balance = your first deposit in MT5 history</div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewAccBalanceMode('manual')}
-                      className={`text-left rounded-lg border-2 p-3 transition text-xs ${newAccBalanceMode === 'manual' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 hover:border-slate-300 bg-slate-50 text-slate-600'}`}
-                    >
-                      <div className="font-bold">Enter Manually</div>
-                      <div className="text-[10px] mt-0.5 opacity-80">Provide your own starting balance</div>
-                    </button>
-                  </div>
-                  {newAccBalanceMode === 'manual' && (
-                    <div className="mt-3">
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">Starting Balance</label>
-                      <input
-                        type="number"
-                        required
-                        value={newAccBalance}
-                        onChange={(e) => setNewAccBalance(e.target.value)}
-                        className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-2.5 w-full"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -7009,9 +7038,13 @@ export default function App() {
               <button
                 type="submit"
                 disabled={actionLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50"
+                className={`w-full font-semibold text-xs rounded-lg py-2.5 px-4 transition disabled:opacity-50 ${
+                  accountCreationMethod === 'mt5' 
+                    ? 'bg-[#8B5CF6] hover:bg-[#7C3AED] text-white' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
               >
-                {actionLoading ? 'Provisioning Account...' : (accountCreationMethod === 'mt5' ? 'Create MT5 Sync Account' : 'Create Portfolio Account')}
+                {actionLoading ? 'Connecting...' : (accountCreationMethod === 'mt5' ? 'Connect MT5 Account' : 'Create Portfolio Account')}
               </button>
             </form>
             )}
