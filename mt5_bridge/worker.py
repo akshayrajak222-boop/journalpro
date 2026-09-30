@@ -5,12 +5,12 @@ import MetaTrader5 as mt5
 from datetime import datetime, timezone
 import json
 
-API_URL = os.environ.get('FXJOURNALPRO_API_URL', 'http://localhost:5000/api/mt5/worker')
+API_URL = os.environ.get('FXJOURNALPRO_API_URL', 'https://www.fxjournalpro.com/api/mt5/worker')
 BRIDGE_ID = os.environ.get('BRIDGE_ID', 'worker-1')
 BRIDGE_TOKEN = os.environ.get('BRIDGE_AUTH_TOKEN', 'dev-bridge-secret-token')
 
-# Explicit path to MT5 terminal - auto-detected on Windows
-MT5_PATH = os.environ.get('MT5_PATH', r'C:\Program Files\MetaTrader 5\terminal64.exe')
+# Explicit path to MT5 terminal
+MT5_PATH = os.environ.get('MT5_PATH', r'C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe')
 
 headers = {
     'Authorization': f'Bearer {BRIDGE_TOKEN}',
@@ -211,7 +211,7 @@ def process_job(job):
         r = requests.post(
             f"{API_URL}/job/{job_id}/trades",
             headers=headers,
-            json={"trades": closed_trades},
+            json={"trades": closed_trades, "equity": account_info.equity, "balance": account_info.balance},
             timeout=60
         )
         if r.status_code == 200:
