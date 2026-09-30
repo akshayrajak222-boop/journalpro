@@ -2054,7 +2054,7 @@ function collectAllInMemoryTickets(): any[] {
 }
 
 const app = express();
-const PORT = 3000;
+const PORT = 5000;
 
 async function verifyTurnstile(token: string): Promise<boolean> {
   const secretKey = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
@@ -3092,6 +3092,224 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   // ==========================================
   // TRADING JOURNAL / TRADES ROUTES
   // ==========================================
+
+
+  // ==========================================
+  // MT5 Bridge API
+  // ==========================================
+  
+  app.get('/api/mt5/connections', async (req, res) => {
+    const db = (req as any).userDb;
+    if (!db) return res.json({ connections: [] });
+    const user = (req as any).currentUser;
+    const connections = (db.mt5Connections || []).filter((c: any) => c.userId === user.id);
+    res.json({ connections });
+  });
+
+  app.post('/api/mt5/connect', async (req, res) => {
+    let db = (req as any).userDb;
+    const user = (req as any).currentUser;
+    if (!db) return res.status(401).json({ error: 'Not authenticated' });
+    
+    const { portfolioAccountId, brokerName, mt5Server, mt5AccountNumber, investorPassword, accountType } = req.body;
+    
+    if (!db.mt5Connections) db.mt5Connections = [];
+    
+    const newConnection = {
+      id: 'mt5_conn_' + Date.now(),
+      userId: user.id,
+      portfolioAccountId,
+      brokerName,
+      mt5Server,
+      mt5AccountNumber,
+      investorPassword, // In a real app this should be encrypted at rest!
+      accountType,
+      connectionStatus: 'DISCONNECTED',
+      createdAt: new Date().toISOString()
+    };
+    
+    db.mt5Connections.push(newConnection);
+    
+    // Automatically create a first sync job
+    if (!db.mt5SyncJobs) db.mt5SyncJobs = [];
+    
+    const newJob = {
+      id: 'job_' + Date.now(),
+      userId: user.id,
+      portfolioAccountId,
+      mt5ConnectionId: newConnection.id,
+      status: 'QUEUED',
+      createdAt: new Date().toISOString()
+    };
+    
+    db.mt5SyncJobs.push(newJob);
+    await saveDatabase(db, user.email);
+    
+    res.json({ connection: newConnection, job: newJob });
+  });
+
+  app.post('/api/mt5/sync', async (req, res) => {
+    let db = (req as any).userDb;
+    const user = (req as any).currentUser;
+    if (!db) return res.status(401).json({ error: 'Not authenticated' });
+    
+    const { connectionId } = req.body;
+    if (!db.mt5SyncJobs) db.mt5SyncJobs = [];
+    
+    // Ensure no pending job for this connection
+    const existingPending = db.mt5SyncJobs.find((j: any) => j.mt5ConnectionId === connectionId && ['QUEUED', 'CONNECTING', 'FETCHING_HISTORY', 'IMPORTING'].includes(j.status));
+    
+    if (existingPending) {
+        return res.status(400).json({ error: 'A sync job is already in progress for this connection' });
+    }
+    
+    const connection = (db.mt5Connections || []).find((c: any) => c.id === connectionId);
+    if (!connection) return res.status(404).json({ error: 'Connection not found' });
+    
+    const newJob = {
+      id: 'job_' + Date.now(),
+      userId: user.id,
+      portfolioAccountId: connection.portfolioAccountId,
+      mt5ConnectionId: connectionId,
+      status: 'QUEUED',
+      createdAt: new Date().toISOString()
+    };
+    
+    db.mt5SyncJobs.push(newJob);
+    await saveDatabase(db, user.email);
+    
+    res.json({ job: newJob });
+  });
+
+  app.get('/api/mt5/status', async (req, res) => {
+    const db = (req as any).userDb;
+    if (!db) return res.json({ jobs: [] });
+    const user = (req as any).currentUser;
+    const jobs = (db.mt5SyncJobs || []).filter((j: any) => j.userId === user.id);
+    res.json({ jobs });
+  });
+
+  // ------------------------------------------
+  // Worker Endpoints (Authenticate via token)
+  // ------------------------------------------
+  
+  const WORKER_TOKEN = process.env.BRIDGE_AUTH_TOKEN || 'dev-bridge-secret-token';
+  
+  const workerAuth = (req: any, res: any, next: any) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader === `Bearer ${WORKER_TOKEN}`) {
+      next();
+    } else {
+      res.status(401).json({ error: 'Unauthorized worker' });
+    }
+  };
+
+  app.post('/api/mt5/worker/heartbeat', workerAuth, (req, res) => {
+      // In a real app we would track worker status
+      res.json({ success: true });
+  });
+
+  app.get('/api/mt5/worker/jobs', workerAuth, async (req, res) => {
+      // Find a queued job across ALL user DBs
+      // Since we are using local JSON db files, we might need to search them all
+      // For simplicity in this local demo, we search all known DBs.
+      // Alternatively, we use a central queue. Let's create a central memory queue for demo.
+      let nextJob = null;
+      let targetEmail = null;
+      
+      for (const email of userDatabases.keys()) {
+          const db = userDatabases.get(email);
+          const queued = (db.mt5SyncJobs || []).find((j: any) => j.status === 'QUEUED');
+          if (queued) {
+              nextJob = queued;
+              targetEmail = email;
+              break;
+          }
+      }
+      
+      if (nextJob) {
+          const db = userDatabases.get(targetEmail!);
+          const connection = (db.mt5Connections || []).find((c: any) => c.id === nextJob.mt5ConnectionId);
+          res.json({ jobs: [{ ...nextJob, connection }] });
+      } else {
+          res.json({ jobs: [] });
+      }
+  });
+
+  app.post('/api/mt5/worker/job/:id/status', workerAuth, async (req, res) => {
+      const jobId = req.params.id;
+      const { status, error_message } = req.body;
+      
+      for (const email of userDatabases.keys()) {
+          const db = userDatabases.get(email);
+          const job = (db.mt5SyncJobs || []).find((j: any) => j.id === jobId);
+          if (job) {
+              job.status = status;
+              if (error_message) job.errorMessage = error_message;
+              if (status === 'COMPLETED' || status === 'FAILED') job.completedAt = new Date().toISOString();
+              
+              const connection = (db.mt5Connections || []).find((c: any) => c.id === job.mt5ConnectionId);
+              if (connection) {
+                  connection.lastSyncStatus = status;
+                  if (error_message) connection.lastSyncError = error_message;
+                  if (status === 'COMPLETED') connection.lastSuccessfulSyncAt = new Date().toISOString();
+                  connection.lastSyncAt = new Date().toISOString();
+              }
+              
+              await saveDatabase(db, email);
+              return res.json({ success: true });
+          }
+      }
+      res.status(404).json({ error: 'Job not found' });
+  });
+
+  app.post('/api/mt5/worker/job/:id/trades', workerAuth, async (req, res) => {
+      const jobId = req.params.id;
+      const { trades } = req.body;
+      
+      for (const email of userDatabases.keys()) {
+          const db = userDatabases.get(email);
+          const job = (db.mt5SyncJobs || []).find((j: any) => j.id === jobId);
+          if (job) {
+              if (!db.trades) db.trades = [];
+              let newTradesCount = 0;
+              
+              trades.forEach((t: any) => {
+                  // Deduplication check
+                  const exists = db.trades.find((existing: any) => existing.externalTradeId === str(t.externalTradeId) && existing.mt5ConnectionId === job.mt5ConnectionId);
+                  if (!exists) {
+                      db.trades.push({
+                          id: 'trade_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                          userId: job.userId,
+                          accountId: job.portfolioAccountId,
+                          date: t.entryTime,
+                          exitTime: t.exitTime,
+                          symbol: t.symbol,
+                          type: t.type,
+                          lotSize: str(t.lotSize),
+                          entryPrice: str(t.entryPrice),
+                          exitPrice: str(t.exitPrice),
+                          profit: str(t.netProfit),
+                          source: 'MT5',
+                          externalTradeId: str(t.externalTradeId),
+                          mt5ConnectionId: job.mt5ConnectionId
+                      });
+                      newTradesCount++;
+                  }
+              });
+              
+              await saveDatabase(db, email);
+              return res.json({ success: true, imported: newTradesCount });
+          }
+      }
+      res.status(404).json({ error: 'Job not found' });
+  });
+
+  function str(val: any) {
+      if (val === undefined || val === null) return "";
+      return String(val);
+  }
+
 
   app.get('/api/trades', async (req, res) => {
     let currentUser = (req as any).currentUser;
@@ -4881,7 +5099,7 @@ RESTRICTIONS:
     }
   });
 
-  app.get('/api/admin/bugs', async (req, res) => {
+  app.get('/api/debug-db', (req, res) => { res.json({ dbKeys: Array.from(userDatabases.keys()), dbs: Array.from(userDatabases.entries()).map(([k,v]) => ({ key: k, jobs: v.mt5SyncJobs, conns: v.mt5Connections })) }); }); app.get('/api/admin/bugs', async (req, res) => {
     let currentUser = (req as any).currentUser;
     if (!currentUser || !(await checkIsAdmin(currentUser))) {
       return res.status(403).json({ error: 'Admin access required' });

@@ -62,6 +62,9 @@ export interface Trade {
   strategy?: string;
   emotion?: 'Calm' | 'Excited' | 'Anxious' | 'FOMO' | 'Greedy' | 'Revenge';
   notes?: string;
+  source?: 'MANUAL' | 'MT5';
+  externalTradeId?: string;
+  mt5ConnectionId?: string;
   screenshot?: string; // base64 or URL
   tags: string[];
   isMt5Sync?: boolean;
@@ -120,4 +123,55 @@ export interface PaymentHistory {
   status: 'Success' | 'Failed' | 'Pending';
   date: string;
   razorpayId: string;
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  shortDescription: string;
+  description: string;
+  rules: string[];
+  durationDays: number;
+  targetType: 'pip' | 'percentage';
+  targetValue: number;
+}
+
+export interface UserChallenge {
+  id: string;
+  userId: string;
+  challengeId: string;
+  status: 'active' | 'completed' | 'failed';
+  startDate: string;
+  currentStreak: number;
+  completedDays: number;
+  dailyProgress: Record<string, boolean>; // e.g. "2026-09-28": true
+}
+
+export interface MT5Connection {
+  id: string;
+  userId: string;
+  portfolioAccountId: string;
+  brokerName: string;
+  mt5Server: string;
+  mt5AccountNumber: string;
+  accountType: 'Live' | 'Demo';
+  connectionStatus: 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
+  lastSyncAt?: string;
+  lastSuccessfulSyncAt?: string;
+  lastSyncStatus?: string;
+  lastSyncError?: string;
+  createdAt: string;
+}
+
+export interface MT5SyncJob {
+  id: string;
+  userId: string;
+  portfolioAccountId: string;
+  mt5ConnectionId: string;
+  status: 'QUEUED' | 'CONNECTING' | 'CONNECTED' | 'FETCHING_HISTORY' | 'IMPORTING' | 'VERIFYING' | 'COMPLETED' | 'FAILED' | 'DISCONNECTED';
+  workerId?: string;
+  startedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+  createdAt: string;
 }

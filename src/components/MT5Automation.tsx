@@ -248,12 +248,44 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   const pollStatus = useCallback(async () => {
     if (!account) return;
     try {
+      // 1. Fetch EA status (existing logic)
       const res = await authFetch(`/api/mt5/${account.id}/status`);
+      let combinedStatus: MT5Status | null = null;
       if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-        setError('');
+        combinedStatus = await res.json();
       }
+
+      // 2. Fetch new Bridge Worker status
+      const connRes = await authFetch('/api/mt5/connections');
+      const connData = await connRes.json();
+      const conn = connData.connections?.find((c: any) => c.portfolioAccountId === account.id);
+
+      const jobRes = await authFetch('/api/mt5/status');
+      const jobData = await jobRes.json();
+      const activeJob = jobData.jobs?.find((j: any) => j.portfolioAccountId === account.id && !['COMPLETED', 'FAILED', 'DISCONNECTED'].includes(j.status));
+
+      if (conn || activeJob) {
+        if (!combinedStatus) combinedStatus = {} as any;
+        combinedStatus!.syncMethod = 'CLOUD';
+        combinedStatus!.cloudConnected = true; // Connection exists
+        
+        // Map job status to UI status
+        if (activeJob) {
+            combinedStatus!.status = activeJob.status;
+            combinedStatus!.connectJobs = [{ status: activeJob.status.toLowerCase(), error: activeJob.errorMessage, lastCheckedAt: new Date().toISOString() }];
+        } else {
+            combinedStatus!.status = conn?.connectionStatus === 'ERROR' ? 'Disconnected' : 'Connected';
+            if (conn?.lastSyncStatus === 'FAILED') combinedStatus!.status = 'Error: ' + conn.lastSyncError;
+            combinedStatus!.lastSyncTime = conn?.lastSuccessfulSyncAt || conn?.lastSyncAt;
+            combinedStatus!.connectJobs = [];
+        }
+        
+        combinedStatus!.terminalLogin = conn?.mt5AccountNumber || '';
+        combinedStatus!.terminalServer = conn?.mt5Server || '';
+      }
+
+      if (combinedStatus) setStatus(combinedStatus);
+      setError('');
     } catch {
       // keep last known status on transient failures
     }
@@ -382,19 +414,21 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
     setCloudBusy(true);
     setCloudError('');
     try {
-      const res = await authFetch('/api/mt5/cloud/connect', {
+      const res = await authFetch('/api/mt5/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: account.id,
-          login: cloudLogin.trim(),
-          server: cloudServer.trim(),
-          investorPassword: cloudPassword
+          portfolioAccountId: account.id,
+          brokerName: 'Unknown', // Could be added to form
+          mt5AccountNumber: cloudLogin.trim(),
+          mt5Server: cloudServer.trim(),
+          investorPassword: cloudPassword,
+          accountType: 'Live'
         })
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setCloudError(friendlyError({ errorCode: d.code || 'SERVER_ERROR', errorMessage: d.error || 'Cloud connect failed.', occurredAt: new Date().toISOString(), resolvedAt: null }));
+        setCloudError(d.error || 'Cloud connect failed.');
         return;
       }
       setCloudPassword('');
@@ -435,10 +469,18 @@ export default function MT5Automation({ account, authFetch, onRefresh }: MT5Auto
   async function handleCloudSync() {
     if (!account) return;
     try {
-      const res = await authFetch('/api/mt5/cloud/sync', {
+      const connRes = await authFetch('/api/mt5/connections');
+      const connData = await connRes.json();
+      const conn = connData.connections?.find((c: any) => c.portfolioAccountId === account.id);
+      if (!conn) {
+          setError('No MT5 connection found for this account.');
+          return;
+      }
+      
+      const res = await authFetch('/api/mt5/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId: account.id })
+        body: JSON.stringify({ connectionId: conn.id })
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));

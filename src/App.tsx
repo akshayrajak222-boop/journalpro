@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   LineChart, BarChart3, NotebookPen, BookOpen, Calendar, Shield, ShieldOff, HelpCircle, User, 
   ChevronRight, Sparkles, TrendingUp, TrendingDown, Layers, 
-  DollarSign, Plus, CheckCircle2, ArrowRight,
+  DollarSign, Plus, CheckCircle2, ArrowRight, Target,
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
@@ -42,7 +42,7 @@ import TradingTools from './components/TradingTools';
 import AchievementsTab from './components/AchievementsTab';
 import { NotebookTab } from './components/NotebookTab';
 import KnowYourTrades from './components/KnowYourTrades';
-
+import ChallengesDashboard from './components/ChallengesDashboard';
 
 
 // ─── Symbol Contract Specifications ─────────────────────────────────────────
@@ -860,13 +860,24 @@ export default function App() {
 
   const [tradesRefreshing, setTradesRefreshing] = useState(false);
 
+  // Normalize trade numeric fields that may arrive as strings from the backend
+  const normalizeTrades = (raw: any[]): Trade[] => raw.map(t => ({
+    ...t,
+    profit:      parseFloat(t.profit)      || 0,
+    lotSize:     parseFloat(t.lotSize)     || 0,
+    entryPrice:  parseFloat(t.entryPrice)  || 0,
+    exitPrice:   parseFloat(t.exitPrice)   || 0,
+    commission:  parseFloat(t.commission)  || 0,
+    swap:        parseFloat(t.swap)        || 0,
+  }));
+
   const refreshTrades = async () => {
     if (!selectedAccountId) return;
     setTradesRefreshing(true);
     try {
       const tradesRes = await authFetch(`/api/trades?accountId=${selectedAccountId}`);
       const tradesData = await tradesRes.json();
-      setTrades(tradesData.trades || []);
+      setTrades(normalizeTrades(tradesData.trades || []));
       // Also refresh account balance
       const accsRes = await authFetch('/api/accounts');
       const accsData = await accsRes.json();
@@ -882,7 +893,7 @@ export default function App() {
     try {
       const tradesRes = await authFetch(`/api/trades?accountId=${accId}`);
       const tradesData = await tradesRes.json();
-      setTrades(tradesData.trades || []);
+      setTrades(normalizeTrades(tradesData.trades || []));
 
       const riskRes = await authFetch(`/api/risk-settings/${accId}`);
       const riskData = await riskRes.json();
@@ -3562,6 +3573,19 @@ export default function App() {
               <Wrench className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'tools' ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
               <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Tools</span>
               <span className={`absolute ${desktopSidebarOpen ? 'right-4' : 'top-1.5 right-1.5'} h-1.5 w-1.5 bg-emerald-500 rounded-full`} />
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('challenges'); setMobileMenuOpen(false); }}
+              title="Challenges"
+              className={`relative flex ${desktopSidebarOpen ? 'flex-row items-center justify-start gap-4 px-4' : 'flex-col items-center justify-center gap-1 mx-auto'} w-full ${desktopSidebarOpen ? 'h-12' : 'h-14'} rounded-2xl ${
+                activeTab === 'challenges' 
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm' 
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Target className={`transition-colors ${desktopSidebarOpen ? "h-5 w-5" : "h-4 w-4"} ${activeTab === 'challenges' ? 'text-rose-600 dark:text-rose-400' : ''}`} />
+              <span className={`${desktopSidebarOpen ? 'text-sm' : 'text-[9px]'} font-bold`}>Challenges</span>
             </button>
 
             <button
@@ -6604,6 +6628,11 @@ export default function App() {
           <TradingTools />
         )}
 
+        {/* 9. CHALLENGES VIEW */}
+        {activeTab === 'challenges' && (
+          <ChallengesDashboard trades={trades} accounts={accounts} />
+        )}
+
 
 
       </main>
@@ -6627,6 +6656,7 @@ export default function App() {
             { id: 'fxnews', icon: Globe, notify: true },
             { id: 'mt5', icon: RefreshCw },
             { id: 'tools', icon: Wrench, notify: true },
+            { id: 'challenges', icon: Target },
             { id: 'insights', icon: Brain, notify: true }
           ].map(item => (
             <button
