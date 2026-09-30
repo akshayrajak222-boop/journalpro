@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -3100,7 +3100,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
   async function getConnections(userId: string) {
     if (useSupabase) {
-      const { data } = await supabase.from('mt5_connections').select('*').eq('user_id', userId);
+      const { data, error } = await supabase.from('mt5_connections').select('*').eq('user_id', userId);
+      if (error) console.error("Supabase getConnections error:", error);
       return (data || []).map((r: any) => ({
         id: r.id, userId: r.user_id, portfolioAccountId: r.portfolio_account_id,
         brokerName: r.broker_name, mt5Server: r.mt5_server,
@@ -3116,7 +3117,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
   async function saveConnectionRow(conn: any) {
     if (useSupabase) {
-      await supabase.from('mt5_connections').upsert({
+      const { error } = await supabase.from('mt5_connections').upsert({
         id: conn.id, user_id: conn.userId,
         portfolio_account_id: conn.portfolioAccountId, broker_name: conn.brokerName,
         mt5_server: conn.mt5Server, mt5_account_number: conn.mt5AccountNumber,
@@ -3126,6 +3127,10 @@ async function verifyTurnstile(token: string): Promise<boolean> {
         last_sync_at: conn.lastSyncAt || null, last_successful_sync_at: conn.lastSuccessfulSyncAt || null,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
+      if (error) {
+        console.error("Supabase saveConnectionRow error:", error);
+        throw new Error("Failed to save connection to database: " + error.message);
+      }
     }
   }
 
@@ -3135,7 +3140,8 @@ async function verifyTurnstile(token: string): Promise<boolean> {
       if (filter.userId) q = q.eq('user_id', filter.userId);
       if (filter.status) q = q.eq('status', filter.status);
       if (filter.connectionId) q = q.eq('mt5_connection_id', filter.connectionId);
-      const { data } = await q.order('created_at', { ascending: true });
+      const { data, error } = await q.order('created_at', { ascending: true });
+      if (error) console.error("Supabase getJobsFromDb error:", error);
       return (data || []).map((r: any) => ({
         id: r.id, userId: r.user_id, portfolioAccountId: r.portfolio_account_id,
         mt5ConnectionId: r.mt5_connection_id, status: r.status,
@@ -3148,7 +3154,11 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
   async function saveJobRow(job: any) {
     if (useSupabase) {
-      await supabase.from('mt5_sync_jobs').upsert({ id: job.id, user_id: job.userId, portfolio_account_id: job.portfolioAccountId, mt5_connection_id: job.mt5ConnectionId, status: job.status, error_message: job.errorMessage || null, completed_at: job.completedAt || null, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+      const { error } = await supabase.from('mt5_sync_jobs').upsert({ id: job.id, user_id: job.userId, portfolio_account_id: job.portfolioAccountId, mt5_connection_id: job.mt5ConnectionId, status: job.status, error_message: job.errorMessage || null, completed_at: job.completedAt || null, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+      if (error) {
+        console.error("Supabase saveJobRow error:", error);
+        throw new Error("Failed to save job to database: " + error.message);
+      }
     }
   }
 
@@ -3161,37 +3171,47 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   });
 
   app.post('/api/mt5/connect', async (req, res) => {
-    const user = (req as any).currentUser;
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
-    const { portfolioAccountId, brokerName, mt5Server, mt5AccountNumber, investorPassword, accountType } = req.body;
-    if (!mt5Server || !mt5AccountNumber || !investorPassword) return res.status(400).json({ error: 'mt5Server, mt5AccountNumber, and investorPassword are required' });
-    const newConnection = { id: 'mt5_conn_' + Date.now(), userId: user.id, portfolioAccountId, brokerName: brokerName || 'Unknown', mt5Server, mt5AccountNumber, investorPassword, accountType: accountType || 'Live', connectionStatus: 'DISCONNECTED', createdAt: new Date().toISOString() };
-    const newJob = { id: 'job_' + Date.now(), userId: user.id, portfolioAccountId, mt5ConnectionId: newConnection.id, status: 'QUEUED', createdAt: new Date().toISOString() };
-    if (useSupabase) { await saveConnectionRow(newConnection); await saveJobRow(newJob); }
-    else { const db = (req as any).userDb; if (!db.mt5Connections) db.mt5Connections = []; if (!db.mt5SyncJobs) db.mt5SyncJobs = []; db.mt5Connections.push(newConnection); db.mt5SyncJobs.push(newJob); await saveDatabase(db, user.email); }
-    res.json({ connection: newConnection, job: newJob });
+    try {
+      const user = (req as any).currentUser;
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      const { portfolioAccountId, brokerName, mt5Server, mt5AccountNumber, investorPassword, accountType } = req.body;
+      if (!mt5Server || !mt5AccountNumber || !investorPassword) return res.status(400).json({ error: 'mt5Server, mt5AccountNumber, and investorPassword are required' });
+      const newConnection = { id: 'mt5_conn_' + Date.now(), userId: user.id, portfolioAccountId, brokerName: brokerName || 'Unknown', mt5Server, mt5AccountNumber, investorPassword, accountType: accountType || 'Live', connectionStatus: 'DISCONNECTED', createdAt: new Date().toISOString() };
+      const newJob = { id: 'job_' + Date.now(), userId: user.id, portfolioAccountId, mt5ConnectionId: newConnection.id, status: 'QUEUED', createdAt: new Date().toISOString() };
+      if (useSupabase) { await saveConnectionRow(newConnection); await saveJobRow(newJob); }
+      else { const db = (req as any).userDb; if (!db.mt5Connections) db.mt5Connections = []; if (!db.mt5SyncJobs) db.mt5SyncJobs = []; db.mt5Connections.push(newConnection); db.mt5SyncJobs.push(newJob); await saveDatabase(db, user.email); }
+      res.json({ connection: newConnection, job: newJob });
+    } catch (e: any) {
+      console.error("Error in /api/mt5/connect:", e);
+      res.status(500).json({ error: e.message || "Failed to create connection" });
+    }
   });
 
   app.post('/api/mt5/sync', async (req, res) => {
-    const user = (req as any).currentUser;
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
-    const { connectionId } = req.body;
-    if (useSupabase) {
-      const activeJobs = await getJobsFromDb({ connectionId, status: 'QUEUED' });
-      if (activeJobs.length > 0) return res.status(400).json({ error: 'A sync job is already queued' });
-      const connections = await getConnections(user.id);
-      const connection = connections.find((c: any) => c.id === connectionId);
+    try {
+      const user = (req as any).currentUser;
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      const { connectionId } = req.body;
+      if (useSupabase) {
+        const activeJobs = await getJobsFromDb({ connectionId, status: 'QUEUED' });
+        if (activeJobs.length > 0) return res.status(400).json({ error: 'A sync job is already queued' });
+        const connections = await getConnections(user.id);
+        const connection = connections.find((c: any) => c.id === connectionId);
+        if (!connection) return res.status(404).json({ error: 'Connection not found' });
+        const newJob = { id: 'job_' + Date.now(), userId: user.id, portfolioAccountId: connection.portfolioAccountId, mt5ConnectionId: connectionId, status: 'QUEUED', createdAt: new Date().toISOString() };
+        await saveJobRow(newJob); return res.json({ job: newJob });
+      }
+      const db = (req as any).userDb; if (!db.mt5SyncJobs) db.mt5SyncJobs = [];
+      const existing = db.mt5SyncJobs.find((j: any) => j.mt5ConnectionId === connectionId && ['QUEUED','CONNECTING','FETCHING_HISTORY','IMPORTING'].includes(j.status));
+      if (existing) return res.status(400).json({ error: 'A sync job is already in progress' });
+      const connection = (db.mt5Connections || []).find((c: any) => c.id === connectionId);
       if (!connection) return res.status(404).json({ error: 'Connection not found' });
       const newJob = { id: 'job_' + Date.now(), userId: user.id, portfolioAccountId: connection.portfolioAccountId, mt5ConnectionId: connectionId, status: 'QUEUED', createdAt: new Date().toISOString() };
-      await saveJobRow(newJob); return res.json({ job: newJob });
+      db.mt5SyncJobs.push(newJob); await saveDatabase(db, user.email); res.json({ job: newJob });
+    } catch (e: any) {
+      console.error("Error in /api/mt5/sync:", e);
+      res.status(500).json({ error: e.message || "Failed to create sync job" });
     }
-    const db = (req as any).userDb; if (!db.mt5SyncJobs) db.mt5SyncJobs = [];
-    const existing = db.mt5SyncJobs.find((j: any) => j.mt5ConnectionId === connectionId && ['QUEUED','CONNECTING','FETCHING_HISTORY','IMPORTING'].includes(j.status));
-    if (existing) return res.status(400).json({ error: 'A sync job is already in progress' });
-    const connection = (db.mt5Connections || []).find((c: any) => c.id === connectionId);
-    if (!connection) return res.status(404).json({ error: 'Connection not found' });
-    const newJob = { id: 'job_' + Date.now(), userId: user.id, portfolioAccountId: connection.portfolioAccountId, mt5ConnectionId: connectionId, status: 'QUEUED', createdAt: new Date().toISOString() };
-    db.mt5SyncJobs.push(newJob); await saveDatabase(db, user.email); res.json({ job: newJob });
   });
 
   app.get('/api/mt5/status', async (req, res) => {
