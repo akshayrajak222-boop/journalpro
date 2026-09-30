@@ -7,7 +7,7 @@ import {
   LogOut, Star, Compass, Trash2, Check, Download, AlertTriangle,
   Clock, Heart, Tag, Edit3, Image as ImageIcon, Eye, EyeOff, RefreshCw, Radio,
   Cpu, Terminal, Globe, Bell, CreditCard, Info, Activity, Menu, Sun, Moon, Brain, Upload,
-  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy, Lock, Flame, MessageSquare
+  FileSpreadsheet, FileText, Mail, Wrench, X, Newspaper, Trophy, Lock, Flame, MessageSquare, ShieldCheck
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, 
