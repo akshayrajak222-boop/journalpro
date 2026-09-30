@@ -3250,7 +3250,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   });
 
   app.post('/api/mt5/worker/job/:id/trades', workerAuth, async (req: any, res: any) => {
-    const jobId = req.params.id; const { trades, equity, balance } = req.body;
+    const jobId = req.params.id; const { trades, equity, balance, initial_balance } = req.body;
     if (useSupabase) {
       const { data: rows } = await supabase.from('mt5_sync_jobs').select('*').eq('id', jobId).limit(1);
       if (!rows || rows.length === 0) return res.status(404).json({ error: 'Job not found' });
@@ -3265,12 +3265,20 @@ async function verifyTurnstile(token: string): Promise<boolean> {
           return res.status(500).json({ error: "Database rejected trades: " + insertError.message });
         }
       }
-      if (equity !== undefined || balance !== undefined || trades.length > 0) {
+      if (equity !== undefined || balance !== undefined || trades.length > 0 || initial_balance !== undefined) {
           const { data: totalTrades } = await supabase.from('trades').select('id', { count: 'exact' }).eq('account_id', job.portfolio_account_id).not('external_trade_id', 'is', null);
           const updateObj: any = {};
           if (equity !== undefined) updateObj.equity = equity;
           if (balance !== undefined) updateObj.current_balance = balance;
           if (totalTrades) updateObj.ea_sync_trade_count = totalTrades.length;
+          
+          // Only update starting_balance if we got it from MT5 history
+          if (initial_balance !== undefined && initial_balance !== null) {
+              // Optionally check if the account's starting balance is currently 0, but
+              // the user asked to automatically set it to the first deposited amount.
+              updateObj.starting_balance = initial_balance;
+          }
+          
           if (Object.keys(updateObj).length > 0) {
               await supabase.from('trading_accounts').update(updateObj).eq('id', job.portfolio_account_id);
           }

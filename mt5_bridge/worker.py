@@ -134,6 +134,13 @@ def process_job(job):
     # MT5 stores trades as individual "deals" (e.g. open=IN, close=OUT)
     # We group by position_id to reconstruct full trades
     positions = {}
+    
+    # Find the first deposited amount
+    initial_balance = None
+    for deal in history_deals:
+        if deal.type == 2 and deal.profit > 0:  # DEAL_TYPE_BALANCE
+            initial_balance = deal.profit
+            break
 
     for deal in history_deals:
         pid = deal.position_id
@@ -206,12 +213,18 @@ def process_job(job):
 
     update_job(job_id, 'IMPORTING')
 
-    # Push trades to FXJournalPro backend
+    payload = {
+        "trades": closed_trades,
+        "equity": account_info.equity,
+        "balance": account_info.balance,
+        "initial_balance": initial_balance
+    }
+
     try:
         r = requests.post(
             f"{API_URL}/job/{job_id}/trades",
             headers=headers,
-            json={"trades": closed_trades, "equity": account_info.equity, "balance": account_info.balance},
+            json=payload,
             timeout=60
         )
         if r.status_code == 200:
